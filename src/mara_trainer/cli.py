@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import db, imports
+from . import db, imports, paces
 from .dates import date_in_timezone, parse_day
 from .plan_rules import (
     RaceSetup,
@@ -304,6 +304,47 @@ def race_show() -> None:
     """Print the saved race setup (or null)."""
     setup = db.load_race_setup(_conn())
     _out(setup.to_dict() if setup else None)
+
+
+@app.command("pace")
+def pace_cmd(
+    distance: Annotated[
+        float | None, typer.Option(help="Race distance (see --unit); default: saved recent race")
+    ] = None,
+    time: Annotated[str | None, typer.Option(help="Race time H:MM:SS")] = None,
+    unit: Annotated[str, typer.Option(help="Unit for --distance: km or mi")] = "mi",
+) -> None:
+    """Predict 5K/10K/half/marathon times from one race result (Riegel 1981). No training zones."""
+    if (distance is None) != (time is None):
+        _fail("give both --distance and --time, or neither to use the saved recent race")
+    if distance is not None and time is not None:
+        if unit not in ("km", "mi"):
+            _fail("--unit must be km or mi")
+        try:
+            seconds = _parse_hms(time)
+        except (ValueError, typer.BadParameter):
+            _fail(f"--time must be H:MM:SS, got {time!r}")
+        meters: float = round(distance * (KM if unit == "km" else MI), 1)
+        source = "arguments"
+    else:
+        conn = _conn()
+        setup = db.load_race_setup(conn)
+        if setup is None:
+            _fail("no race set and no --distance/--time given; run `coach race set` first")
+        if setup.recent_race is None:
+            _fail(
+                "the saved race has no recent race result; pass --distance and --time, or "
+                "save one with `coach race set --recent-race-distance ... --recent-race-time ...`"
+            )
+        meters = setup.recent_race.distance_meters
+        seconds = setup.recent_race.duration_seconds
+        source = "race_setup"
+    try:
+        report = paces.predict(meters, seconds).to_dict()
+    except ValueError as exc:
+        _fail(str(exc))
+    report["input"] = {"source": source, **report["input"]}
+    _out(report)
 
 
 def main() -> None:  # pragma: no cover

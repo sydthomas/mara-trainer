@@ -21,7 +21,7 @@ def invoke(*args: str):  # type: ignore[no-untyped-def]
 def test_help_lists_commands() -> None:
     r = invoke("--help")
     assert r.exit_code == 0
-    for cmd in ("init-db", "import", "summary", "validate-plan", "race", "plan"):
+    for cmd in ("init-db", "import", "summary", "validate-plan", "race", "plan", "pace"):
         assert cmd in r.output
 
 
@@ -148,3 +148,70 @@ def test_race_set_rejects_invalid(tmp_db: Path) -> None:
         "10",
     )
     assert r.exit_code == 1
+
+
+def _race_set(*extra: str):  # type: ignore[no-untyped-def]
+    return invoke(
+        "race",
+        "set",
+        "--name",
+        "Test Marathon",
+        "--date",
+        "2027-04-25",
+        "--days",
+        "sun,tue,thu,sat",
+        "--long-run-day",
+        "sun",
+        "--weekly-min",
+        "25",
+        "--weekly-max",
+        "30",
+        "--longest",
+        "10",
+        *extra,
+    )
+
+
+def test_pace_with_explicit_race(tmp_db: Path) -> None:
+    r = invoke("pace", "--distance", "10", "--unit", "km", "--time", "50:00")
+    assert r.exit_code == 0, r.output
+    data = json.loads(r.output)
+    assert data["input"]["source"] == "arguments"
+    assert data["input"]["distance_meters"] == 10000
+    assert data["method"]["id"] == "riegel_1981"
+    assert [p["label"] for p in data["predictions"]] == ["5k", "10k", "half_marathon", "marathon"]
+    assert data["predictions"][1]["time"] == "0:50:00"
+    assert data["predictions"][1]["pace_per_mile"] == "8:03"
+    assert data["training_zones"] is None and data["caveats"]
+    assert not tmp_db.exists()  # explicit input never touches the DB
+
+
+def test_pace_defaults_to_saved_recent_race(tmp_db: Path) -> None:
+    invoke("init-db")
+    assert (
+        _race_set("--recent-race-distance", "13.1", "--recent-race-time", "1:55:00").exit_code == 0
+    )
+    r = invoke("pace")
+    assert r.exit_code == 0, r.output
+    data = json.loads(r.output)
+    assert data["input"]["source"] == "race_setup"
+    assert data["input"]["distance_meters"] == round(13.1 * 1609.344)
+    assert data["input"]["duration_seconds"] == 6900
+
+
+def test_pace_errors_without_recent_race(tmp_db: Path) -> None:
+    invoke("init-db")
+    r = invoke("pace")
+    assert r.exit_code == 1
+    assert "error" in json.loads(r.output)
+    _race_set()
+    r2 = invoke("pace")
+    assert r2.exit_code == 1
+    assert "recent race" in json.loads(r2.output)["error"]
+
+
+def test_pace_rejects_partial_or_bad_input(tmp_db: Path) -> None:
+    assert invoke("pace", "--distance", "10").exit_code == 1
+    assert invoke("pace", "--distance", "100", "--time", "9:00:00").exit_code == 1
+    assert invoke("pace", "--distance", "5", "--time", "x:y", "--unit", "km").exit_code != 0
+    assert invoke("pace", "--distance", "5", "--time", "25:00", "--unit", "yd").exit_code == 1

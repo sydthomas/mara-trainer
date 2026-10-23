@@ -989,6 +989,23 @@
       "notes": "Popular, research-informed guide to training and eating around the menstrual cycle and menopause; cite by reference only and prefer the peer-reviewed sources for specific numbers.",
       "female_evidence": "female_specific",
       "population_note": "Written for active women across the lifespan; not a study."
+    },
+    {
+      "slug": "riegel-athletic-records-human-endurance-1981",
+      "title": "Athletic Records and Human Endurance",
+      "author": "Riegel PS",
+      "kind": "research",
+      "url": "https://www.jstor.org/stable/27850427",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 1981,
+      "trust_reason": "Published in American Scientist 69(3):285-290 (Sigma Xi); origin of the widely used Riegel race-time prediction formula.",
+      "notes": "Fits a time-versus-distance power law to world-record performances; basis of T2 = T1 * (D2/D1)^1.06 used by `coach pace`. JSTOR page, so cite and link only.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Fit to elite world-record performances, not recreational runners. Full text not reviewed, so how much women's records shaped the 1.06 exponent is unconfirmed; not validated separately for women."
     }
   ]
 }

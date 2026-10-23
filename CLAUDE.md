@@ -54,6 +54,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach plan show` — accepted plan
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
+- `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
 - `uv run coach source import [sources/seed.json] [--update]` — add seed sources as `proposed`; `--update` refreshes metadata of existing ones (approval kept)
 - `uv run coach source add --slug ... --title ... --author ... --kind ... --topics a,b --license ... --trust-reason ... [--url https://...]`
 - `uv run coach source list [--status proposed|approved|retired] [--topic fueling] [--women-tested]`

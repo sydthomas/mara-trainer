@@ -137,6 +137,15 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
   bone stress, the 2025 Triad update, heat, injury by sex, postnatal return to running, ROAR), for
   57 in total. 3 eval cases added. Gap: no open-access study of strength training in women runners.
   Day 3 system prompt: prefer women-tested sources and flag mostly-male evidence.
+- 2026-10-22: Pace calculator. `src/mara_trainer/paces.py` and `coach pace [--distance N --time
+  H:MM:SS --unit mi|km]` predict 5K, 10K, half and marathon times from one race result with
+  Riegel's formula (T2 = T1 * (D2/D1)^1.06, American Scientist 1981). It defaults to the saved
+  recent race and errors if there is none. Output is SI plus per-mile display, names the method
+  on every prediction, and carries caveats: the exponent was fit to elite world records, isn't
+  checked separately for women, and runs optimistic for a first marathon from a half. No
+  training-pace zones: the published systems (e.g. Daniels' VDOT) are in copyrighted books we
+  haven't checked, so none are invented. Riegel added to the seed as a proposed, link-only
+  source (58 total), `female_evidence: unknown` because the full text wasn't reviewed.
 
 ## Later, before any public launch
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
