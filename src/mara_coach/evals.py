@@ -1,14 +1,17 @@
 """Eval set for the coach: synthetic questions plus what a good answer must and must not do.
 
-The file is hand-written JSON (`evals/coach-questions.json`). This module only loads and checks
-its shape; grading answers against the rubrics comes later.
+The file is hand-written JSON (`evals/coach-questions.json`). This module loads and checks its
+shape. `must` and `must_not` are rubric lines for a human (or later a model) grader. The optional
+`checks` object holds what code can verify deterministically: `require` (groups of regexes, one
+per group must match), `forbid` (regexes that must not match) and `cite` (the answer must carry a
+citation). Referral cases are always checked for a referral. Scoring lives in `evals_runner`.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +33,26 @@ CATEGORIES = frozenset(
 
 _ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FIELDS = ("id", "category", "question", "context", "must", "must_not", "expect_referral")
+_CHECK_KEYS = frozenset({"require", "forbid", "cite"})
 
 
 class EvalSetError(ValueError):
     def __init__(self, problems: list[str]) -> None:
         super().__init__("; ".join(problems))
         self.problems = problems
+
+
+@dataclass(frozen=True)
+class Checks:
+    """Deterministic checks. Patterns are case-insensitive Python regexes."""
+
+    require: tuple[tuple[str, ...], ...] = ()
+    forbid: tuple[str, ...] = ()
+    cite: bool = False
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.require or self.forbid or self.cite)
 
 
 @dataclass(frozen=True)
@@ -47,6 +64,7 @@ class EvalCase:
     must: tuple[str, ...]
     must_not: tuple[str, ...]
     expect_referral: bool
+    checks: Checks = field(default_factory=Checks)
 
 
 def load_eval_set(path: Path = DEFAULT_PATH) -> list[EvalCase]:
@@ -95,6 +113,7 @@ def parse_eval_set(raw: Any) -> list[EvalCase]:
                 must=tuple(item["must"]),
                 must_not=tuple(item["must_not"]),
                 expect_referral=item["expect_referral"],
+                checks=_to_checks(item.get("checks")),
             )
         )
     if problems:
@@ -122,7 +141,53 @@ def _check_case(item: dict[str, Any]) -> list[str]:
         problems.append("'expect_referral' must be true or false")
     elif item["category"] == "safety_referral" and not item["expect_referral"]:
         problems.append("safety_referral cases need expect_referral: true")
+    if "checks" in item:
+        problems.extend(_check_checks(item["checks"]))
     return problems
+
+
+def _check_checks(checks: Any) -> list[str]:
+    if not isinstance(checks, dict):
+        return ["'checks' must be an object"]
+    problems: list[str] = []
+    unknown = sorted(set(checks) - _CHECK_KEYS)
+    if unknown:
+        problems.append(f"'checks' has unknown keys {', '.join(unknown)}")
+    require = checks.get("require", [])
+    if not isinstance(require, list) or not all(
+        isinstance(g, list) and g and all(_non_empty_str(p) for p in g) for g in require
+    ):
+        problems.append("'require' must be a list of non-empty lists of patterns")
+    else:
+        problems.extend(_bad_patterns(p for g in require for p in g))
+    forbid = checks.get("forbid", [])
+    if not isinstance(forbid, list) or not all(_non_empty_str(p) for p in forbid):
+        problems.append("'forbid' must be a list of non-empty patterns")
+    else:
+        problems.extend(_bad_patterns(forbid))
+    if not isinstance(checks.get("cite", False), bool):
+        problems.append("'cite' must be true or false")
+    return problems
+
+
+def _bad_patterns(patterns: Any) -> list[str]:
+    problems: list[str] = []
+    for p in patterns:
+        try:
+            re.compile(p)
+        except re.error as exc:
+            problems.append(f"bad pattern {p!r}: {exc}")
+    return problems
+
+
+def _to_checks(raw: Any) -> Checks:
+    if raw is None:
+        return Checks()
+    return Checks(
+        require=tuple(tuple(g) for g in raw.get("require", [])),
+        forbid=tuple(raw.get("forbid", [])),
+        cite=raw.get("cite", False),
+    )
 
 
 def _non_empty_str(value: Any) -> bool:

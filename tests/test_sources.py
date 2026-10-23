@@ -189,7 +189,7 @@ def test_load_seed_file(tmp_path: Path) -> None:
 
 def test_shipped_seed_file_is_valid_and_unapproved() -> None:
     seed = sources.load_seed()
-    assert 30 <= len(seed) <= 60
+    assert 30 <= len(seed) <= 100
     assert all(s.status == "proposed" for s in seed)
     assert {t for s in seed for t in s.topics} == sources.TOPICS
     # Books are cited by reference only: never marked as summarizable.

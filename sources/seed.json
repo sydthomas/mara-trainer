@@ -989,6 +989,58 @@
       "notes": "Popular, research-informed guide to training and eating around the menstrual cycle and menopause; cite by reference only and prefer the peer-reviewed sources for specific numbers.",
       "female_evidence": "female_specific",
       "population_note": "Written for active women across the lifespan; not a study."
+    },
+    {
+      "slug": "vikmoen-heavy-strength-female-endurance-2016",
+      "title": "Effects of Heavy Strength Training on Running Performance and Determinants of Running Performance in Female Endurance Athletes",
+      "author": "Vikmoen O, Raastad T, Seynnes O, Bergstrom K, Ellefsen S, Ronnestad BR",
+      "kind": "research",
+      "url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0150799",
+      "topics": [
+        "cross_training",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2016,
+      "trust_reason": "Peer-reviewed randomized controlled trial in PLOS ONE 11(3):e0150799 (doi 10.1371/journal.pone.0150799), CC BY 4.0.",
+      "notes": "Twice-weekly heavy leg strength work for 11 weeks made trained women much stronger without hurting their endurance, but did not change running economy or 40-minute run performance.",
+      "female_evidence": "female_specific",
+      "population_note": "Well-trained women who both ran and cycled (VO2max about 53 ml/kg/min), matched on VO2max then randomized; 28 enrolled, 19 finished (11 strength plus endurance, 8 endurance only). Small sample; not marathon runners."
+    },
+    {
+      "slug": "huiberts-concurrent-training-sex-2024",
+      "title": "Concurrent Strength and Endurance Training: A Systematic Review and Meta-Analysis on the Impact of Sex and Training Status",
+      "author": "Huiberts RO, Wust RCI, van der Zwaard S",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10933151/",
+      "topics": [
+        "cross_training",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2024,
+      "trust_reason": "Peer-reviewed PRISMA systematic review and meta-analysis in Sports Medicine 54(2):485-503 (doi 10.1007/s40279-023-01943-9), PROSPERO-registered, CC BY.",
+      "notes": "Combining strength and endurance training slightly blunted lower-body strength gains in men but not in women, with no sex difference for VO2max, upper-body strength or power.",
+      "female_evidence": "sex_reported",
+      "population_note": "59 studies, 1,346 healthy adults, analysed by sex; fewer female studies, hypertrophy data male only, cycle phase rarely controlled. Not runner-specific; exact sex split not checked."
+    },
+    {
+      "slug": "barnes-resistance-training-cross-country-2013",
+      "title": "Effects of Resistance Training on Running Economy and Cross-country Performance",
+      "author": "Barnes KR, Hopkins WG, McGuigan MR, Northuis ME, Kilding AE",
+      "kind": "research",
+      "url": "https://openrepository.aut.ac.nz/items/aa7c20b9-166b-4186-99f5-7b4a66053b68",
+      "topics": [
+        "cross_training",
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2013,
+      "trust_reason": "Peer-reviewed randomized trial in Med Sci Sports Exerc 45(12):2322-2331 (doi 10.1249/MSS.0b013e31829af603); free copy in the Auckland University of Technology repository, publisher keeps copyright.",
+      "notes": "In collegiate cross-country runners lifting during the race season, women likely raced slightly faster while men did not, and heavy lifting alone was possibly better for women than heavy lifting mixed with plyometrics. Small effects with wide uncertainty.",
+      "fetchable": false,
+      "female_evidence": "sex_reported",
+      "population_note": "50 male and female collegiate runners randomized to heavy resistance or plyometric plus heavy resistance; results given by sex. Sex counts not in the abstract; full text not reviewed."
     }
   ]
 }

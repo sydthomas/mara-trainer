@@ -9,10 +9,12 @@ import typer
 
 from mara_trainer.cli import _conn, _fail, _out, app
 
-from . import sources
+from . import evals, evals_runner, sources
 
 source_app = typer.Typer(help="Source registry: vetted references the coach may cite.")
 app.add_typer(source_app, name="source")
+eval_app = typer.Typer(help="Eval set: score coach answers against the rubric checks.")
+app.add_typer(eval_app, name="eval")
 
 
 @source_app.command("add")
@@ -115,3 +117,24 @@ def source_retire(slugs: Annotated[list[str], typer.Argument(help="One or more s
 def source_domains() -> None:
     """Domains the coach may fetch from at answer time (approved, non-link-only sources)."""
     _out({"allowed_domains": sources.approved_domains(_conn())})
+
+
+@eval_app.command("run")
+def eval_run(
+    answers: Annotated[
+        Path, typer.Option(exists=True, dir_okay=False, help="JSON object {case_id: answer_text}")
+    ],
+    evals_file: Annotated[
+        Path, typer.Option("--evals", exists=True, dir_okay=False, help="Eval set JSON")
+    ] = evals.DEFAULT_PATH,
+) -> None:
+    """Score saved answers offline. Exit 0 if nothing failed, 3 if any case failed."""
+    try:
+        cases = evals.load_eval_set(evals_file)
+        answerer = evals_runner.MappingAnswerer(evals_runner.load_answers(answers))
+    except evals.EvalSetError as exc:
+        _fail("invalid eval input", problems=exc.problems)
+    report = evals_runner.run_eval(cases, answerer)
+    _out(report)
+    if not report["ok"]:
+        raise typer.Exit(3)

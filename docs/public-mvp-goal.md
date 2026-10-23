@@ -137,6 +137,18 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
   bone stress, the 2025 Triad update, heat, injury by sex, postnatal return to running, ROAR), for
   57 in total. 3 eval cases added. Gap: no open-access study of strength training in women runners.
   Day 3 system prompt: prefer women-tested sources and flag mostly-male evidence.
+- 2026-10-22: Offline eval runner. `mara_coach/evals_runner.py` scores answers from a pluggable
+  answerer (any callable from case to text; `MappingAnswerer` doubles as the test fake), and
+  `coach eval run --answers FILE.json` prints a JSON report: per-case pass, fail, unchecked or
+  missing with reasons, totals by category, unknown answer ids. Exit 3 if any case fails. Cases
+  gained an optional `checks` object (`require` regex groups, `forbid` regexes, `cite`), and
+  referral cases are always checked for a referral. These are text heuristics that catch clear
+  misses; the `must`/`must_not` lines still need a grader and are listed under `manual_review`.
+  All 28 cases now carry checks, including 2 new ones (strength for women runners, lifting after
+  low bone density). Strength gap partly closed with 3 proposed sources: Vikmoen 2016 (female-only
+  RCT, PLOS ONE, CC BY), Huiberts 2024 (concurrent-training meta-analysis analysed by sex, CC BY)
+  and Barnes 2013 (collegiate runners, results by sex; free repository copy, publisher copyright).
+  Still missing: a trial in women marathon or recreational distance runners. Seed is now 60.
 
 ## Later, before any public launch
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
