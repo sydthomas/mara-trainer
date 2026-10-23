@@ -13,19 +13,32 @@
       "Bash(git status *)",
       "Bash(git diff)",
       "Bash(git diff *)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git switch *)",
+      "Bash(git branch *)",
+      "Bash(git merge *)",
+      "Bash(git worktree *)",
+      "Bash(git push *)",
+      "Bash(gh issue *)",
+      "Bash(gh pr *)",
+      "Bash(gh repo view *)"
     ],
     "ask": [
       "Bash(uv add *)",
-      "Bash(uv remove *)",
-      "Bash(git commit *)"
+      "Bash(uv remove *)"
     ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
       "Edit(./.env)",
       "Edit(./.env.*)",
-      "Bash(git push *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force*)",
+      "Bash(git reset --hard *)",
       "Bash(rm -rf *)",
       "Bash(curl *)",
       "Bash(wget *)"
