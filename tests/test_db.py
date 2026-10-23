@@ -19,6 +19,7 @@ def test_migrations_are_idempotent(conn: sqlite3.Connection) -> None:
         "race_setup",
         "training_plans",
         "sources",
+        "athlete_profile",
         "schema_migrations",
     } <= names
     assert not {"users", "sessions"} & names  # auth dropped

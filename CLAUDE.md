@@ -60,6 +60,12 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach source list [--status proposed|approved|retired] [--topic fueling] [--women-tested]`
 - `uv run coach source approve SLUG ... --by NAME` / `coach source retire SLUG ...` — only Sydney approves
 - `uv run coach source domains` — allowed web domains for the agent (approved sources only)
+- `uv run coach profile set [--diet ...] [--allergies a,b] [--shoe-likes a,b] [--shoe-dislikes a,b] [--current-shoes a,b] [--injury-history ...] [--notes ...] [--clear FIELD ...]`
+  — partial update, only given fields change; `--allergies ""` = none, `--clear` resets to null
+- `uv run coach profile show` — runner profile (unset fields are null)
+- `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
+  read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile,
+  search_sources, allowed_domains); exit 1 on bad args or a tool error
 - Eval set: `evals/coach-questions.json`, loaded and checked by `mara_coach.evals` (tests enforce
   its shape). Add a case whenever the coach gets something wrong.
 
@@ -125,14 +131,18 @@ be summarized. If no approved source covers a question, the coach says so.
   unless Sydney asks; she commits under her own identity.
 
 ## Layout
-- `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`, `migrations/`
+- `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
+  `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  (all tables, including the coach's `sources` and `athlete_profile`)
 - `src/mara_coach/` — `cli.py` (entry point), `evals.py` (eval-set loader), `sources.py` (source
-  registry); agent, profile and Slack land here
+  registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
+  schemas, reused by the future API agent); agent and Slack land here
 - `sources/seed.json` — proposed seed sources (links + metadata + our own one-line notes, no copied text)
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
-- `.claude/skills/{plan-builder,weekly-review,import-workouts}/SKILL.md`
+- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach}/SKILL.md` (`ask-coach` is
+  the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)
 - `plans/` — Sydney's personal plan JSON (gitignored)
