@@ -1,0 +1,34 @@
+# Personal data — never commit
+data/
+*.db
+*.db-journal
+*.sqlite*
+exports/
+export.zip
+*.fit
+*.FIT
+*.gpx
+plans/
+!examples/*.json
+
+# Secrets
+.env*
+!.env.example
+
+# Python / tooling
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Claude Code personal settings
+.claude/settings.local.json
+CLAUDE.local.md
+
+# OS
+.DS_Store

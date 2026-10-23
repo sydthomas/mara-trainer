@@ -1,0 +1,777 @@
+{
+  "_comment": "Synthetic example plan for a fictional athlete. Weekdays: 0=Sunday..6=Saturday. Distances in meters. Validate with: uv run coach validate-plan examples/sample-plan.json",
+  "brief_date": "2027-01-04",
+  "setup": {
+    "race_name": "Sample Spring Marathon",
+    "race_date": "2027-04-25",
+    "goal": "finish",
+    "target_seconds": null,
+    "training_days": [
+      0,
+      2,
+      4,
+      6
+    ],
+    "long_run_day": 0,
+    "weekly_distance_min_meters": 40234,
+    "weekly_distance_max_meters": 48280,
+    "longest_run_meters": 16093,
+    "experience": "returning",
+    "recent_race": null,
+    "notes": "Fictional sample athlete. Replace with your own setup via `coach race set`."
+  },
+  "weeks": [
+    {
+      "week": 1,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 16093,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "easy",
+          "distance_meters": 9388,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 9388,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 9388,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 17426,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "easy",
+          "distance_meters": 10173,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 10173,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 10173,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 18760,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "easy",
+          "distance_meters": 10957,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 10957,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 10959,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 16476,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "easy",
+          "distance_meters": 9629,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 9629,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 9629,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 21426,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 12527,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 12527,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 12529,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 22760,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 13312,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 13312,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 13313,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 7,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 24093,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 14097,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 14097,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 14099,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 8,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 20849,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 12204,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 12204,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 12204,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 9,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 26760,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 15667,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 15667,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 15668,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 10,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 28093,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 16452,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 16452,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 16453,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 11,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 29426,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 17237,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 17237,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 17238,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 12,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 25223,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 14778,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 14778,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 14778,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 13,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 32093,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "workout",
+          "distance_meters": 18807,
+          "details": "Warm-up, 3 x 8 min steady with 2 min jog, cool-down."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 18807,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 18807,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 14,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 24070,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "easy",
+          "distance_meters": 14105,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 14105,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 14106,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 15,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "long",
+          "distance_meters": 18614,
+          "details": "Long run at easy, conversational effort."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 2,
+          "kind": "easy",
+          "distance_meters": 10023,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 4,
+          "kind": "easy",
+          "distance_meters": 10023,
+          "details": "Easy conversational run."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest day."
+        },
+        {
+          "day": 6,
+          "kind": "easy",
+          "distance_meters": 10023,
+          "details": "Easy conversational run."
+        }
+      ]
+    },
+    {
+      "week": 16,
+      "sessions": [
+        {
+          "day": 0,
+          "kind": "race",
+          "distance_meters": 42195,
+          "details": "Race day. Start conservatively, fuel early."
+        },
+        {
+          "day": 1,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest or very light walk; stay off your feet."
+        },
+        {
+          "day": 2,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest or very light walk; stay off your feet."
+        },
+        {
+          "day": 3,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest or very light walk; stay off your feet."
+        },
+        {
+          "day": 4,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest or very light walk; stay off your feet."
+        },
+        {
+          "day": 5,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest or very light walk; stay off your feet."
+        },
+        {
+          "day": 6,
+          "kind": "rest",
+          "distance_meters": 0,
+          "details": "Rest or very light walk; stay off your feet."
+        }
+      ]
+    }
+  ]
+}

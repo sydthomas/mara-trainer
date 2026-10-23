@@ -1,0 +1,994 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "slug": "acsm-and-dc-nutrition-athletic-performance-2016",
+      "title": "American College of Sports Medicine Joint Position Statement. Nutrition and Athletic Performance",
+      "author": "Thomas DT, Erdman KA, Burke LM (Academy of Nutrition and Dietetics, Dietitians of Canada, American College of Sports Medicine)",
+      "kind": "position_stand",
+      "url": "https://doi.org/10.1249/MSS.0000000000000852",
+      "topics": [
+        "fueling",
+        "daily_nutrition",
+        "hydration",
+        "race_week"
+      ],
+      "license": "unknown",
+      "year": 2016,
+      "trust_reason": "Joint position of three professional bodies, published concurrently in Med Sci Sports Exerc 48(3):543-568 and J Acad Nutr Diet 116(3):501-528.",
+      "notes": "Sets out energy, macronutrient, fluid and supplement guidance for athletes across training and competition, and recommends individualized advice from a sports dietitian.",
+      "fetchable": false,
+      "female_evidence": "sex_reported",
+      "population_note": "Full text paywalled; abstract silent on sex, but secondary sources citing it confirm female-relevant guidance (iron screening for women with heavy menstruation, low energy availability/Triad); evidence base not split by sex. Rating based on secondary sources; full text not reviewed."
+    },
+    {
+      "slug": "issn-nutrient-timing-2017",
+      "title": "International Society of Sports Nutrition position stand: nutrient timing",
+      "author": "Kerksick CM, Arent S, Schoenfeld BJ, et al. (ISSN)",
+      "kind": "position_stand",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5596471/",
+      "topics": [
+        "fueling",
+        "daily_nutrition",
+        "recovery"
+      ],
+      "license": "cc_by",
+      "year": 2017,
+      "trust_reason": "Peer-reviewed society position stand in J Int Soc Sports Nutr 14:33.",
+      "notes": "Reviews when to eat carbohydrate and protein around training and how timing affects glycogen, recovery and adaptation.",
+      "female_evidence": "mostly_male",
+      "population_note": "Authors state most nutrient-timing studies evaluated men and carb guidance rests on male endurance athletes; notes women oxidize more fat and may need more total energy when carb loading."
+    },
+    {
+      "slug": "issn-caffeine-2021",
+      "title": "International society of sports nutrition position stand: caffeine and exercise performance",
+      "author": "Guest NS, VanDusseldorp TA, Nelson MT, et al. (ISSN)",
+      "kind": "position_stand",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7777221/",
+      "topics": [
+        "fueling",
+        "race_week"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed society position stand in J Int Soc Sports Nutr (doi 10.1186/s12970-020-00383-4).",
+      "notes": "Summarizes evidence on caffeine dose, timing, forms and side effects for endurance and other exercise.",
+      "female_evidence": "sex_reported",
+      "population_note": "Cites several mixed-sex and female-only trials; concludes endurance benefits do not appear to differ by sex; notes hormonal contraceptives and pregnancy slow caffeine metabolism; no menstrual-cycle analysis."
+    },
+    {
+      "slug": "acsm-exercise-fluid-replacement-2007",
+      "title": "American College of Sports Medicine position stand. Exercise and fluid replacement",
+      "author": "Sawka MN, Burke LM, Eichner ER, Maughan RJ, Montain SJ, Stachenfeld NS (ACSM)",
+      "kind": "position_stand",
+      "url": "https://doi.org/10.1249/mss.0b013e31802ca597",
+      "topics": [
+        "hydration",
+        "race_week",
+        "health"
+      ],
+      "license": "unknown",
+      "year": 2007,
+      "trust_reason": "ACSM official position stand, Med Sci Sports Exerc 39(2):377-390.",
+      "notes": "Covers hydrating before, during and after exercise, estimating sweat rate from body weight, and electrolyte needs.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Abstract frames sweat variability as individual, not by sex; full text paywalled and could not be checked for sex-specific content."
+    },
+    {
+      "slug": "ioc-reds-consensus-2023",
+      "title": "2023 International Olympic Committee's (IOC) consensus statement on Relative Energy Deficiency in Sport (REDs)",
+      "author": "Mountjoy M, Ackerman KE, Bailey DM, et al. (IOC)",
+      "kind": "position_stand",
+      "url": "https://doi.org/10.1136/bjsports-2023-106994",
+      "topics": [
+        "health",
+        "daily_nutrition",
+        "injury"
+      ],
+      "license": "unknown",
+      "year": 2023,
+      "trust_reason": "IOC expert consensus published in Br J Sports Med 57(17):1073-1097.",
+      "notes": "Describes low energy availability as a spectrum, its health and performance effects, and the REDs CAT2 screening and risk tool.",
+      "fetchable": false,
+      "female_evidence": "female_specific",
+      "population_note": "REDs grew out of the Female Athlete Triad; assessment tool uses female indicators (menstrual function, amenorrhoea) and separate male ones (testosterone); abstract notes male data still emerging."
+    },
+    {
+      "slug": "ioc-dietary-supplements-2018",
+      "title": "IOC consensus statement: dietary supplements and the high-performance athlete",
+      "author": "Maughan RJ, Burke LM, Dvorak J, et al. (IOC)",
+      "kind": "position_stand",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5867441/",
+      "topics": [
+        "fueling",
+        "daily_nutrition",
+        "health"
+      ],
+      "license": "open_access",
+      "year": 2018,
+      "trust_reason": "IOC expert consensus published in Br J Sports Med 52(7):439-455 (CC BY-NC).",
+      "notes": "Weighs evidence for performance supplements such as caffeine, nitrate and bicarbonate, plus contamination and anti-doping risk.",
+      "female_evidence": "sex_reported",
+      "population_note": "Gives sex-specific iron intake thresholds (above 18 mg/day women, 8 mg/day men), flags menstrual blood loss and menstrual dysfunction for iron and calcium/vitamin D; no sex analysis of ergogenic effects."
+    },
+    {
+      "slug": "acsm-resistance-training-2026",
+      "title": "American College of Sports Medicine Position Stand. Resistance Training Prescription for Muscle Function, Hypertrophy, and Physical Performance in Healthy Adults: An Overview of Reviews",
+      "author": "Currier BS, D'Souza AC, Fiatarone Singh MA, et al.; Phillips SM (ACSM)",
+      "kind": "position_stand",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12965823/",
+      "topics": [
+        "cross_training",
+        "training"
+      ],
+      "license": "open_access",
+      "year": 2026,
+      "trust_reason": "ACSM position stand in Med Sci Sports Exerc 58(4), an overview of 137 systematic reviews (CC BY-NC-ND); replaces the 2009 progression-models stand.",
+      "notes": "Gives evidence-based ranges for load, sets, frequency and progression of strength training in healthy adults.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "Overview of 137 systematic reviews with over 30,000 adults; no sex breakdown and no sex-specific recommendations, though some included reviews are women-only."
+    },
+    {
+      "slug": "ioc-load-injury-risk-2016",
+      "title": "How much is too much? (Part 1) International Olympic Committee consensus statement on load in sport and risk of injury",
+      "author": "Soligard T, Schwellnus M, Alonso JM, et al. (IOC)",
+      "kind": "position_stand",
+      "url": "https://doi.org/10.1136/bjsports-2016-096581",
+      "topics": [
+        "training",
+        "injury",
+        "recovery"
+      ],
+      "license": "unknown",
+      "year": 2016,
+      "trust_reason": "IOC expert consensus published in Br J Sports Med 50(17):1030-1041.",
+      "notes": "Links rapid load changes and poor load management to injury and gives guidance on prescribing and monitoring training load.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Abstract and indexing give no detail on sex; full text paywalled and not checked."
+    },
+    {
+      "slug": "wms-exercise-associated-hyponatremia-2019",
+      "title": "Wilderness Medical Society Clinical Practice Guidelines for the Management of Exercise-Associated Hyponatremia: 2019 Update",
+      "author": "Bennett BL, Hew-Butler T, Rosner MH, Myers T, Lipman GS (Wilderness Medical Society)",
+      "kind": "position_stand",
+      "url": "https://doi.org/10.1016/j.wem.2019.11.003",
+      "topics": [
+        "hydration",
+        "health",
+        "race_week"
+      ],
+      "license": "unknown",
+      "year": 2020,
+      "trust_reason": "Society clinical practice guideline in Wilderness Environ Med 31(1):50-62.",
+      "notes": "Identifies fluid overconsumption as the main cause of exercise-associated hyponatremia and favors drinking to thirst for prevention.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Abstract silent on sex; secondary summaries of its risk-factor table list BMI, slow pace and overdrinking but not female sex; full text paywalled."
+    },
+    {
+      "slug": "acsm-exertional-heat-illness-2023",
+      "title": "ACSM Expert Consensus Statement on Exertional Heat Illness: Recognition, Management, and Return to Activity",
+      "author": "Roberts WO, Armstrong LE, Sawka MN, Yeargin SW, Heled Y, O'Connor FG (ACSM)",
+      "kind": "position_stand",
+      "url": "https://doi.org/10.1249/jsr.0000000000001058",
+      "topics": [
+        "health",
+        "hydration",
+        "race_week"
+      ],
+      "license": "unknown",
+      "year": 2023,
+      "trust_reason": "ACSM expert consensus in Curr Sports Med Rep 22(4), the replacement version of the 2021 statement.",
+      "notes": "Covers recognizing heat exhaustion and heat stroke, rapid whole-body cooling, prevention and return to running; note a published dissent letter on some points.",
+      "fetchable": false,
+      "female_evidence": "mixed_unreported",
+      "population_note": "Lists NCAA heat-illness rates for men's and women's sports and cites a review of sex differences, but gives no sex-specific recognition, cooling or return-to-play guidance."
+    },
+    {
+      "slug": "jeukendrup-carbohydrate-during-exercise-2014",
+      "title": "A step towards personalized sports nutrition: carbohydrate intake during exercise",
+      "author": "Jeukendrup A",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4008807/",
+      "topics": [
+        "fueling",
+        "race_week"
+      ],
+      "license": "cc_by",
+      "year": 2014,
+      "trust_reason": "Peer-reviewed review in Sports Medicine 44(Suppl 1) by a leading researcher on exercise carbohydrate metabolism.",
+      "notes": "Explains how carbohydrate intake during exercise should scale with event duration and the role of multiple transportable sugars.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "Narrative review; cites one Ironman study where women took about 1.0 and men 1.1 g/kg/h carb, with the intake-performance link not seen in women; otherwise no sex analysis."
+    },
+    {
+      "slug": "blagrove-strength-training-distance-runners-2018",
+      "title": "Effects of Strength Training on the Physiological Determinants of Middle- and Long-Distance Running Performance: A Systematic Review",
+      "author": "Blagrove RC, Howatson G, Hayes PR",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5889786/",
+      "topics": [
+        "cross_training",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2018,
+      "trust_reason": "Peer-reviewed systematic review in Sports Medicine 48(5).",
+      "notes": "Finds that adding strength and plyometric work tends to improve running economy in distance runners without harming aerobic fitness.",
+      "female_evidence": "mostly_male",
+      "population_note": "24 studies, 469 runners: 352 male and 96 female (about 79% male); only two female-only studies; authors list female runners as an under-researched group."
+    },
+    {
+      "slug": "wang-tapering-endurance-meta-analysis-2023",
+      "title": "Effects of tapering on performance in endurance athletes: A systematic review and meta-analysis",
+      "author": "Wang Z, Wang YT, Gao W, Zhong Y",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10171681/",
+      "topics": [
+        "race_week",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2023,
+      "trust_reason": "Peer-reviewed systematic review and meta-analysis in PLoS One (doi 10.1371/journal.pone.0282838).",
+      "notes": "Pools taper studies in endurance athletes to compare taper length, volume reduction and intensity on performance.",
+      "female_evidence": "mostly_male",
+      "population_note": "14 studies, 174 athletes; only 7 women (about 4%) across two studies; no sex subgroup; authors note results may not represent female athletes."
+    },
+    {
+      "slug": "hearris-muscle-glycogen-endurance-2018",
+      "title": "Regulation of Muscle Glycogen Metabolism during Exercise: Implications for Endurance Performance and Training Adaptations",
+      "author": "Hearris MA, Hammond KM, Fell JM, Morton JP",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5872716/",
+      "topics": [
+        "fueling",
+        "race_week",
+        "daily_nutrition"
+      ],
+      "license": "cc_by",
+      "year": 2018,
+      "trust_reason": "Peer-reviewed review in Nutrients 10(3):298 from an academic sports nutrition group.",
+      "notes": "Explains how glycogen stores govern endurance capacity and how pre-race carbohydrate loading and training-low strategies relate to them.",
+      "female_evidence": "mostly_male",
+      "population_note": "Key glycogen figure compiled from males only and most cited trials used men; authors mention gender as a factor in fat oxidation and call for more research by gender."
+    },
+    {
+      "slug": "halson-sleep-elite-athletes-2014",
+      "title": "Sleep in elite athletes and nutritional interventions to enhance sleep",
+      "author": "Halson SL",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4008810/",
+      "topics": [
+        "recovery",
+        "health"
+      ],
+      "license": "cc_by",
+      "year": 2014,
+      "trust_reason": "Peer-reviewed review in Sports Medicine 44(Suppl 1) by a sport-science recovery researcher.",
+      "notes": "Reviews why sleep matters for athlete recovery and performance and which dietary factors may influence sleep quality.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "Narrative review mixing men-only, women-only and unreported-sex studies; most athlete samples do not state sex and sex is not analyzed."
+    },
+    {
+      "slug": "agresta-footwear-injury-paradigms-2022",
+      "title": "Running Injury Paradigms and Their Influence on Footwear Design Features and Runner Assessment Methods: A Focused Review to Advance Evidence-Based Practice for Running Medicine Clinicians",
+      "author": "Agresta C, Giacomazzi C, Harrast M, Zendler J",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8959543/",
+      "topics": [
+        "gear",
+        "injury"
+      ],
+      "license": "cc_by",
+      "year": 2022,
+      "trust_reason": "Peer-reviewed review in Frontiers in Sports and Active Living by running-medicine clinicians and researchers.",
+      "notes": "Surveys how injury theories such as pronation control, impact and comfort shaped shoe design, and what evidence supports each.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "Cites some female-only and mixed studies (one suggests female, lighter runners keep motion paths less well) but sex is not analyzed and no sex-specific footwear advice."
+    },
+    {
+      "slug": "tenforde-carbon-plate-bone-stress-2023",
+      "title": "Bone Stress Injuries in Runners Using Carbon Fiber Plate Footwear",
+      "author": "Tenforde A, Hoenig T, Saxena A, Hollander K",
+      "kind": "research",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10356879/",
+      "topics": [
+        "gear",
+        "injury"
+      ],
+      "license": "cc_by",
+      "year": 2023,
+      "trust_reason": "Peer-reviewed article in Sports Medicine by sports-medicine physicians and researchers.",
+      "notes": "Reports bone stress injuries seen in runners wearing carbon-plated super shoes and discusses possible mechanisms and caution.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "Case series of 5 runners (3 male, 2 female); cases described individually, no RED-S or menstrual discussion; the biomechanics work it relies on used male runners."
+    },
+    {
+      "slug": "us-physical-activity-guidelines-2nd-ed",
+      "title": "Physical Activity Guidelines for Americans, 2nd edition",
+      "author": "U.S. Department of Health and Human Services (ODPHP)",
+      "kind": "guideline",
+      "url": "https://odphp.health.gov/our-work/nutrition-physical-activity/physical-activity-guidelines/current-guidelines",
+      "topics": [
+        "health",
+        "cross_training"
+      ],
+      "license": "public_domain",
+      "year": 2018,
+      "trust_reason": "Federal guideline built on the 2018 Physical Activity Guidelines Advisory Committee Scientific Report.",
+      "notes": "Baseline weekly aerobic and muscle-strengthening targets for adults and the health benefits of activity.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "General adult guidance with a pregnancy and postpartum section; no sex-specific training evidence for athletes."
+    },
+    {
+      "slug": "dietary-guidelines-americans-2025-2030",
+      "title": "Dietary Guidelines for Americans, 2025-2030",
+      "author": "U.S. Department of Agriculture and U.S. Department of Health and Human Services",
+      "kind": "guideline",
+      "url": "https://www.dietaryguidelines.gov/",
+      "topics": [
+        "daily_nutrition",
+        "health"
+      ],
+      "license": "public_domain",
+      "year": 2026,
+      "trust_reason": "Official federal dietary guidance released by USDA and HHS on 2026-01-07; note this edition skipped the usual advisory-committee process, so pair it with sports-nutrition position stands.",
+      "notes": "General healthy-eating patterns for the population, emphasizing whole foods and limiting added sugars and highly processed foods.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "General-population guidance with a pregnancy section; sex-specific nutrient tables not confirmed."
+    },
+    {
+      "slug": "nih-ods-exercise-athletic-performance",
+      "title": "Dietary Supplements for Exercise and Athletic Performance (fact sheet)",
+      "author": "NIH Office of Dietary Supplements",
+      "kind": "guideline",
+      "url": "https://ods.od.nih.gov/factsheets/ExerciseAndAthleticPerformance-Consumer/",
+      "topics": [
+        "fueling",
+        "health"
+      ],
+      "license": "public_domain",
+      "year": null,
+      "trust_reason": "U.S. National Institutes of Health fact sheet, regularly updated.",
+      "notes": "Ingredient-by-ingredient summary of evidence and safety for supplements marketed for exercise; a health-professional version also exists.",
+      "female_evidence": "unknown",
+      "population_note": "Fact sheet pages returned 403 and search snippets did not show any sex-related content."
+    },
+    {
+      "slug": "eatright-sports-athletic-performance",
+      "title": "Sports and Athletic Performance",
+      "author": "Academy of Nutrition and Dietetics",
+      "kind": "organization",
+      "url": "https://www.eatright.org/fitness/sports-and-athletic-performance",
+      "topics": [
+        "daily_nutrition",
+        "fueling",
+        "hydration"
+      ],
+      "license": "copyrighted",
+      "year": null,
+      "trust_reason": "Consumer pages from the largest professional body of registered dietitian nutritionists in the U.S.",
+      "notes": "Plain-language articles on eating for exercise at beginner and advanced levels; useful for referring runners to an RDN.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "usada-supplement-connect",
+      "title": "Supplement Connect",
+      "author": "U.S. Anti-Doping Agency (USADA)",
+      "kind": "organization",
+      "url": "https://www.usada.org/athletes/substances/supplement-connect/",
+      "topics": [
+        "health",
+        "fueling"
+      ],
+      "license": "unknown",
+      "year": null,
+      "trust_reason": "Education resource from the national anti-doping organization of the United States.",
+      "notes": "Explains supplement risks such as contamination and mislabeling and advises third-party certified products (NSF Certified for Sport) if a runner chooses to use them.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "rrca-coaching-certification",
+      "title": "RRCA Coaching Certification Program",
+      "author": "Road Runners Club of America",
+      "kind": "organization",
+      "url": "https://www.rrca.org/education/coaching-certification/",
+      "topics": [
+        "training"
+      ],
+      "license": "unknown",
+      "year": null,
+      "trust_reason": "National running organization that runs a long-standing distance-running coach certification with exam and CPR/First Aid requirements.",
+      "notes": "Describes Level 1 and Level 2 coach certification requirements; useful for vetting a coach's credentials and finding certified coaches.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "pfitzinger-douglas-advanced-marathoning-4e",
+      "title": "Advanced Marathoning, 4th Edition",
+      "author": "Pete Pfitzinger and Scott Douglas",
+      "kind": "book",
+      "url": "https://us.humankinetics.com/products/advanced-marathoning-4th-edition",
+      "topics": [
+        "training",
+        "race_week",
+        "recovery"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Published by Human Kinetics (ISBN 9781718237476); Pfitzinger was the top American finisher in the 1984 and 1988 Olympic marathons.",
+      "notes": "Marathon training principles plus plans organized by weekly mileage, with tapering and race-day strategy; cite by reference only.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "daniels-running-formula-4e",
+      "title": "Daniels' Running Formula, 4th Edition",
+      "author": "Jack Daniels",
+      "kind": "book",
+      "url": "https://us.humankinetics.com/products/daniels-running-formula-4th-edition",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2022,
+      "trust_reason": "Published by Human Kinetics (ISBN 9781718203662); author created the VDOT training-pace system.",
+      "notes": "VDOT-based training intensities and plans from 800 m to the marathon; cite by reference only.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "hudson-run-faster-5k-marathon",
+      "title": "Run Faster from the 5K to the Marathon: How to Be Your Own Best Coach",
+      "author": "Brad Hudson and Matt Fitzgerald",
+      "kind": "book",
+      "url": "https://www.penguinrandomhouse.com/books/83833/run-faster-from-the-5k-to-the-marathon-by-brad-hudson-and-matt-fitzgerald/",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2008,
+      "trust_reason": "Published by Broadway Books/Crown (Penguin Random House, ISBN 9780767928229); Hudson coached elite distance runners.",
+      "notes": "Adaptive approach to building and adjusting your own plan, with sample programs from 5K to marathon; cite by reference only.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "fitzgerald-80-20-running",
+      "title": "80/20 Running: Run Stronger and Race Faster by Training Slower",
+      "author": "Matt Fitzgerald",
+      "kind": "book",
+      "url": "https://www.penguin.com.au/books/80-20-running-9780451470881",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2014,
+      "trust_reason": "Published by New American Library/Berkley (Penguin, ISBN 9780451470881); author is an established endurance-sports writer.",
+      "notes": "Makes the case for keeping most running easy and a small share hard, with plans for 5K through marathon; cite by reference only.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "la-marathon-larr-training-plans",
+      "title": "LA Road Runners Training Resources (ASICS LA Marathon plans, Levels 1-5)",
+      "author": "LA Road Runners / The McCourt Foundation (Head Coach David Levine)",
+      "kind": "race_organizer",
+      "url": "https://www.mccourtfoundation.org/la-road-runners-training-resources/",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Published by the LA Marathon's organizer for LA Road Runners, the race's official in-person training program, led by Head Coach David Levine (the site lists no formal credentials).",
+      "notes": "Free five-level PDF plans of about 25 weeks aimed at the March 2027 race, built around the program's own pace-zone terms.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "la-marathon-course",
+      "title": "Los Angeles Marathon Distances & Courses",
+      "author": "The McCourt Foundation",
+      "kind": "race_organizer",
+      "url": "https://www.mccourtfoundation.org/event/los-angeles-marathon/distances-courses/",
+      "topics": [
+        "course",
+        "race_week"
+      ],
+      "license": "copyrighted",
+      "year": null,
+      "trust_reason": "Official course page from the race organizer.",
+      "notes": "Point-to-point route from Dodger Stadium to Century City with a 7:00am start, 6h30m limit and a downloadable map PDF; no elevation profile in the page text.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "boston-marathon-baa-training-plans",
+      "title": "Boston Marathon Training Plans",
+      "author": "Boston Athletic Association (B.A.A.)",
+      "kind": "race_organizer",
+      "url": "https://www.baa.org/races/boston-marathon/enter/training",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": null,
+      "trust_reason": "Plans described as B.A.A.-developed by the race organizer; no individual coach is named.",
+      "notes": "Four 20-week levels from novice to advanced, from roughly 4 to 7 run days and up to about 60 mi peak weeks; the page forbids reproduction without B.A.A. written consent.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "boston-marathon-course-map-2026",
+      "title": "2026 Boston Marathon Course Map (PDF)",
+      "author": "Boston Athletic Association (B.A.A.)",
+      "kind": "race_organizer",
+      "url": "https://www.baa.org/wp-content/uploads/2026/03/2026-Course-Map.pdf",
+      "topics": [
+        "course"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Official course map PDF linked from the B.A.A. spectator information page.",
+      "notes": "Point-to-point map from Hopkinton to Boylston Street; B.A.A. has no dedicated HTML course page, so elevation comes from the media guide entry.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "boston-marathon-media-guide-2026",
+      "title": "130th Boston Marathon Media Guide (PDF)",
+      "author": "Boston Athletic Association (B.A.A.)",
+      "kind": "race_organizer",
+      "url": "https://www.baa.org/wp-content/uploads/2026/04/April14-BM26-Media-Guide-Pages_UPDATE-ForOnlineL.pdf",
+      "topics": [
+        "course"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Official B.A.A. media guide whose elevation profile is credited to geographer Sean Hartnett (University of Wisconsin-Eau Claire).",
+      "notes": "Large PDF with mile-by-mile course elevations, useful for planning downhill-heavy early miles and the Newton hills.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "nyc-marathon-course",
+      "title": "TCS New York City Marathon: The Course",
+      "author": "New York Road Runners (NYRR)",
+      "kind": "race_organizer",
+      "url": "https://www.nyrr.org/tcsnycmarathon/the-course",
+      "topics": [
+        "course"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Official course page from the race organizer, New York Road Runners.",
+      "notes": "Five-borough route with the 2026 course map PDF and the 2026 Bronx change; nyrr.org sends automated fetches to a waiting-room queue, so answer-time fetch may fail.",
+      "fetchable": false,
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "london-marathon-training-plans",
+      "title": "TCS London Marathon: Start Training (training plans)",
+      "author": "London Marathon Events",
+      "kind": "race_organizer",
+      "url": "https://www.londonmarathonevents.co.uk/london-marathon/start-training",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Published by the race organizer; the page names no plan author, though third-party sources credit official event coach Martin Yelling.",
+      "notes": "Free 16-week Beginner, Improver, Advanced and Wheelchair PDF plans for 2026, with Coopah promoted as the official (paid, in-app) training app.",
+      "fetchable": false,
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "london-marathon-course",
+      "title": "TCS London Marathon Course",
+      "author": "London Marathon Events",
+      "kind": "race_organizer",
+      "url": "https://www.londonmarathonevents.co.uk/london-marathon/course",
+      "topics": [
+        "course",
+        "race_week"
+      ],
+      "license": "copyrighted",
+      "year": null,
+      "trust_reason": "Official course page from the race organizer, with section pacing notes from an event pacer.",
+      "notes": "Mile-by-mile written route from Woolwich to The Mall, noting a net-downhill opening, gentle drop to mile 14 and the rise before Tower Bridge, plus aid station locations.",
+      "fetchable": false,
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "chicago-marathon-training-plan",
+      "title": "Bank of America Chicago Marathon Training (official Nike plan)",
+      "author": "Nike, for the Bank of America Chicago Marathon",
+      "kind": "race_organizer",
+      "url": "https://www.chicagomarathon.com/training/",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Hosted by the race organizer as the official plan from Nike; no individual coach is named.",
+      "notes": "Downloadable 18-week PDF plan (2026 edition) mixing recovery, long, speed and strength sessions with effort-based paces.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "chicago-marathon-course",
+      "title": "Bank of America Chicago Marathon Course",
+      "author": "Bank of America Chicago Marathon",
+      "kind": "race_organizer",
+      "url": "https://www.chicagomarathon.com/event-info/participant-information/course/",
+      "topics": [
+        "course"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Official course page from the race organizer.",
+      "notes": "Flat loop through 29 neighborhoods starting and finishing in Grant Park, with a 2026 course map PDF; no elevation or start-time detail on the page.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "berlin-marathon-course",
+      "title": "GENERALI BERLIN MARATHON Course",
+      "author": "SCC EVENTS (Berlin Marathon organizer)",
+      "kind": "race_organizer",
+      "url": "https://www.generali-berlin-marathon.com/en/race-weekend/course",
+      "topics": [
+        "course",
+        "hydration"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Official course page from the race organizer (the old bmw-berlin-marathon.com URLs now redirect here).",
+      "notes": "Interactive map still showing the 2026 route, described as the flattest major, elevation listed as tba, with refreshment station kilometers.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "tokyo-marathon-course",
+      "title": "Tokyo Marathon Course Map",
+      "author": "Tokyo Marathon Foundation",
+      "kind": "race_organizer",
+      "url": "https://www.marathon.tokyo/en/about/course/",
+      "topics": [
+        "course",
+        "race_week"
+      ],
+      "license": "copyrighted",
+      "year": 2027,
+      "trust_reason": "Official course page from the race organizer.",
+      "notes": "Route from the Tokyo Metropolitan Government Building to Wadakura Gate with an elevation profile image, map PDF and expected start and passing times for the 2027 race.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "sydney-marathon-course",
+      "title": "TCS Sydney Marathon: Marathon course",
+      "author": "TCS Sydney Marathon (Sydney Marathon organizer)",
+      "kind": "race_organizer",
+      "url": "https://www.tcssydneymarathon.com/marathon",
+      "topics": [
+        "course",
+        "race_week"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Official course page from the race organizer.",
+      "notes": "Hilly route from North Sydney over the Harbour Bridge to the Opera House (+313 m gain), 6:30am mass start, 7-hour cutoff, with an official GPX file and flyover video.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "marathon-handbook-marathon-plans",
+      "title": "Marathon Handbook: Marathon Training Plans",
+      "author": "Marathon Handbook (plans designed by founder Thomas Watson)",
+      "kind": "coach",
+      "url": "https://marathonhandbook.com/trainingplans/marathon-training-plans/",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2026,
+      "trust_reason": "Plans credited to founder Thomas Watson, self-described UESCA-certified running coach and ultrarunner, and marked as reviewed by an unnamed in-house coaching team.",
+      "notes": "Free index of beginner through advanced and sub-4, sub-3:30 and sub-3 plans of 8 to 26 weeks; the site is affiliate-funded and sells paid TrainingPeaks versions.",
+      "fetchable": false,
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "venice-run-club-marathon-training",
+      "title": "Venice Run Club: Marathon Training",
+      "author": "Venice Run Club (founded by Justin and Tyler)",
+      "kind": "coach",
+      "url": "https://venicerunclub.co/pages/marathon-training",
+      "topics": [
+        "training"
+      ],
+      "license": "unknown",
+      "year": null,
+      "trust_reason": "Community run club page; no coaches or coaching credentials are named anywhere on the site.",
+      "notes": "Free Level I-III marathon plans hosted as Google Drive and Sheets files, alongside free group runs in Venice, CA; treat as low-authority community material.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "hal-higdon-marathon-training",
+      "title": "Hal Higdon: Marathon Training for All Skill Levels",
+      "author": "Hal Higdon",
+      "kind": "coach",
+      "url": "https://www.halhigdon.com/training/marathon-training/",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": null,
+      "trust_reason": "Written by Hal Higdon, longtime Runner's World contributing editor, RRCA co-founder and author of Marathon: The Ultimate Training Guide; no coaching certification is claimed.",
+      "notes": "Widely used free library of mostly 18-week plans from Novice 1 to Advanced 2 plus longer and specialty variants, with paid interactive versions on TrainingPeaks.",
+      "female_evidence": "not_applicable",
+      "population_note": ""
+    },
+    {
+      "slug": "issn-female-athlete-nutrition-2023",
+      "title": "International society of sports nutrition position stand: nutritional concerns of the female athlete",
+      "author": "Sims ST, Kerksick CM, Smith-Ryan AE, Janse de Jonge XAK, et al. (International Society of Sports Nutrition)",
+      "kind": "position_stand",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10210857/",
+      "topics": [
+        "fueling",
+        "daily_nutrition",
+        "hydration",
+        "recovery",
+        "health"
+      ],
+      "license": "open_access",
+      "year": 2023,
+      "trust_reason": "Official ISSN position stand, peer reviewed, J Int Soc Sports Nutr 20(1):2204066.",
+      "notes": "Covers energy availability, carbohydrate and protein needs across menstrual cycle phases, contraceptive use and menopause, and suggests women track their own hormonal status against training and recovery.",
+      "female_evidence": "female_specific",
+      "population_note": "Expert review of literature on female athletes of reproductive age through peri- and post-menopause; no single study sample."
+    },
+    {
+      "slug": "wohlgemuth-female-nutrition-strategies-2021",
+      "title": "Sex differences and considerations for female specific nutritional strategies: a narrative review",
+      "author": "Wohlgemuth KJ, Arieta LR, Brewer GJ, Hoselton AL, Gould LM, Smith-Ryan AE",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8015182/",
+      "topics": [
+        "fueling",
+        "daily_nutrition",
+        "health"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed narrative review in J Int Soc Sports Nutr 18:27.",
+      "notes": "Practical summary of how hormonal changes across the cycle and lifespan shift nutrition and supplement considerations for active women.",
+      "female_evidence": "female_specific",
+      "population_note": "Narrative synthesis of literature on active females and female athletes; no pooled sample."
+    },
+    {
+      "slug": "mercer-protein-female-athletes-2020",
+      "title": "Protein Requirements of Pre-Menopausal Female Athletes: Systematic Literature Review",
+      "author": "Mercer D, Convit L, Condo D, Carr AJ, Hamilton DL, Slater G, Snipe RMJ",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7696053/",
+      "topics": [
+        "daily_nutrition",
+        "fueling",
+        "recovery"
+      ],
+      "license": "cc_by",
+      "year": 2020,
+      "trust_reason": "Peer-reviewed systematic review in Nutrients 12(11):3527, quality graded with the Academy of Nutrition and Dietetics checklist.",
+      "notes": "Estimates daily protein needs for premenopausal women doing endurance, resistance and intermittent exercise, and finds too little data to say whether cycle phase or contraception changes them.",
+      "female_evidence": "female_specific",
+      "population_note": "14 studies, 204 recreationally active or competitive premenopausal women (about 18-45 years)."
+    },
+    {
+      "slug": "mcnulty-menstrual-cycle-performance-2020",
+      "title": "The Effects of Menstrual Cycle Phase on Exercise Performance in Eumenorrheic Women: A Systematic Review and Meta-Analysis",
+      "author": "McNulty KL, Elliott-Sale KJ, Dolan E, Swinton PA, Ansdell P, Goodall S, Thomas K, Hicks KM",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7497427/",
+      "topics": [
+        "training",
+        "race_week",
+        "health"
+      ],
+      "license": "cc_by",
+      "year": 2020,
+      "trust_reason": "Peer-reviewed systematic review and Bayesian meta-analysis in Sports Med 50(10):1813-1827, GRADE-based quality assessment.",
+      "notes": "Finds performance may be trivially lower in the early follicular phase, but evidence is mostly low quality and varied, so it favors individual tracking over blanket cycle-based rules.",
+      "female_evidence": "female_specific",
+      "population_note": "78 studies, 1,193 naturally menstruating women; 51 studies (709 women) in the pairwise meta-analysis."
+    },
+    {
+      "slug": "elliott-sale-oral-contraceptives-performance-2020",
+      "title": "The Effects of Oral Contraceptives on Exercise Performance in Women: A Systematic Review and Meta-analysis",
+      "author": "Elliott-Sale KJ, McNulty KL, Ansdell P, Goodall S, Hicks KM, Thomas K, Swinton PA, Dolan E",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7497464/",
+      "topics": [
+        "training",
+        "health"
+      ],
+      "license": "cc_by",
+      "year": 2020,
+      "trust_reason": "Peer-reviewed systematic review and Bayesian meta-analysis in Sports Med 50(10):1785-1812.",
+      "notes": "Compares pill users with naturally menstruating women and pill-taking days with withdrawal days, finding at most small performance differences and mostly low-quality evidence.",
+      "female_evidence": "female_specific",
+      "population_note": "42 studies, 590 women (oral contraceptive users and naturally menstruating comparators)."
+    },
+    {
+      "slug": "elliott-sale-methods-women-research-2021",
+      "title": "Methodological Considerations for Studies in Sport and Exercise Science with Women as Participants: A Working Guide for Standards of Practice for Research on Women",
+      "author": "Elliott-Sale KJ, Minahan CL, de Jonge XAKJ, Ackerman KE, Sipila S, Constantini NW, Lebrun CM, Hackney AC",
+      "kind": "guideline",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8053180/",
+      "topics": [
+        "training",
+        "health"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Expert methodological statement, peer reviewed, Sports Med 51(5):843-861.",
+      "notes": "Sets standards for classifying menstrual status, contraceptive use, pregnancy and menopause in studies, which helps the coach judge how well a study's findings apply to women.",
+      "female_evidence": "female_specific",
+      "population_note": "Methods guidance for research with women from non-athletes to athletes; no study sample."
+    },
+    {
+      "slug": "cowley-invisible-sportswomen-2021",
+      "title": "\"Invisible Sportswomen\": The Sex Data Gap in Sport and Exercise Science Research",
+      "author": "Cowley ES, Olenick AA, McNulty KL, Ross EZ",
+      "kind": "research",
+      "url": "https://doi.org/10.1123/wspaj.2021-0028",
+      "topics": [
+        "training",
+        "health"
+      ],
+      "license": "unknown",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed audit in Women in Sport and Physical Activity Journal 29(2):146-151 (Human Kinetics).",
+      "notes": "Audits who was studied in six sport science journals and shows women are a minority of participants and rarely studied alone, a reason to flag male-only evidence.",
+      "female_evidence": "sex_reported",
+      "population_note": "5,261 papers from 6 journals (2014-2020), 12.5 million participants: 34% female; 6% of papers studied females only."
+    },
+    {
+      "slug": "pengelly-iron-deficiency-female-athletes-2025",
+      "title": "Iron deficiency, supplementation, and sports performance in female athletes: A systematic review",
+      "author": "Pengelly M, Pumpa K, Pyne DB, Etxebarria N",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11863318/",
+      "topics": [
+        "health",
+        "daily_nutrition",
+        "training"
+      ],
+      "license": "open_access",
+      "year": 2025,
+      "trust_reason": "Peer-reviewed systematic review in J Sport Health Sci 14:101009, quality assessed with a modified Downs and Black checklist.",
+      "notes": "Links iron deficiency to a small drop in endurance performance in trained women and reports gains after medically supervised supplementation; useful context for advising a blood test with a doctor.",
+      "female_evidence": "female_specific",
+      "population_note": "23 studies, 669 high-level female athletes aged 13-47 across 16 sports, iron deficient defined as serum ferritin under 40 ug/L."
+    },
+    {
+      "slug": "tenforde-bone-stress-female-runners-2024",
+      "title": "Factors Associated With High-Risk and Low-Risk Bone Stress Injury in Female Runners: Implications for Risk Factor Stratification and Management",
+      "author": "Tenforde AS, Ackerman KE, Bouxsein ML, Gaudette L, et al., Popp KL",
+      "kind": "research",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11110515/",
+      "topics": [
+        "injury",
+        "health"
+      ],
+      "license": "open_access",
+      "year": 2024,
+      "trust_reason": "Peer-reviewed cross-sectional study in Orthop J Sports Med 12(5).",
+      "notes": "Compares women with high-risk (pelvis, femoral neck) versus low-risk (shin, foot) bone stress injuries on bone density, menstrual history, eating behavior and running load rates.",
+      "female_evidence": "female_specific",
+      "population_note": "45 premenopausal women runners: 15 with high-risk BSI history, 15 with low-risk BSI history, 15 with none."
+    },
+    {
+      "slug": "female-athlete-triad-coalition-2025-update-part2",
+      "title": "2025 Update to the Female Athlete Triad Coalition Consensus Statement Part 2: Clinical Guidelines for Screening, Diagnosis, Treatment, and Return to Play for Adolescents and Adults",
+      "author": "Williams NI, De Souza MJ, Misra M, Nattiv A, Joy E, Barrack M, et al. (Female Athlete Triad Coalition)",
+      "kind": "position_stand",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12982345/",
+      "topics": [
+        "health",
+        "injury",
+        "daily_nutrition"
+      ],
+      "license": "cc_by",
+      "year": 2026,
+      "trust_reason": "Consensus statement of the Female Athlete Triad Coalition, peer reviewed, Sports Med 56(2):375-427; updates the 2014 consensus.",
+      "notes": "Updates screening, treatment and return-to-play guidance for low energy, menstrual disturbance and bone loss, now counting bone stress injuries in the bone spectrum and moving away from a single energy availability cutoff.",
+      "female_evidence": "female_specific",
+      "population_note": "Expert consensus on adolescent and adult female athletes; no single study sample."
+    },
+    {
+      "slug": "kelly-heat-adaptation-females-2023",
+      "title": "Heat Adaptation for Females: A Systematic Review and Meta-Analysis of Physiological Adaptations and Exercise Performance in the Heat",
+      "author": "Kelly MK, Bowe SJ, Jardine WT, Condo D, Guy JH, Snow RJ, Carr AJ",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10289939/",
+      "topics": [
+        "training",
+        "hydration",
+        "race_week"
+      ],
+      "license": "cc_by",
+      "year": 2023,
+      "trust_reason": "Peer-reviewed systematic review and meta-analysis in Sports Med 53(7):1395-1421.",
+      "notes": "Shows heat training lowers core temperature and heart rate and raises sweat rate in women and improves performance in the heat, with notes on the exposure doses that worked best.",
+      "female_evidence": "female_specific",
+      "population_note": "30 studies (22 meta-analysed), 235 women completing heat training; most studies did not control cycle phase."
+    },
+    {
+      "slug": "hollander-sex-differences-running-injuries-2021",
+      "title": "Sex-Specific Differences in Running Injuries: A Systematic Review with Meta-Analysis and Meta-Regression",
+      "author": "Hollander K, Rahlf AL, Wilke J, Edler C, Steib S, Junge A, Zech A",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8053184/",
+      "topics": [
+        "injury",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed systematic review and meta-analysis in Sports Med 51(5):1011-1039, PRISMA methods.",
+      "notes": "Finds similar overall injury rates in women and men but a roughly doubled bone stress injury risk in women, while men get more Achilles problems.",
+      "female_evidence": "sex_reported",
+      "population_note": "38 prospective studies; injury data from 35,689 runners, 40.8% female."
+    },
+    {
+      "slug": "goom-postnatal-return-to-running-2019",
+      "title": "Returning to running postnatal: guidelines for medical, health and fitness professionals managing this population",
+      "author": "Goom T, Donnelly G, Brockwell E",
+      "kind": "guideline",
+      "url": "https://www.running-physio.com/postnatal-guide",
+      "topics": [
+        "training",
+        "injury",
+        "health"
+      ],
+      "license": "unknown",
+      "year": 2019,
+      "trust_reason": "Clinician guideline written by a sports physiotherapist and two pelvic health physiotherapists after expert feedback; later summarized as a BJSM infographic (2020).",
+      "notes": "Lists pelvic floor and abdominal checks, risk factors and graded strength and impact readiness tests before running after childbirth; the coach uses it only as context when referring to a pelvic health physio.",
+      "female_evidence": "female_specific",
+      "population_note": "Clinical guidance for postnatal women returning to running; not a study sample."
+    },
+    {
+      "slug": "sims-roar-revised-2024",
+      "title": "ROAR, Revised Edition: Match Your Food and Fitness to Your Unique Female Physiology",
+      "author": "Sims ST",
+      "kind": "book",
+      "url": null,
+      "topics": [
+        "fueling",
+        "daily_nutrition",
+        "training",
+        "recovery",
+        "hydration"
+      ],
+      "license": "copyrighted",
+      "year": 2024,
+      "trust_reason": "Book by an exercise physiologist and nutrition scientist, published by Rodale/Harmony (Penguin Random House), ISBN 9780593581926; revision of the 2016 Rodale original.",
+      "notes": "Popular, research-informed guide to training and eating around the menstrual cycle and menopause; cite by reference only and prefer the peer-reviewed sources for specific numbers.",
+      "female_evidence": "female_specific",
+      "population_note": "Written for active women across the lifespan; not a study."
+    }
+  ]
+}
