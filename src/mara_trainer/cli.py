@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import typer
 
 from . import db, imports, paces, reports
-from .dates import date_in_timezone, parse_day
+from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
     RecentRace,

@@ -66,8 +66,13 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
   read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile,
   search_sources, allowed_domains); exit 1 on bad args or a tool error
+- `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
+  answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
+  by category; exit 0 none failed, 3 any failed. No API calls.
 - Eval set: `evals/coach-questions.json`, loaded and checked by `mara_coach.evals` (tests enforce
-  its shape). Add a case whenever the coach gets something wrong.
+  its shape), scored by `mara_coach.evals_runner`. Optional per-case `checks`: `require` (regex
+  groups, one match each), `forbid`, `cite`; referral cases are always checked for a referral.
+  Add a case whenever the coach gets something wrong.
 
 ## Data sources and rules (read before touching integrations)
 - **Strava — official MCP only, and never in `mara_coach`.** The coach agent and any public
@@ -134,7 +139,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
   `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources` and `athlete_profile`)
-- `src/mara_coach/` — `cli.py` (entry point), `evals.py` (eval-set loader), `sources.py` (source
+- `src/mara_coach/` — `cli.py` (entry point), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent); agent and Slack land here
 - `sources/seed.json` — proposed seed sources (links + metadata + our own one-line notes, no copied text)
