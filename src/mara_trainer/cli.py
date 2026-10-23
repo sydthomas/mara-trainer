@@ -4,25 +4,20 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import db, imports
-from .dates import date_in_timezone, parse_day
+from . import db, imports, reports
+from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
     RecentRace,
     ScheduleValidationError,
-    brief_feasibility_problems,
-    build_schedule_brief,
-    check_schedule,
     validate_schedule,
 )
-from .summaries import summarize, summarize_range, week_bounds, weekly_rollups
 
 app = typer.Typer(
     help="Personal marathon coach CLI (local SQLite, JSON output).", no_args_is_help=True
@@ -139,54 +134,10 @@ def summary_cmd(
     weeks: Annotated[int, typer.Option(help="Also return N weekly rollups (oldest first)")] = 0,
 ) -> None:
     """Training summary. Default: trailing 7 athlete-local days. Missing data stays null."""
-    conn = _conn()
     try:
-        tz = db.athlete_timezone(conn)
-    except LookupError as exc:
+        _out(reports.summary(_conn(), week, weeks))
+    except reports.ReportError as exc:
         _fail(str(exc))
-    acts, checks = db.load_activities(conn), db.load_check_ins(conn)
-    now = datetime.now(UTC)
-    if week:
-        today = date_in_timezone(now, tz)
-        anchor = {"current": today, "last": (date.fromisoformat(today).toordinal() - 7)}.get(
-            week, week
-        )
-        if isinstance(anchor, int):
-            anchor = date.fromordinal(anchor).isoformat()
-        start, end = week_bounds(str(anchor))
-        data: dict[str, Any] = {
-            "summary": summarize_range(acts, checks, tz, start, end, now).to_dict()
-        }
-    else:
-        data = {"summary": summarize(acts, checks, tz, now).to_dict()}
-    if weeks:
-        data["weekly"] = [s.to_dict() for s in weekly_rollups(acts, checks, tz, weeks, now)]
-    plan = db.load_accepted_plan(conn)
-    data["has_accepted_plan"] = plan is not None
-    _out(data)
-
-
-def _load_plan_inputs(plan_file: Path, today: str | None) -> tuple[dict[str, Any], RaceSetup, str]:
-    try:
-        raw = json.loads(plan_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        _fail(f"cannot read plan JSON: {exc}")
-    if not isinstance(raw, dict):
-        _fail("plan JSON must be an object with 'weeks'")
-    try:
-        if "setup" in raw:
-            setup = RaceSetup.from_dict(raw["setup"])
-        else:
-            loaded = db.load_race_setup(_conn())
-            if loaded is None:
-                _fail("plan has no 'setup' and no race is set; run `coach race set` first")
-            setup = loaded
-    except (KeyError, TypeError, ValueError) as exc:
-        _fail(f"invalid setup: {exc}")
-    anchor = today or raw.get("brief_date")
-    if not anchor:
-        _fail("plan needs 'brief_date' (the date its brief was built) or pass --today")
-    return raw, setup, str(anchor)
 
 
 @app.command("validate-plan")
@@ -198,11 +149,15 @@ def validate_plan(
     ] = False,
 ) -> None:
     """Run the deterministic guardrails on a proposed plan. Exit 0 = pass, 3 = violations."""
-    raw, setup, anchor = _load_plan_inputs(plan_file, today)
-    brief = build_schedule_brief(setup, anchor)
-    result = check_schedule(raw, setup, brief)
-    if not result.ok:
-        typer.echo(json.dumps(result.to_dict(), indent=2))
+    try:
+        raw = reports.read_plan_file(plan_file)
+        saved = None if "setup" in raw else db.load_race_setup(_conn())
+        check = reports.check_plan(raw, saved, today)
+    except reports.ReportError as exc:
+        _fail(str(exc))
+    setup, brief, anchor = check.setup, check.brief, check.brief_date
+    if not check.result.ok:
+        typer.echo(json.dumps(check.result.to_dict(), indent=2))
         raise typer.Exit(3)
     if accept:
         try:
@@ -224,20 +179,10 @@ def plan_brief(
     ] = None,
 ) -> None:
     """Print the guardrails (weekly targets, long-run bounds, phases) for the saved race setup."""
-    conn = _conn()
-    setup = db.load_race_setup(conn)
-    if setup is None:
-        _fail("no race set; run `coach race set` first")
-    anchor = today or date_in_timezone(datetime.now(UTC), db.athlete_timezone(conn))
-    brief = build_schedule_brief(setup, anchor)
-    _out(
-        {
-            "brief_date": anchor,
-            "setup": setup.to_dict(),
-            "feasibility_problems": brief_feasibility_problems(brief),
-            **brief.to_dict(),
-        }
-    )
+    try:
+        _out(reports.plan_brief(_conn(), today))
+    except reports.ReportError as exc:
+        _fail(str(exc))
 
 
 @plan_app.command("show")

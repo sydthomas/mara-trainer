@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -9,7 +10,7 @@ import typer
 
 from mara_trainer.cli import _conn, _fail, _out, app
 
-from . import sources
+from . import profile, sources, tools
 
 source_app = typer.Typer(help="Source registry: vetted references the coach may cite.")
 app.add_typer(source_app, name="source")
@@ -115,3 +116,90 @@ def source_retire(slugs: Annotated[list[str], typer.Argument(help="One or more s
 def source_domains() -> None:
     """Domains the coach may fetch from at answer time (approved, non-link-only sources)."""
     _out({"allowed_domains": sources.approved_domains(_conn())})
+
+
+profile_app = typer.Typer(help="Runner profile: diet, allergies, shoes, injury history, notes.")
+app.add_typer(profile_app, name="profile")
+
+
+def _split(value: str | None) -> list[str] | None:
+    """Comma list -> items. An empty string means "none" (empty list); omitted means no change."""
+    return None if value is None else [v.strip() for v in value.split(",") if v.strip()]
+
+
+@profile_app.command("set")
+def profile_set(
+    diet: Annotated[str | None, typer.Option(help="Diet in your words, e.g. vegetarian")] = None,
+    allergies: Annotated[
+        str | None, typer.Option(help="Comma list of allergies/foods avoided ('' = none)")
+    ] = None,
+    shoe_likes: Annotated[
+        str | None, typer.Option(help="Comma list of shoes or traits liked")
+    ] = None,
+    shoe_dislikes: Annotated[
+        str | None, typer.Option(help="Comma list of shoes or traits disliked")
+    ] = None,
+    current_shoes: Annotated[str | None, typer.Option(help="Comma list of shoes in use")] = None,
+    injury_history: Annotated[str | None, typer.Option(help="Past injuries, free text")] = None,
+    notes: Annotated[str | None, typer.Option(help="Anything else the coach should know")] = None,
+    clear: Annotated[
+        list[str] | None, typer.Option("--clear", help="Field to reset to null (repeatable)")
+    ] = None,
+) -> None:
+    """Update only the given profile fields. Omitted fields keep their value."""
+    raw: dict[str, object] = {
+        k: v
+        for k, v in {
+            "diet": diet,
+            "allergies": _split(allergies),
+            "shoe_likes": _split(shoe_likes),
+            "shoe_dislikes": _split(shoe_dislikes),
+            "current_shoes": _split(current_shoes),
+            "injury_history": injury_history,
+            "notes": notes,
+        }.items()
+        if v is not None
+    }
+    both = sorted(set(raw) & set(clear or []))
+    if both:
+        _fail(f"can't set and clear the same field: {', '.join(both)}")
+    raw.update(dict.fromkeys(clear or []))
+    try:
+        data = profile.update_profile(_conn(), raw)
+    except profile.ProfileError as exc:
+        _fail("invalid profile update", problems=exc.problems)
+    _out({"ok": True, "profile": data})
+
+
+@profile_app.command("show")
+def profile_show() -> None:
+    """Print the runner profile. Unset fields are null."""
+    _out({"profile": profile.get_profile(_conn())})
+
+
+tools_app = typer.Typer(help="Coach tools: read-only views of the core for the coach agent.")
+app.add_typer(tools_app, name="tools")
+
+
+@tools_app.command("list")
+def tools_list() -> None:
+    """Print every tool's name, description and JSON input schema."""
+    _out({"tools": tools.tool_specs()})
+
+
+@tools_app.command("call")
+def tools_call(
+    name: Annotated[str, typer.Argument(help="Tool name from `coach tools list`")],
+    args: Annotated[str, typer.Option("--args", help="JSON object of arguments")] = "{}",
+) -> None:
+    """Run one tool and print its JSON result. Exit 1 on bad input or a tool error."""
+    try:
+        parsed = json.loads(args)
+    except json.JSONDecodeError as exc:
+        _fail(f"--args is not valid JSON: {exc}")
+    if not isinstance(parsed, dict):
+        _fail("--args must be a JSON object")
+    try:
+        _out(tools.call_tool(_conn(), name, parsed))
+    except tools.ToolError as exc:
+        _fail(str(exc), tool=name)

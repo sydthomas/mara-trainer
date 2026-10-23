@@ -137,6 +137,17 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
   bone stress, the 2025 Triad update, heat, injury by sex, postnatal return to running, ROAR), for
   57 in total. 3 eval cases added. Gap: no open-access study of strength training in women runners.
   Day 3 system prompt: prefer women-tested sources and flag mostly-male evidence.
+- 2026-10-22 (Days 3-4): Sydney's call: Day 3 became a Claude Code skill, `.claude/skills/ask-coach`,
+  and the Claude API agent (`coach ask`, `anthropic` dependency) is deferred. The skill pulls her
+  context through a new tool layer, `mara_coach/tools.py`: seven read-only tools (plan_brief,
+  summary, validate_plan, show_plan, get_profile, search_sources, allowed_domains), each with a
+  name, description and JSON input schema, exposed as `coach tools list` / `coach tools call`. The
+  future API agent can pass the same registry to a tool runner. `search_sources` returns approved
+  sources only, `validate_plan` never accepts, and no tool touches Strava data. Plan brief, summary
+  and plan checks moved into `mara_trainer/reports.py` so the CLI and the tools share one code path.
+  Day 4 profile done: migration 006 adds `athlete_profile` (diet, allergies, shoe likes/dislikes,
+  current shoes, injury history, notes; all nullable, `[]` = "none"), with `coach profile set/show`.
+  Still to do for Day 4: fueling, gear and recovery sections (in the skill for now).
 
 ## Later, before any public launch
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
