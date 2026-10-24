@@ -54,13 +54,25 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach plan show` — accepted plan
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
+- `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
 - `uv run coach source import [sources/seed.json] [--update]` — add seed sources as `proposed`; `--update` refreshes metadata of existing ones (approval kept)
 - `uv run coach source add --slug ... --title ... --author ... --kind ... --topics a,b --license ... --trust-reason ... [--url https://...]`
 - `uv run coach source list [--status proposed|approved|retired] [--topic fueling] [--women-tested]`
 - `uv run coach source approve SLUG ... --by NAME` / `coach source retire SLUG ...` — only Sydney approves
 - `uv run coach source domains` — allowed web domains for the agent (approved sources only)
+- `uv run coach profile set [--diet ...] [--allergies a,b] [--shoe-likes a,b] [--shoe-dislikes a,b] [--current-shoes a,b] [--injury-history ...] [--notes ...] [--clear FIELD ...]`
+  — partial update, only given fields change; `--allergies ""` = none, `--clear` resets to null
+- `uv run coach profile show` — runner profile (unset fields are null)
+- `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
+  read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile,
+  search_sources, allowed_domains); exit 1 on bad args or a tool error
+- `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
+  answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
+  by category; exit 0 none failed, 3 any failed. No API calls.
 - Eval set: `evals/coach-questions.json`, loaded and checked by `mara_coach.evals` (tests enforce
-  its shape). Add a case whenever the coach gets something wrong.
+  its shape), scored by `mara_coach.evals_runner`. Optional per-case `checks`: `require` (regex
+  groups, one match each), `forbid`, `cite`; referral cases are always checked for a referral.
+  Add a case whenever the coach gets something wrong.
 
 ## Data sources and rules (read before touching integrations)
 - **Strava — official MCP only, and never in `mara_coach`.** The coach agent and any public
@@ -124,14 +136,18 @@ be summarized. If no approved source covers a question, the coach says so.
   unless Sydney asks; she commits under her own identity.
 
 ## Layout
-- `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`, `migrations/`
-- `src/mara_coach/` — `cli.py` (entry point), `evals.py` (eval-set loader), `sources.py` (source
-  registry); agent, profile and Slack land here
+- `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
+  `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  (all tables, including the coach's `sources` and `athlete_profile`)
+- `src/mara_coach/` — `cli.py` (entry point), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `sources.py` (source
+  registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
+  schemas, reused by the future API agent); agent and Slack land here
 - `sources/seed.json` — proposed seed sources (links + metadata + our own one-line notes, no copied text)
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
-- `.claude/skills/{plan-builder,weekly-review,import-workouts}/SKILL.md`
+- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach}/SKILL.md` (`ask-coach` is
+  the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)
 - `plans/` — Sydney's personal plan JSON (gitignored)

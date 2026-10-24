@@ -137,6 +137,38 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
   bone stress, the 2025 Triad update, heat, injury by sex, postnatal return to running, ROAR), for
   57 in total. 3 eval cases added. Gap: no open-access study of strength training in women runners.
   Day 3 system prompt: prefer women-tested sources and flag mostly-male evidence.
+- 2026-10-22: Pace calculator. `src/mara_trainer/paces.py` and `coach pace [--distance N --time
+  H:MM:SS --unit mi|km]` predict 5K, 10K, half and marathon times from one race result with
+  Riegel's formula (T2 = T1 * (D2/D1)^1.06, American Scientist 1981). It defaults to the saved
+  recent race and errors if there is none. Output is SI plus per-mile display, names the method
+  on every prediction, and carries caveats: the exponent was fit to elite world records, isn't
+  checked separately for women, and runs optimistic for a first marathon from a half. No
+  training-pace zones: the published systems (e.g. Daniels' VDOT) are in copyrighted books we
+  haven't checked, so none are invented. Riegel added to the seed as a proposed, link-only
+  source (58 total), `female_evidence: unknown` because the full text wasn't reviewed.
+- 2026-10-22 (Days 3-4): Sydney's call: Day 3 became a Claude Code skill, `.claude/skills/ask-coach`,
+  and the Claude API agent (`coach ask`, `anthropic` dependency) is deferred. The skill pulls her
+  context through a new tool layer, `mara_coach/tools.py`: seven read-only tools (plan_brief,
+  summary, validate_plan, show_plan, get_profile, search_sources, allowed_domains), each with a
+  name, description and JSON input schema, exposed as `coach tools list` / `coach tools call`. The
+  future API agent can pass the same registry to a tool runner. `search_sources` returns approved
+  sources only, `validate_plan` never accepts, and no tool touches Strava data. Plan brief, summary
+  and plan checks moved into `mara_trainer/reports.py` so the CLI and the tools share one code path.
+  Day 4 profile done: migration 006 adds `athlete_profile` (diet, allergies, shoe likes/dislikes,
+  current shoes, injury history, notes; all nullable, `[]` = "none"), with `coach profile set/show`.
+  Still to do for Day 4: fueling, gear and recovery sections (in the skill for now).
+- 2026-10-22: Offline eval runner. `mara_coach/evals_runner.py` scores answers from a pluggable
+  answerer (any callable from case to text; `MappingAnswerer` doubles as the test fake), and
+  `coach eval run --answers FILE.json` prints a JSON report: per-case pass, fail, unchecked or
+  missing with reasons, totals by category, unknown answer ids. Exit 3 if any case fails. Cases
+  gained an optional `checks` object (`require` regex groups, `forbid` regexes, `cite`), and
+  referral cases are always checked for a referral. These are text heuristics that catch clear
+  misses; the `must`/`must_not` lines still need a grader and are listed under `manual_review`.
+  All 28 cases now carry checks, including 2 new ones (strength for women runners, lifting after
+  low bone density). Strength gap partly closed with 3 proposed sources: Vikmoen 2016 (female-only
+  RCT, PLOS ONE, CC BY), Huiberts 2024 (concurrent-training meta-analysis analysed by sex, CC BY)
+  and Barnes 2013 (collegiate runners, results by sex; free repository copy, publisher copyright).
+  Still missing: a trial in women marathon or recreational distance runners. Seed is now 60.
 
 ## Later, before any public launch
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
