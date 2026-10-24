@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -10,7 +11,8 @@ import typer
 
 from mara_trainer.cli import _conn, _fail, _out, app
 
-from . import evals, evals_runner, profile, sources, tools
+from . import agent, evals, evals_runner, profile, sources, tools
+from .env import load_env
 
 source_app = typer.Typer(help="Source registry: vetted references the coach may cite.")
 app.add_typer(source_app, name="source")
@@ -226,3 +228,31 @@ def eval_run(
     _out(report)
     if not report["ok"]:
         raise typer.Exit(3)
+
+
+@app.command("ask")
+def ask(
+    question: Annotated[str, typer.Argument(help="Your question for the coach")],
+    effort: Annotated[str, typer.Option(help="low, medium or high")] = agent.EFFORT,
+) -> None:
+    """Ask the coach (Claude API). Needs ANTHROPIC_API_KEY in .env; tools are read-only."""
+    import anthropic
+
+    if effort not in ("low", "medium", "high"):
+        _fail("--effort must be low, medium or high")
+    load_env()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        _fail("ANTHROPIC_API_KEY is not set; add it to .env (see .env.example)")
+    try:
+        reply = agent.Coach(_conn(), effort=effort).ask(question)
+    except agent.CoachError as exc:
+        _fail(str(exc))
+    except anthropic.AuthenticationError:
+        _fail("the API key was rejected; check ANTHROPIC_API_KEY in .env")
+    except anthropic.RateLimitError:
+        _fail("rate limited by the API; try again in a minute")
+    except anthropic.APIStatusError as exc:
+        _fail(f"API error {exc.status_code}", request_id=getattr(exc, "request_id", None))
+    except anthropic.APIConnectionError:
+        _fail("couldn't reach the API; check your connection")
+    _out(reply.to_dict())

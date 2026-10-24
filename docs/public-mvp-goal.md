@@ -182,6 +182,13 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
   (Sydney talks via `/voice`) that reads the entry back and saves it after she says yes. Sydney's
   call: long runs only, stay in Claude Code for now. Later the same debrief moves to Slack with a
   scheduled ping after the planned long run (needs an API key), then maybe phone calls.
+- 2026-10-24: Plan accepted (18 weeks from 2026-11-02, peak 40 mi with a 20 mi long run). Sydney
+  approved the API agent, Slack, a COROS MCP and Twilio phone debriefs (free tunnel first;
+  hosting later), building them together in that order. `coach ask` added: `mara_coach/agent.py`
+  runs a manual tool loop on `claude-opus-5-5` (adaptive thinking, effort medium, server-side
+  refusal fallback `"default"`, prompt caching) over the read-only tools, with server-side web
+  fetch restricted to approved source domains. Tests use a scripted fake client. `anthropic`
+  added (Apache-2.0). Strava stays in Claude Code sessions only; the coach gets runs from COROS.
 
 ## Later, before any public launch
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
