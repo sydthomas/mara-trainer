@@ -195,7 +195,8 @@ def test_pace_defaults_to_saved_recent_race(tmp_db: Path) -> None:
     assert r.exit_code == 0, r.output
     data = json.loads(r.output)
     assert data["input"]["source"] == "race_setup"
-    assert data["input"]["distance_meters"] == round(13.1 * 1609.344)
+    assert data["input"]["distance_meters"] == 21097.5  # 13.1 mi snaps to the exact half
+    assert data["input"]["entered_meters"] == round(13.1 * 1609.344)
     assert data["input"]["duration_seconds"] == 6900
 
 

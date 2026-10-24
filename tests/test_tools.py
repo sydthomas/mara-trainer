@@ -107,7 +107,10 @@ def test_summary_needs_initialized_db() -> None:
         tools.summary(c)
 
 
-def test_validate_plan_never_accepts(conn: sqlite3.Connection, tmp_path: Path) -> None:
+def test_validate_plan_never_accepts(
+    conn: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tools, "PLAN_DIRS", (EXAMPLE.parent, tmp_path))
     ok = tools.call_tool(conn, "validate_plan", {"path": str(EXAMPLE)})
     assert ok["ok"] is True and ok["violations"] == [] and ok["weeks"] == 16
     raw = json.loads(EXAMPLE.read_text())
@@ -181,3 +184,28 @@ def test_cli_tools_call_errors(tmp_db: Path) -> None:
     assert runner.invoke(app, ["tools", "call", "summary", "--args", "{bad"]).exit_code == 1
     assert runner.invoke(app, ["tools", "call", "summary", "--args", "[1]"]).exit_code == 1
     assert runner.invoke(app, ["tools", "call", "plan_brief"]).exit_code == 1
+
+
+def test_validate_plan_only_reads_plan_dirs(
+    conn: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plans = tmp_path / "plans"
+    plans.mkdir()
+    outside = tmp_path / "elsewhere.json"
+    outside.write_text(EXAMPLE.read_text())
+    monkeypatch.setattr(tools, "PLAN_DIRS", (plans,))
+    with pytest.raises(ToolError, match="plans/ or examples/"):
+        tools.call_tool(conn, "validate_plan", {"path": str(outside)})
+    with pytest.raises(ToolError, match="plans/ or examples/"):
+        tools.call_tool(conn, "validate_plan", {"path": str(plans / ".." / "elsewhere.json")})
+    escape = plans / "link.json"
+    escape.symlink_to(outside)
+    with pytest.raises(ToolError, match="plans/ or examples/"):
+        tools.call_tool(conn, "validate_plan", {"path": str(escape)})
+    (plans / "draft.json").write_text(EXAMPLE.read_text())
+    assert tools.call_tool(conn, "validate_plan", {"path": str(plans / "draft.json")})["ok"]
+
+
+def test_plan_dirs_default_to_repo_folders() -> None:
+    assert [d.name for d in tools.PLAN_DIRS] == ["plans", "examples"]
+    assert (tools.PLAN_DIRS[1] / "sample-plan.json").is_file()

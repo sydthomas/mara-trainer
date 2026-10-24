@@ -8,6 +8,9 @@ published zone systems (for example Daniels' VDOT tables) live in copyrighted bo
 percentages we can't check against the text here, and CLAUDE.md forbids invented paces. The
 report says so in `training_zones_note`.
 
+Inputs within 0.5% of 5K, 10K, half or marathon snap to the exact distance (`entered_meters`
+in the report keeps what was typed).
+
 Units: SI in, SI out (meters, seconds, seconds per meter / km / mile). `*_per_mile` and the
 formatted strings exist for display only (1 mi = 1609.344 m).
 """
@@ -38,6 +41,10 @@ STANDARD_DISTANCES: tuple[tuple[str, float], ...] = (
     ("half_marathon", HALF_MARATHON_METERS),
     ("marathon", float(MARATHON_METERS)),
 )
+
+# Entries within this fraction of a standard distance (13.1 mi, 26.2 mi, 3.1 mi...) are treated as
+# that exact distance, so a 13.1 mi entry predicts from a true half.
+SNAP_TOLERANCE = 0.005
 
 METHOD: dict[str, Any] = {
     "id": METHOD_ID,
@@ -75,6 +82,14 @@ def riegel_seconds(d1_meters: float, t1_seconds: float, d2_meters: float) -> flo
     if d1_meters <= 0 or t1_seconds <= 0 or d2_meters <= 0:
         raise ValueError("distances and time must be positive")
     return float(t1_seconds * (d2_meters / d1_meters) ** RIEGEL_EXPONENT)
+
+
+def snap_distance(meters: float) -> float:
+    """The standard distance `meters` is within SNAP_TOLERANCE of, else `meters` unchanged."""
+    for _, d in STANDARD_DISTANCES:
+        if abs(meters - d) <= d * SNAP_TOLERANCE:
+            return d
+    return meters
 
 
 def seconds_per_mile(seconds_per_meter: float) -> float:
@@ -127,12 +142,14 @@ class PaceReport:
     distance_meters: float
     duration_seconds: float
     predictions: list[Prediction]
+    entered_meters: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         spm = self.duration_seconds / self.distance_meters
         return {
             "input": {
                 "distance_meters": self.distance_meters,
+                "entered_meters": self.entered_meters,
                 "distance_miles": round(self.distance_meters / MI, 2),
                 "duration_seconds": self.duration_seconds,
                 "time": format_hms(self.duration_seconds),
@@ -153,8 +170,10 @@ def predict(distance_meters: float, duration_seconds: float) -> PaceReport:
         raise ValueError(f"race distance must be {MIN_INPUT_METERS}-{MAX_INPUT_METERS} meters")
     if not MIN_INPUT_SECONDS <= duration_seconds <= MAX_INPUT_SECONDS:
         raise ValueError(f"race time must be {MIN_INPUT_SECONDS}-{MAX_INPUT_SECONDS} seconds")
+    snapped = snap_distance(distance_meters)
     preds = [
-        Prediction(label, d, riegel_seconds(distance_meters, duration_seconds, d))
+        Prediction(label, d, riegel_seconds(snapped, duration_seconds, d))
         for label, d in STANDARD_DISTANCES
     ]
-    return PaceReport(distance_meters, duration_seconds, preds)
+    entered = distance_meters if snapped != distance_meters else None
+    return PaceReport(snapped, duration_seconds, preds, entered)
