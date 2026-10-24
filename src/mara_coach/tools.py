@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mara_trainer import db, reports
+from mara_trainer import db, fueling, reports
 
 from . import profile, sources
 
@@ -70,6 +70,13 @@ def show_plan(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def get_profile(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"profile": profile.get_profile(conn)}
+
+
+def fuel_log(conn: sqlite3.Connection, last: int = 10, since: str | None = None) -> dict[str, Any]:
+    try:
+        return fueling.list_entries(conn, last, since)
+    except fueling.FuelError as exc:
+        raise ToolError(str(exc)) from exc
 
 
 def search_sources(
@@ -185,6 +192,19 @@ TOOLS: tuple[Tool, ...] = (
         "current shoes, injury history, notes. Null = not given; [] = runner said none.",
         _schema(),
         get_profile,
+    ),
+    Tool(
+        "fuel_log",
+        "The runner's fueling log, newest first: what she ate before runs (and how long "
+        "before), what she took during, carbs per hour, stomach and energy (1-5). No calories "
+        "or weight by design. Use it to spot what works; fueling targets come from sources.",
+        _schema(
+            {
+                "last": {"type": "integer", "minimum": 1, "maximum": 200},
+                "since": {**_DATE, "description": "Only entries on/after this date"},
+            }
+        ),
+        fuel_log,
     ),
     Tool(
         "search_sources",

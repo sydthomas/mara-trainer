@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import db, imports, paces, reports
+from . import db, fueling, imports, paces, reports
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -25,7 +26,12 @@ app = typer.Typer(
 race_app = typer.Typer(help="Race setup (goal race, availability, baseline).", no_args_is_help=True)
 plan_app = typer.Typer(help="Plan guardrails and accepted plans.", no_args_is_help=True)
 app.add_typer(race_app, name="race")
+fuel_app = typer.Typer(
+    help="Fueling log: what you ate before and took during runs (no calories).",
+    no_args_is_help=True,
+)
 app.add_typer(plan_app, name="plan")
+app.add_typer(fuel_app, name="fuel")
 
 KM = 1000.0
 MI = 1609.344
@@ -290,6 +296,78 @@ def pace_cmd(
         _fail(str(exc))
     report["input"] = {"source": source, **report["input"]}
     _out(report)
+
+
+@fuel_app.command("log")
+def fuel_log(
+    date_: Annotated[
+        str | None, typer.Option("--date", help="Run date YYYY-MM-DD (default: today)")
+    ] = None,
+    activity_id: Annotated[
+        int | None, typer.Option(help="Imported activity id; fills distance/duration")
+    ] = None,
+    distance: Annotated[float | None, typer.Option(help="Run distance (see --unit)")] = None,
+    unit: Annotated[str, typer.Option(help="Unit for --distance: km or mi")] = "mi",
+    duration: Annotated[str | None, typer.Option(help="Run time H:MM:SS")] = None,
+    pre_run: Annotated[str | None, typer.Option(help="What you ate before")] = None,
+    pre_run_minutes: Annotated[
+        int | None, typer.Option(help="Minutes between eating and starting")
+    ] = None,
+    during: Annotated[
+        str | None, typer.Option(help="What you took during (gels, drink...)")
+    ] = None,
+    carbs: Annotated[float | None, typer.Option(help="Carbs taken during the run, grams")] = None,
+    fluid: Annotated[float | None, typer.Option(help="Fluid during the run, ml")] = None,
+    stomach: Annotated[int | None, typer.Option(help="Stomach 1 (bad) to 5 (no issues)")] = None,
+    energy: Annotated[int | None, typer.Option(help="Energy 1 (low) to 5 (great)")] = None,
+    notes: Annotated[str | None, typer.Option(help="Anything else")] = None,
+) -> None:
+    """Log fueling for one run. Carbs per hour is computed from --carbs and the run time."""
+    if unit not in ("km", "mi"):
+        _fail("--unit must be km or mi")
+    try:
+        seconds = _parse_hms(duration) if duration is not None else None
+    except (ValueError, typer.BadParameter):
+        _fail(f"--duration must be H:MM:SS, got {duration!r}")
+    entry = fueling.FuelEntry(
+        date=date_ or date.today().isoformat(),
+        activity_id=activity_id,
+        distance_meters=round(distance * (KM if unit == "km" else MI)) if distance else None,
+        duration_seconds=seconds,
+        pre_run=pre_run,
+        pre_run_minutes=pre_run_minutes,
+        during=during,
+        carbs_grams=carbs,
+        fluid_ml=fluid,
+        stomach=stomach,
+        energy=energy,
+        notes=notes,
+    )
+    try:
+        saved = fueling.add_entry(_conn(), entry)
+    except fueling.FuelError as exc:
+        _fail("invalid fuel entry", problems=exc.problems)
+    _out({"ok": True, "entry": saved})
+
+
+@fuel_app.command("show")
+def fuel_show(
+    last: Annotated[int, typer.Option(help="How many entries, newest first")] = 10,
+    since: Annotated[str | None, typer.Option(help="Only entries on/after YYYY-MM-DD")] = None,
+) -> None:
+    """Recent fueling entries with carbs per hour and coverage counts."""
+    try:
+        _out(fueling.list_entries(_conn(), last, since))
+    except fueling.FuelError as exc:
+        _fail(str(exc))
+
+
+@fuel_app.command("delete")
+def fuel_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> None:
+    """Delete one fueling entry (for typos)."""
+    if not fueling.delete_entry(_conn(), entry_id):
+        _fail(f"no fuel entry with id {entry_id}")
+    _out({"ok": True, "deleted": entry_id})
 
 
 def main() -> None:  # pragma: no cover

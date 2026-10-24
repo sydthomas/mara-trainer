@@ -1,7 +1,7 @@
 ---
 name: weekly-review
 description: Weekly training review for Sydney. Use when she asks how her week went, wants a check-in or weekly review, or asks whether to adjust the plan. Compares `coach summary` (local data) and, in-session only, the official Strava MCP against the accepted plan, then proposes changes for her approval.
-allowed-tools: Bash(uv run coach summary *) Bash(uv run coach summary) Bash(uv run coach plan show) Bash(uv run coach plan brief *) Bash(uv run coach validate-plan *)
+allowed-tools: Bash(uv run coach summary *) Bash(uv run coach summary) Bash(uv run coach plan show) Bash(uv run coach plan brief *) Bash(uv run coach validate-plan *) Bash(uv run coach fuel show *) Bash(uv run coach fuel show)
 ---
 
 # Weekly review
@@ -19,6 +19,9 @@ allowed-tools: Bash(uv run coach summary *) Bash(uv run coach summary) Bash(uv r
     and label them "from Strava (not stored)".
   - If the MCP isn't connected, continue with local data and tell her she can authorize it with `/mcp`.
 - Ask Sydney briefly how she feels (energy, soreness, sleep, any pain) if she hasn't said.
+
+- `uv run coach fuel show --since <Monday>` for this week's fueling entries (long runs mostly):
+  note stomach/energy ratings and carbs per hour. No calorie or weight talk.
 
 ## 2. Compare to the plan
 For each planned session, show planned against actual: done, partial, missed, or extra. Then show

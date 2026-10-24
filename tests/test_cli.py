@@ -21,7 +21,7 @@ def invoke(*args: str):  # type: ignore[no-untyped-def]
 def test_help_lists_commands() -> None:
     r = invoke("--help")
     assert r.exit_code == 0
-    for cmd in ("init-db", "import", "summary", "validate-plan", "race", "plan", "pace"):
+    for cmd in ("init-db", "import", "summary", "validate-plan", "race", "plan", "pace", "fuel"):
         assert cmd in r.output
 
 

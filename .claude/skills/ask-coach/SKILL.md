@@ -22,6 +22,10 @@ Read the question for these before anything else:
 Run `uv run coach tools call NAME --args '{json}'` (`uv run coach tools list` shows the schemas):
 - `get_profile`: diet, allergies/foods avoided, shoe likes/dislikes, current shoes, injury history.
   Null means she hasn't said; ask instead of guessing. `[]` means she said none.
+- `fuel_log` with `{"last": 10}`: what she ate before runs and how long before, what she took
+  during, carbs per hour, stomach and energy (1-5). Use it to point out what has worked for her;
+  targets (e.g. carbs per hour) still come from cited sources. Never turn it into calorie or
+  weight talk.
 - `plan_brief` (phase, weekly targets), `show_plan` (sessions), `summary` with
   `{"week": "current", "weeks": 4}` (recent training; null is "no data", never zero).
 - `validate_plan` with `{"path": "plans/<file>.json"}` checks a draft. It never accepts; plan
