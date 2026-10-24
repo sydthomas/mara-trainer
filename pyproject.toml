@@ -11,6 +11,7 @@ dependencies = [
     "typer>=0.12",
     "garmin-fit-sdk>=21.171",
     "gpxpy>=1.6",
+    "anthropic>=2.3.0",
 ]
 
 [project.scripts]
