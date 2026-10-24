@@ -11,7 +11,7 @@ import typer
 
 from mara_trainer.cli import _conn, _fail, _out, app
 
-from . import agent, evals, evals_runner, profile, sources, tools
+from . import agent, evals, evals_runner, knowledge, profile, sources, tools
 from .env import load_env
 
 source_app = typer.Typer(help="Source registry: vetted references the coach may cite.")
@@ -120,6 +120,65 @@ def source_retire(slugs: Annotated[list[str], typer.Argument(help="One or more s
 def source_domains() -> None:
     """Domains the coach may fetch from at answer time (approved, non-link-only sources)."""
     _out({"allowed_domains": sources.approved_domains(_conn())})
+
+
+knowledge_app = typer.Typer(help="Knowledge base: cited topic summaries the coach reads.")
+app.add_typer(knowledge_app, name="knowledge")
+
+
+@knowledge_app.command("list")
+def knowledge_list() -> None:
+    """Every section with its state (draft, approved, changed_since_approval)."""
+    try:
+        sections = knowledge.load_all(tools.KNOWLEDGE_DIR)
+    except knowledge.KnowledgeError as exc:
+        _fail(str(exc), problems=exc.problems)
+    written = {s.name for s in sections}
+    _out(
+        {
+            "sections": [s.summary() for s in sections],
+            "not_written": [n for n in knowledge.SECTIONS if n not in written],
+        }
+    )
+
+
+@knowledge_app.command("check")
+def knowledge_check(
+    names: Annotated[list[str] | None, typer.Argument(help="Sections (default: all)")] = None,
+) -> None:
+    """Check sections against the format rules and the approved sources. Exit 3 on problems."""
+    approved = tools.approved_slugs(_conn())
+    report: dict[str, list[str]] = {}
+    try:
+        targets = (
+            [knowledge.load(n, tools.KNOWLEDGE_DIR) for n in names]
+            if names
+            else knowledge.load_all(tools.KNOWLEDGE_DIR)
+        )
+    except knowledge.KnowledgeError as exc:
+        _fail(str(exc), problems=exc.problems)
+    for section in targets:
+        report[section.name] = knowledge.check(section, approved)
+    ok = not any(report.values())
+    typer.echo(json.dumps({"ok": ok, "problems": report}, indent=2))
+    if not ok:
+        raise typer.Exit(3)
+
+
+@knowledge_app.command("approve")
+def knowledge_approve(
+    names: Annotated[list[str], typer.Argument(help="One or more sections")],
+    by: Annotated[str, typer.Option(help="Name of the person approving")],
+) -> None:
+    """Approve sections so the coach can read them. Each must pass `knowledge check` first."""
+    approved = tools.approved_slugs(_conn())
+    done = []
+    for name in names:
+        try:
+            done.append(knowledge.approve(name, by, approved, tools.KNOWLEDGE_DIR).summary())
+        except knowledge.KnowledgeError as exc:
+            _fail(f"{name}: not approved", problems=exc.problems, approved=done)
+    _out({"ok": True, "approved": done})
 
 
 profile_app = typer.Typer(help="Runner profile: diet, allergies, shoes, injury history, notes.")
