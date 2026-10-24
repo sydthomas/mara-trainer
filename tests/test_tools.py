@@ -22,6 +22,7 @@ EXPECTED = {
     "validate_plan",
     "show_plan",
     "get_profile",
+    "fuel_log",
     "search_sources",
     "allowed_domains",
 }

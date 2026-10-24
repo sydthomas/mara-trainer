@@ -169,6 +169,19 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
   RCT, PLOS ONE, CC BY), Huiberts 2024 (concurrent-training meta-analysis analysed by sex, CC BY)
   and Barnes 2013 (collegiate runners, results by sex; free repository copy, publisher copyright).
   Still missing: a trial in women marathon or recreational distance runners. Seed is now 60.
+- 2026-10-23: Sydney approved Vikmoen 2016, Huiberts 2024 and Barnes 2013 (Riegel stays
+  proposed). Pace inputs within 0.5% of a standard distance snap to it; the coach's
+  `validate_plan` tool only reads `plans/` and `examples/`.
+- 2026-10-23: Fueling log. Migration 007 adds `fuel_log`; `mara_trainer/fueling.py` and
+  `coach fuel log|show|delete` record pre-run food and timing, what was taken during, carbs
+  (grams), fluid, and stomach/energy 1-5, optionally linked to an imported activity. Carbs per
+  hour is the only computed number. Sydney chose a fueling log over food tracking: no calorie,
+  weight or daily-intake fields, by design (gut training for race day, and the disordered-eating
+  rule). The coach reads it through the `fuel_log` tool; ask-coach and weekly-review use it.
+  Effort (RPE 1-10) is logged too. New `.claude/skills/debrief`: a short post-long-run chat
+  (Sydney talks via `/voice`) that reads the entry back and saves it after she says yes. Sydney's
+  call: long runs only, stay in Claude Code for now. Later the same debrief moves to Slack with a
+  scheduled ping after the planned long run (needs an API key), then maybe phone calls.
 
 ## Later, before any public launch
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
