@@ -55,7 +55,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
-- `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--notes ...]`
+- `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
 - `uv run coach source import [sources/seed.json] [--update]` — add seed sources as `proposed`; `--update` refreshes metadata of existing ones (approval kept)
@@ -149,7 +149,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
-- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach}/SKILL.md` (`ask-coach` is
+- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief}/SKILL.md` (`ask-coach` is
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)

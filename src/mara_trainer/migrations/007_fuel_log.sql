@@ -15,6 +15,7 @@ CREATE TABLE fuel_log (
   fluid_ml REAL CHECK (fluid_ml BETWEEN 0 AND 10000),
   stomach INTEGER CHECK (stomach BETWEEN 1 AND 5),
   energy INTEGER CHECK (energy BETWEEN 1 AND 5),
+  effort INTEGER CHECK (effort BETWEEN 1 AND 10),
   notes TEXT CHECK (notes IS NULL OR length(notes) <= 2000),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

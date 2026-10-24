@@ -320,6 +320,7 @@ def fuel_log(
     fluid: Annotated[float | None, typer.Option(help="Fluid during the run, ml")] = None,
     stomach: Annotated[int | None, typer.Option(help="Stomach 1 (bad) to 5 (no issues)")] = None,
     energy: Annotated[int | None, typer.Option(help="Energy 1 (low) to 5 (great)")] = None,
+    effort: Annotated[int | None, typer.Option(help="Effort (RPE) 1 (easy) to 10 (max)")] = None,
     notes: Annotated[str | None, typer.Option(help="Anything else")] = None,
 ) -> None:
     """Log fueling for one run. Carbs per hour is computed from --carbs and the run time."""
@@ -341,6 +342,7 @@ def fuel_log(
         fluid_ml=fluid,
         stomach=stomach,
         energy=energy,
+        effort=effort,
         notes=notes,
     )
     try:

@@ -1,9 +1,10 @@
 """Fueling log: practice race-day fueling on long runs.
 
 Each entry records what the runner ate before a run (and how long before), what they took during
-it (gels, chews, drink), roughly how many carbs, and 1-5 ratings for stomach (1 = bad, 5 = no
-issues) and energy. The only number computed here is carbs per hour, from the runner's own carb
-total and the run's duration.
+it (gels, chews, drink), roughly how many carbs, 1-5 ratings for stomach (1 = bad, 5 = no
+issues) and energy, and effort (RPE 1-10). The `debrief` skill fills it after long runs. The
+only number computed here is carbs per hour, from the runner's own carb total and the run's
+duration.
 
 By design there are no calorie, body-weight or daily-intake fields: the log is for gut training
 and race-day planning, not food tracking. Missing stays missing: unset fields are null and
@@ -33,6 +34,7 @@ FIELDS = (
     "fluid_ml",
     "stomach",
     "energy",
+    "effort",
     "notes",
 )
 
@@ -56,6 +58,7 @@ class FuelEntry:
     fluid_ml: float | None = None
     stomach: int | None = None
     energy: int | None = None
+    effort: int | None = None
     notes: str | None = None
 
     def problems(self) -> list[str]:
@@ -72,6 +75,7 @@ class FuelEntry:
             ("fluid_ml", 0, 10000),
             ("stomach", 1, 5),
             ("energy", 1, 5),
+            ("effort", 1, 10),
         ):
             value = getattr(self, key)
             if value is not None and not low <= value <= high:
@@ -171,7 +175,14 @@ def list_entries(
         "count": len(entries),
         "coverage": {
             key: sum(1 for e in entries if e[key] is not None)
-            for key in ("carbs_grams", "duration_seconds", "carbs_per_hour", "stomach", "energy")
+            for key in (
+                "carbs_grams",
+                "duration_seconds",
+                "carbs_per_hour",
+                "stomach",
+                "energy",
+                "effort",
+            )
         },
         "carbs_per_hour_range": [min(rates), max(rates)] if rates else None,
         "entries": entries,

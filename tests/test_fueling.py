@@ -45,11 +45,13 @@ def test_add_and_list(conn: sqlite3.Connection) -> None:
             carbs_grams=50,
             stomach=4,
             energy=3,
+            effort=6,
         ),
     )
     assert saved["pre_run"] == "toast and banana"
     assert saved["carbs_per_hour"] == 33.3
     assert saved["fluid_ml"] is None  # missing stays missing
+    assert saved["effort"] == 6
     fueling.add_entry(conn, FuelEntry(date="2026-11-14", stomach=2, notes="side stitch"))
     got = fueling.list_entries(conn)
     assert [e["date"] for e in got["entries"]] == ["2026-11-14", "2026-11-07"]
@@ -70,8 +72,10 @@ def test_activity_fills_distance_and_duration(conn: sqlite3.Connection) -> None:
 
 def test_rejects_bad_input(conn: sqlite3.Connection) -> None:
     with pytest.raises(FuelError) as exc:
-        fueling.add_entry(conn, FuelEntry(date="11/07/2026", stomach=6, energy=0, carbs_grams=-1))
-    assert len(exc.value.problems) == 4
+        fueling.add_entry(
+            conn, FuelEntry(date="11/07/2026", stomach=6, energy=0, carbs_grams=-1, effort=11)
+        )
+    assert len(exc.value.problems) == 5
     with pytest.raises(FuelError, match="at least one detail"):
         fueling.add_entry(conn, FuelEntry(date="2026-11-07", notes="   "))
     with pytest.raises(FuelError):

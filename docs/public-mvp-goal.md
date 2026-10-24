@@ -178,6 +178,10 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
   hour is the only computed number. Sydney chose a fueling log over food tracking: no calorie,
   weight or daily-intake fields, by design (gut training for race day, and the disordered-eating
   rule). The coach reads it through the `fuel_log` tool; ask-coach and weekly-review use it.
+  Effort (RPE 1-10) is logged too. New `.claude/skills/debrief`: a short post-long-run chat
+  (Sydney talks via `/voice`) that reads the entry back and saves it after she says yes. Sydney's
+  call: long runs only, stay in Claude Code for now. Later the same debrief moves to Slack with a
+  scheduled ping after the planned long run (needs an API key), then maybe phone calls.
 
 ## Later, before any public launch
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
