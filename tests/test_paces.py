@@ -106,3 +106,19 @@ def test_predictions_are_finite_and_increasing() -> None:
     secs = [p.seconds for p in preds]
     assert all(math.isfinite(s) for s in secs)
     assert secs == sorted(secs)
+
+
+def test_near_standard_distances_snap_to_exact() -> None:
+    from mara_trainer import paces
+
+    assert paces.snap_distance(13.1 * paces.MI) == paces.HALF_MARATHON_METERS
+    assert paces.snap_distance(26.2 * paces.MI) == 42195.0
+    assert paces.snap_distance(3.1 * paces.MI) == 5000.0
+    assert paces.snap_distance(6.2 * paces.MI) == 10000.0
+    assert paces.snap_distance(15000.0) == 15000.0  # no standard distance nearby
+    report = paces.predict(13.1 * paces.MI, 6900).to_dict()
+    assert report["input"]["distance_meters"] == paces.HALF_MARATHON_METERS
+    assert report["input"]["entered_meters"] == 13.1 * paces.MI
+    half = next(p for p in report["predictions"] if p["label"] == "half_marathon")
+    assert half["time"] == "1:55:00"
+    assert paces.predict(15000.0, 3600).to_dict()["input"]["entered_meters"] is None

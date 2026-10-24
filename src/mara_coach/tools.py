@@ -22,6 +22,10 @@ from mara_trainer import db, reports
 
 from . import profile, sources
 
+# The only folders `validate_plan` may read from (repo root = three levels above this file).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PLAN_DIRS: tuple[Path, ...] = (REPO_ROOT / "plans", REPO_ROOT / "examples")
+
 
 class ToolError(ValueError):
     """A tool call the coach should see as an error result (bad input or missing setup)."""
@@ -49,6 +53,9 @@ def validate_plan(conn: sqlite3.Connection, path: str, today: str | None = None)
     # Check the resolved target too, so a .json symlink can't point the tool at another file.
     if plan_file.suffix.lower() != ".json" or plan_file.resolve().suffix.lower() != ".json":
         raise ToolError("path must point to a .json plan file")
+    target = plan_file.resolve()
+    if not any(target.is_relative_to(d.resolve()) for d in PLAN_DIRS):
+        raise ToolError("plan file must be inside plans/ or examples/")
     if not plan_file.is_file():
         raise ToolError(f"plan file not found: {path}")
     try:
@@ -166,7 +173,10 @@ TOOLS: tuple[Tool, ...] = (
         "list of violations by week. Never accepts the plan; the runner accepts it herself.",
         _schema(
             {
-                "path": {"type": "string", "description": "Path to the draft plan .json"},
+                "path": {
+                    "type": "string",
+                    "description": "Path to the draft plan .json, inside plans/ or examples/",
+                },
                 "today": {**_DATE, "description": "Override the plan's brief_date"},
             },
             required=["path"],
