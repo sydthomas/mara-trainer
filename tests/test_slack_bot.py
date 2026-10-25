@@ -153,4 +153,19 @@ def test_cli_slack_run_fails_without_settings(
         monkeypatch.delenv(name, raising=False)
     r = CliRunner().invoke(app, ["slack", "run"])
     assert r.exit_code == 1
-    assert json.loads(r.output)["missing"] == list(slack_bot.REQUIRED_ENV)
+    assert json.loads(r.output)["missing"] == list(slack_bot.SETUP_ENV)  # setup mode needs less
+
+
+def test_setup_mode_replies_with_own_member_id_only() -> None:
+    client = FakeClient()
+    slack_bot.handle_setup(_dm("hi", user="U777"), client)
+    assert client.posted == [{"channel": "D1", "text": slack_bot.setup_reply("U777")}]
+    assert "U777" in client.posted[0]["text"]
+    slack_bot.handle_setup({**_dm("hi"), "channel_type": "channel"}, client)
+    slack_bot.handle_setup({**_dm("hi"), "bot_id": "B1"}, client)
+    assert len(client.posted) == 1
+
+
+def test_setup_mode_switch() -> None:
+    assert slack_bot.setup_mode({}) and slack_bot.setup_mode({"SLACK_ALLOWED_USER_ID": " "})
+    assert not slack_bot.setup_mode({"SLACK_ALLOWED_USER_ID": SYDNEY})

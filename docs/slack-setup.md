@@ -44,8 +44,9 @@ settings:
    `socket`, add the scope `connections:write`, and generate. It starts with `xapp-`.
 4. **Install App**, then **Install to Workspace**, then **Allow**. Copy the **Bot User OAuth
    Token**. It starts with `xoxb-`.
-5. Your member ID: in Slack, click your profile picture, then **Profile**, the **⋮** menu, and
-   **Copy member ID**. It starts with `U`.
+5. Your member ID (starts with `U`): click your own name on any message you sent, then **⋮** and
+   **Copy member ID**. If Slack shows a Pro upgrade prompt instead, skip this: run the bot without
+   `SLACK_ALLOWED_USER_ID` (setup mode, step 3) and DM it; it replies with your member ID.
 
 ## 2. Add the settings to `.env`
 

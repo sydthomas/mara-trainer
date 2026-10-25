@@ -298,11 +298,18 @@ def slack_run() -> None:
     """Start the Slack bot (Ctrl-C to stop). Needs SLACK_BOT_TOKEN, SLACK_APP_TOKEN,
     SLACK_ALLOWED_USER_ID and ANTHROPIC_API_KEY in .env; see docs/slack-setup.md."""
     load_env()
-    missing = slack_bot.missing_env(dict(os.environ))
+    env = dict(os.environ)
+    setup = slack_bot.setup_mode(env)
+    missing = slack_bot.missing_env(env, slack_bot.SETUP_ENV if setup else slack_bot.REQUIRED_ENV)
     if missing:
         _fail("missing settings in .env (see docs/slack-setup.md)", missing=missing)
     _conn().close()  # create/upgrade the DB before the first message
-    typer.echo(json.dumps({"ok": True, "status": "Slack bot running; Ctrl-C to stop"}), err=True)
+    status = (
+        "Setup mode: DM the bot to get your member ID; Ctrl-C to stop"
+        if setup
+        else "Slack bot running; Ctrl-C to stop"
+    )
+    typer.echo(json.dumps({"ok": True, "status": status}), err=True)
     slack_bot.run(dict(os.environ))
 
 

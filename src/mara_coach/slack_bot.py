@@ -1,6 +1,8 @@
 """Slack channel for the coach: DMs in, coach answers out, over Socket Mode (no public URL).
 
 - One runner for now: only `SLACK_ALLOWED_USER_ID` gets answers; anyone else gets a short note.
+- Setup mode (no `SLACK_ALLOWED_USER_ID` yet): the bot only tells each sender their own member ID,
+  so the runner can find it without the Slack profile page. The coach never runs in this mode.
 - Each DM keeps a short text-only history (last `MAX_TURNS` exchanges, reset after `IDLE_RESET`
   of quiet), so follow-ups work without resending tool output.
 - One message at a time per DM; a placeholder reply is posted, then edited with the answer.
@@ -31,6 +33,23 @@ THINKING = "On it, checking your plan and sources..."
 NOT_ALLOWED = "Sorry, this coach is private for now."
 FAILED = "Sorry, I couldn't answer that just now. Try again in a minute."
 REQUIRED_ENV = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USER_ID", "ANTHROPIC_API_KEY")
+SETUP_ENV = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN")
+
+
+def setup_reply(user: str) -> str:
+    return (
+        f"Setup mode. Your Slack member ID is `{user}`. Add `SLACK_ALLOWED_USER_ID={user}` to "
+        "`.env`, then restart `coach slack run`."
+    )
+
+
+def handle_setup(event: dict[str, Any], client: SlackClient) -> None:
+    """Setup mode: reply to a DM with the sender's own member ID, nothing else."""
+    if event.get("channel_type") != "im" or event.get("subtype") or event.get("bot_id"):
+        return
+    channel, user = event.get("channel"), event.get("user")
+    if channel and user:
+        client.chat_postMessage(channel=channel, text=setup_reply(user))
 
 
 class SlackClient(Protocol):
@@ -124,9 +143,13 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
-def missing_env(env: dict[str, str]) -> list[str]:
+def missing_env(env: dict[str, str], names: tuple[str, ...] = REQUIRED_ENV) -> list[str]:
     """Names (never values) of required settings that aren't set."""
-    return [name for name in REQUIRED_ENV if not env.get(name, "").strip()]
+    return [name for name in names if not env.get(name, "").strip()]
+
+
+def setup_mode(env: dict[str, str]) -> bool:
+    return not env.get("SLACK_ALLOWED_USER_ID", "").strip()
 
 
 def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tokens
@@ -134,10 +157,17 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
     from slack_bolt.adapter.socket_mode import SocketModeHandler
 
     app = App(token=env["SLACK_BOT_TOKEN"])
-    bot = SlackCoach(env["SLACK_ALLOWED_USER_ID"].strip())
+    if setup_mode(env):
 
-    @app.event("message")
-    def on_message(event: dict[str, Any], client: Any) -> None:
-        bot.handle(event, client)
+        @app.event("message")
+        def on_setup_message(event: dict[str, Any], client: Any) -> None:
+            handle_setup(event, client)
+
+    else:
+        bot = SlackCoach(env["SLACK_ALLOWED_USER_ID"].strip())
+
+        @app.event("message")
+        def on_message(event: dict[str, Any], client: Any) -> None:
+            bot.handle(event, client)
 
     SocketModeHandler(app, env["SLACK_APP_TOKEN"]).start()  # type: ignore[no-untyped-call]
