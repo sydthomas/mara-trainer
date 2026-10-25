@@ -211,3 +211,7 @@ caps per user.
   `coach slack run`, Socket Mode (no hosting), DMs from one allowed user, text-only history of the
   last 10 exchanges, placeholder then edited answer. `slack-bolt` added (MIT). Next: the Saturday
   long-run debrief ping in Slack, then COROS.
+- 2026-10-25 (cont.): Slack long-run debrief. On plan long-run days the bot DMs a check-in at 10am
+  athlete-local (Sydney's choice; late until 8pm if the bot was off; once a day via migration
+  008 `notifications`). The coach gathers details and calls `propose_fuel_entry` (validates and
+  reads back, never saves); the bot saves in code only on "yes", drops on "no".

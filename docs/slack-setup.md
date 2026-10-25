@@ -69,6 +69,14 @@ uv run coach slack run
 In Slack, open **Mara Coach** under Apps and send it a message. It posts "On it..." and then
 edits that message with the answer (usually under a minute). Ctrl-C stops the bot.
 
+## Long-run check-in
+
+On days your accepted plan has a long run, the bot DMs you at 10am (your timezone) asking how it
+went. If the bot was off at 10, it sends the check-in when it starts, until 8pm. It's sent at
+most once a day. Answer however you like; the coach asks at most one follow-up, reads the entry
+back and asks "Save it?". Reply **yes** to save it to your fuel log or **no** to drop it.
+Anything else is treated as a correction. The bot has to be running for the check-in to arrive.
+
 ## Notes
 
 - Each answer costs about 10 to 15 cents in API usage, the same as `coach ask`.

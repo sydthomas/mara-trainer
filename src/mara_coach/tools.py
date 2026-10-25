@@ -5,6 +5,8 @@ ask-coach skill (now, via `coach tools call`) can use them directly.
 Rules:
 - No mileage or pace math here. Every number comes from `mara_trainer` (or the DB) unchanged.
 - Read-only. `validate_plan` checks a draft but never accepts it; Sydney accepts via the CLI.
+  `propose_fuel_entry` checks a debrief entry but never saves it; the Slack channel saves it in
+  code after she replies yes.
 - No Strava data. The DB has no Strava source, and no tool may fetch or receive it.
 - Sources: only `approved` rows are visible to the coach.
 """
@@ -112,6 +114,52 @@ def search_sources(
 
 def allowed_domains(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"allowed_domains": sources.approved_domains(conn)}
+
+
+MI_METERS = 1609.344
+_HMS = re.compile(r"^(?:(\d{1,2}):)?([0-5]?\d):([0-5]\d)$")
+
+
+def _seconds(text: str) -> int:
+    m = _HMS.match(text.strip())
+    if not m:
+        raise ToolError(f"duration must be H:MM:SS or MM:SS, got {text!r}")
+    return int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+
+
+def build_fuel_entry(args: dict[str, Any]) -> fueling.FuelEntry:
+    """Debrief fields (miles or km, H:MM:SS) -> a FuelEntry in SI units. Raises ToolError."""
+    values = {k: v for k, v in args.items() if k not in ("distance", "unit", "duration")}
+    if "distance" in args:
+        per_unit = MI_METERS if args.get("unit", "mi") == "mi" else 1000.0
+        values["distance_meters"] = round(float(args["distance"]) * per_unit)
+    if "duration" in args:
+        values["duration_seconds"] = _seconds(str(args["duration"]))
+    return fueling.FuelEntry(**values)
+
+
+def propose_fuel_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
+    """Validate a debrief's fueling entry and return a read-back. Never saves: the channel saves
+    it in code only after the runner says yes."""
+    try:
+        entry = build_fuel_entry(args)
+    except ToolError as exc:
+        return {"ok": False, "saved": False, "problems": [str(exc)]}
+    problems = entry.problems()
+    if problems:
+        return {"ok": False, "saved": False, "problems": problems}
+    cph = fueling.carbs_per_hour(entry.carbs_grams, entry.duration_seconds)
+    return {
+        "ok": True,
+        "saved": False,
+        "entry": {k: v for k, v in entry.__dict__.items() if v is not None},
+        "distance_miles": round(entry.distance_meters / MI_METERS, 2)
+        if entry.distance_meters
+        else None,
+        "carbs_per_hour": cph,
+        "message": "Not saved yet. Read this back in one or two lines and ask 'Save it?'. "
+        "The app saves it when she says yes.",
+    }
 
 
 def approved_slugs(conn: sqlite3.Connection) -> set[str]:
@@ -277,6 +325,31 @@ TOOLS: tuple[Tool, ...] = (
         read_knowledge,
     ),
     Tool(
+        "propose_fuel_entry",
+        "Debriefs only: check a long-run fueling entry and get a read-back with carbs per hour. "
+        "It does NOT save; the app saves it in code after the runner replies yes. Call it once "
+        "you have her answers (call again with corrections). No calorie or weight fields.",
+        _schema(
+            {
+                "date": {**_DATE, "description": "Run date (athlete-local)"},
+                "distance": {"type": "number", "minimum": 0.1, "maximum": 100},
+                "unit": {"type": "string", "enum": ["mi", "km"]},
+                "duration": {"type": "string", "description": "H:MM:SS or MM:SS"},
+                "pre_run": {"type": "string", "description": "What she ate before"},
+                "pre_run_minutes": {"type": "integer", "minimum": 0, "maximum": 720},
+                "during": {"type": "string", "description": "What she took during"},
+                "carbs_grams": {"type": "number", "minimum": 0, "maximum": 1000},
+                "fluid_ml": {"type": "number", "minimum": 0, "maximum": 10000},
+                "stomach": {"type": "integer", "minimum": 1, "maximum": 5},
+                "energy": {"type": "integer", "minimum": 1, "maximum": 5},
+                "effort": {"type": "integer", "minimum": 1, "maximum": 10},
+                "notes": {"type": "string"},
+            },
+            required=["date"],
+        ),
+        propose_fuel_entry,
+    ),
+    Tool(
         "allowed_domains",
         "Web domains the coach may fetch from at answer time (approved, fetchable sources only).",
         _schema(),
@@ -303,6 +376,7 @@ def call_tool(conn: sqlite3.Connection, name: str, args: dict[str, Any]) -> dict
 
 _TYPES: dict[str, Callable[[Any], bool]] = {
     "string": lambda v: isinstance(v, str),
+    "number": lambda v: isinstance(v, int | float) and not isinstance(v, bool),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
     "boolean": lambda v: isinstance(v, bool),
 }

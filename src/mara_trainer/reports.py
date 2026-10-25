@@ -127,3 +127,29 @@ def check_plan(
     anchor = _iso_date(str(anchor), "brief_date")
     brief = build_schedule_brief(setup, anchor)
     return PlanCheck(raw, setup, brief, anchor, check_schedule(raw, setup, brief))
+
+
+def planned_session(plan: dict[str, Any] | None, day: str) -> dict[str, Any] | None:
+    """The accepted plan's session on an athlete-local date, or None. Plan weeks start on Monday
+    (`start_date`); session `day` is 0=Sunday ... 6=Saturday."""
+    if not plan:
+        return None
+    target = date.fromisoformat(day)
+    for week in plan.get("weeks", []):
+        start = week.get("start_date")
+        if not start:
+            continue
+        offset = (target - date.fromisoformat(start)).days
+        if 0 <= offset <= 6:
+            weekday = (offset + 1) % 7  # Monday start -> 0=Sunday numbering
+            return next((s for s in week["sessions"] if s["day"] == weekday), None)
+    return None
+
+
+def mark_notified(conn: sqlite3.Connection, kind: str, day: str) -> bool:
+    """Record a proactive message; False if one of this kind was already sent that day."""
+    with conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO notifications(kind, date) VALUES (?, ?)", (kind, day)
+        )
+    return cur.rowcount == 1
