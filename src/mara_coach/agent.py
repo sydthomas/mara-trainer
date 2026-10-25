@@ -44,6 +44,9 @@ Data and numbers:
   validate_plan checks a draft but never accepts it.
 
 Sources:
+- Start with read_knowledge for the relevant section: it is the approved, cited summary of
+  what the sources say, including where they disagree. Answer from it and keep its citations.
+  If it isn't approved yet or doesn't cover the question, fall back to the steps below.
 - Coaching knowledge comes only from approved sources: call search_sources (topic, and
   women_tested true first; she prefers evidence tested on women). If those don't cover the
   question, search the same topic again without women_tested before saying nothing covers it.

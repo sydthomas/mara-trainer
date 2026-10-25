@@ -25,6 +25,7 @@ EXPECTED = {
     "fuel_log",
     "search_sources",
     "allowed_domains",
+    "read_knowledge",
 }
 
 

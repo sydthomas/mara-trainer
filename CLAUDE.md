@@ -66,9 +66,13 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach profile set [--diet ...] [--allergies a,b] [--shoe-likes a,b] [--shoe-dislikes a,b] [--current-shoes a,b] [--injury-history ...] [--notes ...] [--clear FIELD ...]`
   — partial update, only given fields change; `--allergies ""` = none, `--clear` resets to null
 - `uv run coach profile show` — runner profile (unset fields are null)
+- `uv run coach knowledge list` / `coach knowledge check [SECTION ...]` / `coach knowledge approve SECTION ... --by NAME`
+  — the knowledge base (`knowledge/*.md`, spec in `knowledge/README.md`): cited topic summaries
+  of the approved sources. Check exits 3 on problems; approve needs a passing check and records a
+  body hash (edits send a section back to review). Only Sydney approves.
 - `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
   read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile, fuel_log,
-  search_sources, allowed_domains); exit 1 on bad args or a tool error
+  search_sources, read_knowledge, allowed_domains); exit 1 on bad args or a tool error
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
@@ -145,14 +149,15 @@ be summarized. If no approved source covers a question, the coach says so.
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
   `fueling.py` (fueling log), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
-- `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `sources.py` (source
+- `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent); agent and Slack land here
+- `knowledge/` — the knowledge base: one cited Markdown section per topic (README = format)
 - `sources/seed.json` — proposed seed sources (links + metadata + our own one-line notes, no copied text)
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
-- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief}/SKILL.md` (`ask-coach` is
+- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit}/SKILL.md` (`ask-coach` is
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)

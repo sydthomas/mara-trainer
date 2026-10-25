@@ -194,3 +194,14 @@ New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under 
 Multi-user accounts and auth, hosted DB (Postgres), privacy policy and terms, data deletion,
 health-data handling review, creator partnerships, web onboarding, SMS, rate limits and cost
 caps per user.
+- 2026-10-24 (cont.): Live test of `coach ask` worked (~10-15 cents a question), but PMC pages
+  block web fetch, so the coach couldn't read open-access papers. Sydney's call: build a
+  knowledge base instead of per-source notes. `knowledge/` holds one cited Markdown section per
+  topic (training, strength, cross-training, fueling before/during/after, daily nutrition,
+  hydration, recovery, race week, gear, women, health referrals, course): agreements,
+  disagreements, women-specific notes, gaps, MLA works cited. Drafted by audit agents reading
+  full open-access text through Europe PMC's API (abstracts only for copyrighted sources).
+  `mara_coach/knowledge.py` checks the format and citations; `coach knowledge approve` (Sydney
+  only) records a body hash, so edits send a section back to review. The coach reads approved
+  sections through the `read_knowledge` tool before fetching anything. Upkeep:
+  `.claude/skills/knowledge-audit`.

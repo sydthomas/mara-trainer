@@ -35,6 +35,9 @@ Strava: you may use the Strava MCP in-session if she asks, but never write its d
 the DB or a tool argument, and label it "from Strava (not stored)".
 
 ## 3. Find sources
+- `read_knowledge` with `{"section": "<section>"}` first (no args lists sections). An
+  approved section is the cited summary of the sources, including where they disagree: answer
+  from it and keep its citations. Drafts return no content; then use the steps below.
 - `search_sources` with `{"topic": "<topic>", "women_tested": true}` first (topics: training,
   fueling, daily_nutrition, race_week, hydration, gear, recovery, cross_training, injury, health,
   course). If empty, retry without `women_tested` and say the evidence isn't women-specific; when

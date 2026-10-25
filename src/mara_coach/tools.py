@@ -20,11 +20,12 @@ from typing import Any
 
 from mara_trainer import db, fueling, reports
 
-from . import profile, sources
+from . import knowledge, profile, sources
 
 # The only folders `validate_plan` may read from (repo root = three levels above this file).
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLAN_DIRS: tuple[Path, ...] = (REPO_ROOT / "plans", REPO_ROOT / "examples")
+KNOWLEDGE_DIR = knowledge.KNOWLEDGE_DIR
 
 
 class ToolError(ValueError):
@@ -111,6 +112,41 @@ def search_sources(
 
 def allowed_domains(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"allowed_domains": sources.approved_domains(conn)}
+
+
+def approved_slugs(conn: sqlite3.Connection) -> set[str]:
+    return {s.slug for s in sources.list_sources(conn, status="approved")}
+
+
+def read_knowledge(conn: sqlite3.Connection, section: str | None = None) -> dict[str, Any]:
+    """Approved knowledge-base sections only. Drafts, edited-after-approval sections and sections
+    citing a source that is no longer approved come back without a body."""
+    try:
+        if section is None:
+            return {
+                "sections": [s.summary() for s in knowledge.load_all(KNOWLEDGE_DIR)],
+                "not_written": [
+                    n
+                    for n in knowledge.SECTIONS
+                    if not knowledge.path_for(n, KNOWLEDGE_DIR).is_file()
+                ],
+            }
+        found = knowledge.load(section, KNOWLEDGE_DIR)
+    except knowledge.KnowledgeError as exc:
+        raise ToolError(str(exc)) from exc
+    data = found.summary()
+    if found.state != "approved":
+        data["message"] = (
+            "Not approved yet. Don't use it; answer from search_sources notes or say no "
+            "approved source covers this."
+        )
+        return data
+    if knowledge.check(found, approved_slugs(conn)):
+        data["state"] = "needs_review"
+        data["message"] = "Cites a source that is no longer approved. Don't use it."
+        return data
+    data["content"] = found.body
+    return data
 
 
 # ---------------------------------------------------------------- registry
@@ -231,6 +267,14 @@ TOOLS: tuple[Tool, ...] = (
             }
         ),
         search_sources,
+    ),
+    Tool(
+        "read_knowledge",
+        "The coaching knowledge base: what the approved sources say on a topic, in our own "
+        "words, with agreements, disagreements, women-specific notes, gaps and citations. Read "
+        "the relevant section before fetching any source. No section: list sections and states.",
+        _schema({"section": {"type": "string", "enum": list(knowledge.SECTIONS)}}),
+        read_knowledge,
     ),
     Tool(
         "allowed_domains",
