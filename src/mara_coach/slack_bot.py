@@ -6,6 +6,11 @@
 - Each DM keeps a short text-only history (last `MAX_TURNS` exchanges, reset after `IDLE_RESET`
   of quiet), so follow-ups work without resending tool output.
 - One message at a time per DM; a placeholder reply is posted, then edited with the answer.
+- Long-run debrief: on days the accepted plan has a long run, the bot DMs a check-in at
+  `PING_HOUR` athlete-local time (or later that day if it was off, until `LAST_PING_HOUR`), at
+  most once a day (`notifications` table). The coach gathers the details and calls
+  `propose_fuel_entry`, which only validates. The entry is saved here, in code, only when the
+  runner replies yes; "no" drops it. The AI never writes the log itself.
 - Tokens come from the environment (`.env`); this module never reads, prints or logs them.
 - No Strava data: the coach's tools don't have any.
 """
@@ -19,10 +24,13 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from datetime import UTC, datetime
+from typing import Any, Protocol, cast
+from zoneinfo import ZoneInfo
 
-from mara_trainer import db
+from mara_trainer import db, fueling, reports
 
+from . import tools
 from .agent import Coach, CoachError
 
 log = logging.getLogger(__name__)
@@ -34,6 +42,27 @@ NOT_ALLOWED = "Sorry, this coach is private for now."
 FAILED = "Sorry, I couldn't answer that just now. Try again in a minute."
 REQUIRED_ENV = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USER_ID", "ANTHROPIC_API_KEY")
 SETUP_ENV = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN")
+
+DEBRIEF_KIND = "long_run_debrief"
+PING_HOUR = 10  # athlete-local, Sydney's choice
+LAST_PING_HOUR = 20  # don't send a late check-in after this
+DEBRIEF_TTL = 36 * 60 * 60  # seconds a check-in stays open
+CHECK_EVERY = 60  # seconds between schedule checks
+YES = re.compile(r"^\s*(y|yes|yep|yeah|yup|sure|ok|okay|save|save it|do it)\b[\s.!]*$", re.I)
+NO = re.compile(r"^\s*(n|no|nope|cancel|don'?t save|do not save)\b[\s.!]*$", re.I)
+CANCELLED = "Okay, not saved."
+SAVE_FOLLOW_UP = (
+    "(Saved.) Give me your short coach reply: one or two observations from my fuel log, and "
+    "one small thing to try next long run if it's worth changing anything."
+)
+
+
+def ping_text(miles: float) -> str:
+    return (
+        f"Long run day: {miles:g} mi on the plan. How'd it go? When you have a minute, tell me "
+        "the distance and time, effort (1-10), what you ate before and how long before, what "
+        "you took during, and how your stomach and energy held up."
+    )
 
 
 def setup_reply(user: str) -> str:
@@ -55,6 +84,7 @@ def handle_setup(event: dict[str, Any], client: SlackClient) -> None:
 class SlackClient(Protocol):
     def chat_postMessage(self, **kwargs: Any) -> Any: ...  # noqa: N802 (Slack SDK name)
     def chat_update(self, **kwargs: Any) -> Any: ...
+    def conversations_open(self, **kwargs: Any) -> Any: ...
 
 
 class Asker(Protocol):
@@ -70,10 +100,45 @@ def to_mrkdwn(text: str) -> str:
 
 
 @dataclass
+class Debrief:
+    date: str
+    planned_miles: float
+    expires: float
+
+
+@dataclass
 class Conversation:
     turns: list[dict[str, Any]] = field(default_factory=list)
     last_seen: float = 0.0
     lock: threading.Lock = field(default_factory=threading.Lock)
+    debrief: Debrief | None = None
+    pending: fueling.FuelEntry | None = None  # proposed by the coach, saved only on "yes"
+
+
+def _get(block: Any, key: str) -> Any:
+    return block.get(key) if isinstance(block, dict) else getattr(block, key, None)
+
+
+def proposed_entry(messages: list[dict[str, Any]]) -> fueling.FuelEntry | None:
+    """The last valid `propose_fuel_entry` call in these messages, re-checked in code."""
+    for message in reversed(messages):
+        if message.get("role") != "assistant" or not isinstance(message.get("content"), list):
+            continue
+        for block in reversed(message["content"]):
+            if _get(block, "type") != "tool_use" or _get(block, "name") != "propose_fuel_entry":
+                continue
+            args = _get(block, "input")
+            if not isinstance(args, dict) or tools.check_args(_PROPOSE_SCHEMA, args):
+                return None
+            try:
+                entry = tools.build_fuel_entry(args)
+            except (tools.ToolError, TypeError, ValueError):
+                return None
+            return None if entry.problems() else entry
+    return None
+
+
+_PROPOSE_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_fuel_entry")
 
 
 class SlackCoach:
@@ -83,11 +148,13 @@ class SlackCoach:
         coach_factory: Callable[[sqlite3.Connection], Asker] | None = None,
         connect: Callable[[], sqlite3.Connection] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.allowed_user = allowed_user
         self.coach_factory = coach_factory or (lambda conn: Coach(conn))
         self.connect = connect or _connect
         self.clock = clock
+        self.now = now
         self.conversations: dict[str, Conversation] = {}
         self._guard = threading.Lock()
 
@@ -95,8 +162,10 @@ class SlackCoach:
         with self._guard:
             convo = self.conversations.setdefault(channel, Conversation())
         now = self.clock()
-        if convo.turns and now - convo.last_seen > IDLE_RESET:
-            convo.turns = []
+        if (convo.turns or convo.pending) and now - convo.last_seen > IDLE_RESET:
+            convo.turns, convo.pending = [], None
+        if convo.debrief and now > convo.debrief.expires:
+            convo.debrief = None
         convo.last_seen = now
         return convo
 
@@ -112,14 +181,81 @@ class SlackCoach:
             return
         convo = self._conversation(channel)
         with convo.lock:
-            placeholder = client.chat_postMessage(channel=channel, text=THINKING)
-            answer = self._answer(text, convo)
-            client.chat_update(channel=channel, ts=placeholder["ts"], text=to_mrkdwn(answer))
+            if convo.pending is not None and YES.match(text):
+                self._save(channel, convo, client)
+                return
+            if convo.pending is not None and NO.match(text):
+                convo.pending, convo.debrief = None, None
+                client.chat_postMessage(channel=channel, text=CANCELLED)
+                return
+            question = text
+            if convo.debrief:
+                question = (
+                    f"(Long-run debrief for {convo.debrief.date}: "
+                    f"{convo.debrief.planned_miles:g} mi long run on the plan.)\n\n{text}"
+                )
+            self._reply(channel, convo, client, question)
+
+    def _reply(self, channel: str, convo: Conversation, client: SlackClient, question: str) -> None:
+        placeholder = client.chat_postMessage(channel=channel, text=THINKING)
+        answer = self._answer(question, convo)
+        client.chat_update(channel=channel, ts=placeholder["ts"], text=to_mrkdwn(answer))
+
+    def _save(self, channel: str, convo: Conversation, client: SlackClient) -> None:
+        assert convo.pending is not None
+        conn = self.connect()
+        try:
+            saved = fueling.add_entry(conn, convo.pending)
+        except fueling.FuelError as exc:
+            convo.pending = None
+            client.chat_postMessage(
+                channel=channel, text="Couldn't save that: " + "; ".join(exc.problems)
+            )
+            return
+        finally:
+            conn.close()
+        convo.pending, convo.debrief = None, None
+        cph = saved["carbs_per_hour"]
+        client.chat_postMessage(
+            channel=channel,
+            text=f"Saved to your fuel log (entry {saved['id']})"
+            + (f", {cph:g} g carbs per hour." if cph is not None else "."),
+        )
+        self._reply(channel, convo, client, SAVE_FOLLOW_UP)
+
+    def maybe_ping(self, client: SlackClient) -> bool:
+        """Send today's long-run check-in if it's due. True if one was sent."""
+        conn = self.connect()
+        try:
+            local = self.now().astimezone(ZoneInfo(db.athlete_timezone(conn)))
+            if not PING_HOUR <= local.hour < LAST_PING_HOUR:
+                return False
+            day = local.date().isoformat()
+            session = reports.planned_session(db.load_accepted_plan(conn), day)
+            if not session or session["kind"] != "long":
+                return False
+            sent = conn.execute(
+                "SELECT 1 FROM notifications WHERE kind = ? AND date = ?", (DEBRIEF_KIND, day)
+            ).fetchone()
+            if sent:
+                return False
+            miles = round(session["distance_meters"] / tools.MI_METERS, 1)
+            channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
+            convo = self._conversation(channel)
+            with convo.lock:
+                client.chat_postMessage(channel=channel, text=ping_text(miles))
+                reports.mark_notified(conn, DEBRIEF_KIND, day)
+                convo.turns, convo.pending = [], None
+                convo.debrief = Debrief(day, miles, self.clock() + DEBRIEF_TTL)
+            return True
+        finally:
+            conn.close()
 
     def _answer(self, text: str, convo: Conversation) -> str:
         conn = self.connect()
+        history = list(convo.turns)
         try:
-            reply = self.coach_factory(conn).ask(text, history=list(convo.turns))
+            reply = self.coach_factory(conn).ask(text, history=history)
         except CoachError:
             log.warning("coach could not finish a Slack reply")
             return FAILED
@@ -129,6 +265,9 @@ class SlackCoach:
         finally:
             conn.close()
         answer = reply.text or FAILED
+        entry = proposed_entry(list(getattr(reply, "messages", []))[len(history) :])
+        if entry is not None:
+            convo.pending = entry
         convo.turns += [
             {"role": "user", "content": text},
             {"role": "assistant", "content": answer},
@@ -169,5 +308,15 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
         @app.event("message")
         def on_message(event: dict[str, Any], client: Any) -> None:
             bot.handle(event, client)
+
+        def check_in_loop() -> None:
+            while True:
+                try:
+                    bot.maybe_ping(cast(SlackClient, app.client))
+                except Exception:
+                    log.exception("long-run check-in failed")
+                time.sleep(CHECK_EVERY)
+
+        threading.Thread(target=check_in_loop, name="long-run-check-in", daemon=True).start()
 
     SocketModeHandler(app, env["SLACK_APP_TOKEN"]).start()  # type: ignore[no-untyped-call]

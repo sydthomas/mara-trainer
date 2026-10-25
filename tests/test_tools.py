@@ -26,6 +26,7 @@ EXPECTED = {
     "search_sources",
     "allowed_domains",
     "read_knowledge",
+    "propose_fuel_entry",
 }
 
 
