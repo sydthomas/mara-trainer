@@ -36,6 +36,11 @@ def _timezone(conn: sqlite3.Connection) -> str:
         raise ReportError(str(exc)) from exc
 
 
+def athlete_today(conn: sqlite3.Connection) -> str:
+    """Today's date (YYYY-MM-DD) in the athlete's timezone."""
+    return date_in_timezone(datetime.now(UTC), _timezone(conn))
+
+
 def _iso_date(value: str, label: str) -> str:
     try:
         return date.fromisoformat(value).isoformat()
@@ -48,9 +53,7 @@ def plan_brief(conn: sqlite3.Connection, today: str | None = None) -> dict[str, 
     setup = db.load_race_setup(conn)
     if setup is None:
         raise ReportError("no race set; run `coach race set` first")
-    anchor = (
-        _iso_date(today, "today") if today else date_in_timezone(datetime.now(UTC), _timezone(conn))
-    )
+    anchor = _iso_date(today, "today") if today else athlete_today(conn)
     brief = build_schedule_brief(setup, anchor)
     return {
         "brief_date": anchor,

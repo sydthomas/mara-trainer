@@ -226,3 +226,10 @@ caps per user.
   take the coming week's sessions from the accepted plan (the same week the Sunday 6pm check-in
   previews), build them as COROS workouts and schedule them on her COROS account, after her OK
   each week. Only sessions from a plan that passed `validate-plan` get pushed.
+- 2026-10-25 (cont.): `coros-run-planner` skill built. `coach coros week` (new
+  `mara_trainer/coros_workouts.py`) turns a plan week into COROS course JSON: easy and long runs
+  by distance with no alert (sources define easy by effort), tempo with a pace range from Riegel
+  10K pace to 5K pace + 35 s/mi (LA Road Runners, Chicago), marathon effort at goal pace, other
+  workouts by effort; strength (the MCP can't create it) and race day are listed, not sent. The
+  skill checks her COROS calendar, reads the week back and sends after one yes. The Sunday Slack
+  check-in ends with a nudge to run it. Mapping and sources in `docs/plan-rules-sources.md`.

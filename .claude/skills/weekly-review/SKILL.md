@@ -39,4 +39,5 @@ session happened. Use miles. Keep it to one compact table plus 3-5 bullet points
 
 ## 4. Output
 Give a short summary, the comparison table, the proposed changes, and one question asking her to approve.
-Store nothing unless she approves a validated plan change.
+Store nothing unless she approves a validated plan change. Once next week is settled, offer to put
+it on her watch with the coros-run-planner skill.

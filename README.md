@@ -47,6 +47,7 @@ its data or feeding it to AI apps. Runna has no public API; Runna runs reach you
 6. "I'm traveling next Thursday through Sunday. Rework next week so it still passes validation."
 7. "Show my last 6 weeks of mileage and long runs in miles."
 8. "Explain the guardrails in `coach plan brief` for my race in plain English."
+9. "Push my week to COROS." (uses the **coros-run-planner** skill: builds next week's runs from the plan and schedules them on your COROS calendar after one yes)
 
 ## CLI
 
@@ -71,7 +72,7 @@ src/mara_coach/     the coach: eval-set loader now; Claude agent, sources, profi
 evals/              coach-questions.json (synthetic questions + grading rubrics)
 tests/              pytest suite (synthetic FIT generated in memory; no real data)
 examples/           sample-plan.json (synthetic, passes validation)
-.claude/skills/     plan-builder, weekly-review, import-workouts
+.claude/skills/     plan-builder, weekly-review, import-workouts, coros-run-planner, ...
 .mcp.json           official COROS MCP (http, https://mcpus.coros.com/mcp)
 docs/               public-mvp-goal.md, strava-requirements.md, legacy-notes.md
 ```

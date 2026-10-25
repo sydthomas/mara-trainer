@@ -55,6 +55,10 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
+- `uv run coach coros week [--date YYYY-MM-DD] [--today YYYY-MM-DD]` — one plan week (default: the
+  week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
+  targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
+  with reasons; exit 1 if no race or the week isn't in the accepted plan
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
@@ -102,9 +106,10 @@ be summarized. If no approved source covers a question, the coach says so.
     `plans/`, docs, commits, PRs, issues or any file. Use cycle data only when she asks.
   - Write tools (create/schedule/update workouts or training plans) change her COROS account:
     only with her explicit OK each time, and only for sessions from a plan that passed `validate-plan`.
-  - Planned: a `coros-run-planner` skill that, at the Sunday weekly check-in, writes the coming
-    week's sessions from the accepted plan as COROS workouts and schedules them on her account
-    (with her OK each week). Not built yet.
+  - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar
+    (Sunday, after the weekly check-in; the Slack check-in ends with a nudge). Workouts come only
+    from `coach coros week`, sent unchanged after one yes for the week. The MCP can't move or
+    delete scheduled workouts, so check `queryTrainingSchedule` first and never create twice.
   - Not in `mara_coach` yet: wiring COROS into the coach agent is a separate, planned step.
 - **Strava — not used.** Strava's API Policy of 2026-06-01 bars storing Strava data or feeding it
   to AI apps outside Strava's own MCP. Don't add Strava MCPs, stravalib, OAuth, webhooks or sync
@@ -164,7 +169,7 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Layout
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
-  `fueling.py` (fueling log), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  `fueling.py` (fueling log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
@@ -174,7 +179,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
-- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit}/SKILL.md` (`ask-coach` is
+- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit,coros-run-planner}/SKILL.md` (`ask-coach` is
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)

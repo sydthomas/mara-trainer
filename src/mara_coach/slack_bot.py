@@ -59,6 +59,8 @@ WEEKLY_FAILED = (
     "anytime and I'll try again."
 )
 
+COROS_NUDGE = '\n\n_Want this week on your watch? In Claude Code, say "push my week to COROS"._'
+
 
 def weekly_prompt(sunday: str) -> str:
     day = date.fromisoformat(sunday)
@@ -292,9 +294,8 @@ class SlackCoach:
             sunday = local.date()
             plan = db.load_accepted_plan(conn)
             next_monday = (sunday + timedelta(days=1)).isoformat()
-            if not (
-                reports.plan_week(plan, sunday.isoformat()) or reports.plan_week(plan, next_monday)
-            ):
+            coming = reports.plan_week(plan, next_monday)
+            if not (reports.plan_week(plan, sunday.isoformat()) or coming):
                 return False
             if not reports.mark_notified(conn, WEEKLY_KIND, sunday.isoformat()):
                 return False  # marked before the coach runs, so a failure never retries in a loop
@@ -306,6 +307,8 @@ class SlackCoach:
             convo.turns, convo.pending = [], None
             answer = self._answer(weekly_prompt(sunday.isoformat()), convo)
             text = WEEKLY_FAILED if answer == FAILED else to_mrkdwn(answer)
+            if answer != FAILED and coming:
+                text += COROS_NUDGE
             client.chat_postMessage(channel=channel, text=text)
         return True
 

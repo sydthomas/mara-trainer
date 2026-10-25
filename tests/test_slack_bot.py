@@ -372,7 +372,7 @@ def test_weekly_check_in_sunday_six_pm_once() -> None:
     assert bot.maybe_weekly(client)
     assert coach.calls[0][0].startswith("(Weekly check-in, Sunday 2026-11-08.")
     assert "plan_week for 2026-11-09" in coach.calls[0][0]
-    assert client.posted == [
+    assert client.posted == [  # week 1 is the last plan week: nothing coming to push
         {"channel": "D1", "text": "*Last week* 10 mi long run. *This week* easy."}
     ]
     assert not bot.maybe_weekly(client)  # once per Sunday
@@ -397,6 +397,7 @@ def test_weekly_check_in_preview_before_the_plan_starts() -> None:
     coach = FakeCoach(["Week 1 preview"])
     sunday_before = datetime(2026, 11, 2, 2, tzinfo=UTC)  # Sun 2026-11-01 6pm LA
     assert _debrief_bot(coach, shared, sunday_before).maybe_weekly(client)
+    assert client.posted[-1]["text"] == "Week 1 preview" + slack_bot.COROS_NUDGE
 
 
 def test_weekly_check_in_failure_posts_a_note_once() -> None:
