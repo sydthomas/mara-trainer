@@ -205,3 +205,9 @@ caps per user.
   only) records a body hash, so edits send a section back to review. The coach reads approved
   sections through the `read_knowledge` tool before fetching anything. Upkeep:
   `.claude/skills/knowledge-audit`.
+- 2026-10-25: Plan rules audited against the sources (PR #12, `docs/plan-rules-sources.md`);
+  Sydney's plan updated (second strength day, race-week shakeouts, taper maintenance strength).
+  Knowledge sections approved: fueling-during, training, women. Slack bot added:
+  `coach slack run`, Socket Mode (no hosting), DMs from one allowed user, text-only history of the
+  last 10 exchanges, placeholder then edited answer. `slack-bolt` added (MIT). Next: the Saturday
+  long-run debrief ping in Slack, then COROS.

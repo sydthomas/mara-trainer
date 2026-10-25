@@ -11,7 +11,7 @@ import typer
 
 from mara_trainer.cli import _conn, _fail, _out, app
 
-from . import agent, evals, evals_runner, knowledge, profile, sources, tools
+from . import agent, evals, evals_runner, knowledge, profile, slack_bot, sources, tools
 from .env import load_env
 
 source_app = typer.Typer(help="Source registry: vetted references the coach may cite.")
@@ -287,6 +287,23 @@ def eval_run(
     _out(report)
     if not report["ok"]:
         raise typer.Exit(3)
+
+
+slack_app = typer.Typer(help="Slack: chat with the coach by DM (Socket Mode).")
+app.add_typer(slack_app, name="slack")
+
+
+@slack_app.command("run")
+def slack_run() -> None:
+    """Start the Slack bot (Ctrl-C to stop). Needs SLACK_BOT_TOKEN, SLACK_APP_TOKEN,
+    SLACK_ALLOWED_USER_ID and ANTHROPIC_API_KEY in .env; see docs/slack-setup.md."""
+    load_env()
+    missing = slack_bot.missing_env(dict(os.environ))
+    if missing:
+        _fail("missing settings in .env (see docs/slack-setup.md)", missing=missing)
+    _conn().close()  # create/upgrade the DB before the first message
+    typer.echo(json.dumps({"ok": True, "status": "Slack bot running; Ctrl-C to stop"}), err=True)
+    slack_bot.run(dict(os.environ))
 
 
 @app.command("ask")

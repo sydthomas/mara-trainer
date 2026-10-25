@@ -12,6 +12,7 @@ dependencies = [
     "garmin-fit-sdk>=21.171",
     "gpxpy>=1.6",
     "anthropic>=2.3.0",
+    "slack-bolt>=1.30.0",
 ]
 
 [project.scripts]
