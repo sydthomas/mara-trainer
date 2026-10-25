@@ -76,6 +76,9 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
+- `uv run coach slack run` — the coach in Slack DMs (Socket Mode, `mara_coach/slack_bot.py`); needs
+  `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USER_ID` and `ANTHROPIC_API_KEY` in `.env`;
+  answers only the allowed user. Setup: `docs/slack-setup.md`
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
@@ -152,7 +155,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
   `fueling.py` (fueling log), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
-- `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `sources.py` (source
+- `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent); agent and Slack land here
 - `knowledge/` — the knowledge base: one cited Markdown section per topic (README = format)

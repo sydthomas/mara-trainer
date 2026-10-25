@@ -1,10 +1,10 @@
 ---
 section: women
 title: Women runners
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-25
+content_sha256: f841f1a863e67e304ba7c087604f66e488704596e73cbcb231c1228b47b4b5e3
 ---
 # Women runners
 

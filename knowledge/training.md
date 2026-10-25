@@ -1,10 +1,10 @@
 ---
 section: training
 title: Marathon training
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-25
+content_sha256: 13db5b8efba6061b15a283ebdbeb7aac820fa4e39f4f6159562246eb3c18442f
 ---
 # Marathon training
 

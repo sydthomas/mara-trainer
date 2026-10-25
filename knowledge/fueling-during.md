@@ -1,10 +1,10 @@
 ---
 section: fueling-during
 title: Fueling during runs
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-25
+content_sha256: 24d6e9d8a464d75f795cd955a721e9bf3a0ea5397d1febc51c12c487fd36a39a
 ---
 # Fueling during runs
 
