@@ -11,6 +11,9 @@
   most once a day (`notifications` table). The coach gathers the details and calls
   `propose_fuel_entry`, which only validates. The entry is saved here, in code, only when the
   runner replies yes; "no" drops it. The AI never writes the log itself.
+- Weekly check-in: Sundays at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`), when
+  the week ending or the next one is in the plan. The coach writes a recap of the week and a
+  preview of the next one; her reply continues the conversation.
 - Tokens come from the environment (`.env`); this module never reads, prints or logs them.
 - No Strava data: the coach's tools don't have any.
 """
@@ -24,7 +27,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
@@ -48,6 +51,34 @@ PING_HOUR = 10  # athlete-local, Sydney's choice
 LAST_PING_HOUR = 20  # don't send a late check-in after this
 DEBRIEF_TTL = 36 * 60 * 60  # seconds a check-in stays open
 CHECK_EVERY = 60  # seconds between schedule checks
+WEEKLY_KIND = "weekly_checkin"
+WEEKLY_HOUR = 18  # Sunday, athlete-local, Sydney's choice
+WEEKLY_LAST_HOUR = 22
+WEEKLY_FAILED = (
+    'I couldn\'t put together your weekly check-in just now. Message me "weekly check-in" '
+    "anytime and I'll try again."
+)
+
+
+def weekly_prompt(sunday: str) -> str:
+    day = date.fromisoformat(sunday)
+    monday = (day - timedelta(days=6)).isoformat()
+    next_monday = (day + timedelta(days=1)).isoformat()
+    return f"""(Weekly check-in, Sunday {sunday}. The week ending today ran {monday} to {sunday}; \
+the next week starts {next_monday}.)
+
+Write my Sunday check-in as one Slack message:
+1. Last week: compare plan_week for {monday} with summary for week {monday} and fuel_log \
+since {monday}. If no runs were imported, say the run data isn't in yet (null is no data, not \
+zero) and recap from the fuel log and what I told you.
+2. This week: plan_week for {next_monday}. List each run (day, miles, effort) and the strength \
+days, then the week's focus for its phase (for example easy volume, the workout, hills, speed, \
+long-run fueling practice). Take that focus only from approved read_knowledge sections and say \
+if none covers something.
+3. End with one question: anything coming up this week (travel, soreness, busy days)?
+Keep it brief and cite sources at the end."""
+
+
 YES = re.compile(r"^\s*(y|yes|yep|yeah|yup|sure|ok|okay|save|save it|do it)\b[\s.!]*$", re.I)
 NO = re.compile(r"^\s*(n|no|nope|cancel|don'?t save|do not save)\b[\s.!]*$", re.I)
 CANCELLED = "Okay, not saved."
@@ -251,6 +282,33 @@ class SlackCoach:
         finally:
             conn.close()
 
+    def maybe_weekly(self, client: SlackClient) -> bool:
+        """Send the Sunday check-in if it's due. True if one was sent (or a failure note)."""
+        conn = self.connect()
+        try:
+            local = self.now().astimezone(ZoneInfo(db.athlete_timezone(conn)))
+            if local.weekday() != 6 or not WEEKLY_HOUR <= local.hour < WEEKLY_LAST_HOUR:
+                return False
+            sunday = local.date()
+            plan = db.load_accepted_plan(conn)
+            next_monday = (sunday + timedelta(days=1)).isoformat()
+            if not (
+                reports.plan_week(plan, sunday.isoformat()) or reports.plan_week(plan, next_monday)
+            ):
+                return False
+            if not reports.mark_notified(conn, WEEKLY_KIND, sunday.isoformat()):
+                return False  # marked before the coach runs, so a failure never retries in a loop
+        finally:
+            conn.close()
+        channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
+        convo = self._conversation(channel)
+        with convo.lock:
+            convo.turns, convo.pending = [], None
+            answer = self._answer(weekly_prompt(sunday.isoformat()), convo)
+            text = WEEKLY_FAILED if answer == FAILED else to_mrkdwn(answer)
+            client.chat_postMessage(channel=channel, text=text)
+        return True
+
     def _answer(self, text: str, convo: Conversation) -> str:
         conn = self.connect()
         history = list(convo.turns)
@@ -310,11 +368,13 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
             bot.handle(event, client)
 
         def check_in_loop() -> None:
+            checks = (bot.maybe_ping, bot.maybe_weekly)  # long-run, then Sunday weekly
             while True:
-                try:
-                    bot.maybe_ping(cast(SlackClient, app.client))
-                except Exception:
-                    log.exception("long-run check-in failed")
+                for check in checks:
+                    try:
+                        check(cast(SlackClient, app.client))
+                    except Exception:
+                        log.exception("scheduled check-in failed")
                 time.sleep(CHECK_EVERY)
 
         threading.Thread(target=check_in_loop, name="long-run-check-in", daemon=True).start()

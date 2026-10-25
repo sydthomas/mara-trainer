@@ -146,6 +146,49 @@ def planned_session(plan: dict[str, Any] | None, day: str) -> dict[str, Any] | N
     return None
 
 
+WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+
+
+def plan_week(plan: dict[str, Any] | None, day: str) -> dict[str, Any] | None:
+    """The accepted plan's Monday-Sunday week containing `day`, with a date and miles for each
+    session (Monday first), or None if that week isn't in the plan."""
+    if not plan:
+        return None
+    target = date.fromisoformat(day)
+    for week in plan.get("weeks", []):
+        start = week.get("start_date")
+        if not start or not 0 <= (target - date.fromisoformat(start)).days <= 6:
+            continue
+        monday = date.fromisoformat(start)
+        by_day = {s["day"]: s for s in week["sessions"]}
+        sessions = []
+        for offset in range(7):
+            session = by_day.get((offset + 1) % 7)
+            if session is None:
+                continue
+            sessions.append(
+                {
+                    "date": (monday + timedelta(days=offset)).isoformat(),
+                    "weekday": WEEKDAYS[(offset + 1) % 7],
+                    "kind": session["kind"],
+                    "distance_meters": session["distance_meters"],
+                    "miles": round(session["distance_meters"] / 1609.344, 1),
+                    "details": session.get("details"),
+                }
+            )
+        target_m = week.get("target_distance_meters")
+        return {
+            "week": week.get("week"),
+            "of_weeks": len(plan["weeks"]),
+            "start_date": start,
+            "phase": week.get("phase"),
+            "target_distance_meters": target_m,
+            "target_miles": round(target_m / 1609.344, 1) if target_m else None,
+            "sessions": sessions,
+        }
+    return None
+
+
 def mark_notified(conn: sqlite3.Connection, kind: str, day: str) -> bool:
     """Record a proactive message; False if one of this kind was already sent that day."""
     with conn:

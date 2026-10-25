@@ -354,3 +354,72 @@ def test_propose_tool_validates_but_never_saves(conn: sqlite3.Connection) -> Non
     assert bad["ok"] is False and "H:MM:SS" in bad["problems"][0]
     with pytest.raises(tools.ToolError, match="unexpected"):
         tools.call_tool(conn, "propose_fuel_entry", {**PROPOSAL, "weight_kg": 60})
+
+
+# ------------------------------------------------------------------ Sunday weekly check-in
+
+
+def _sun(hour_utc: int, day: int = 8) -> datetime:  # 2026-11-08 is a Sunday; LA is UTC-8
+    return datetime(2026, 11, day, hour_utc, 0, tzinfo=UTC)
+
+
+def test_weekly_check_in_sunday_six_pm_once() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    coach = FakeCoach(["**Last week** 10 mi long run. **This week** easy."])
+    assert not _debrief_bot(coach, shared, _sun(1, 9)).maybe_weekly(client)  # Sun 5pm LA
+    bot = _debrief_bot(coach, shared, _sun(2, 9))  # Sun 6pm LA (Mon 02:00 UTC)
+    assert bot.maybe_weekly(client)
+    assert coach.calls[0][0].startswith("(Weekly check-in, Sunday 2026-11-08.")
+    assert "plan_week for 2026-11-09" in coach.calls[0][0]
+    assert client.posted == [
+        {"channel": "D1", "text": "*Last week* 10 mi long run. *This week* easy."}
+    ]
+    assert not bot.maybe_weekly(client)  # once per Sunday
+    assert bot.conversations["D1"].turns[-1]["role"] == "assistant"  # her reply continues it
+
+
+def test_weekly_check_in_skips_weeks_outside_the_plan_and_other_days() -> None:
+    shared, client = SharedDB(), SlackFake()
+    coach = FakeCoach([])
+    assert not _debrief_bot(coach, shared, _sun(2, 9)).maybe_weekly(client)  # no plan
+    db.save_plan(shared.conn, PLAN)
+    far = datetime(2027, 1, 11, 2, tzinfo=UTC)  # a Sunday 6pm LA, weeks after the plan
+    assert not _debrief_bot(coach, shared, far).maybe_weekly(client)
+    saturday = _sat(2).replace(day=8)  # Sat 6pm LA
+    assert not _debrief_bot(coach, shared, saturday).maybe_weekly(client)
+    assert client.posted == [] and coach.calls == []
+
+
+def test_weekly_check_in_preview_before_the_plan_starts() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)  # starts Monday 2026-11-02
+    coach = FakeCoach(["Week 1 preview"])
+    sunday_before = datetime(2026, 11, 2, 2, tzinfo=UTC)  # Sun 2026-11-01 6pm LA
+    assert _debrief_bot(coach, shared, sunday_before).maybe_weekly(client)
+
+
+def test_weekly_check_in_failure_posts_a_note_once() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    coach = FakeCoach([RuntimeError("API down")])
+    bot = _debrief_bot(coach, shared, _sun(2, 9))
+    assert bot.maybe_weekly(client)
+    assert client.posted[-1]["text"] == slack_bot.WEEKLY_FAILED
+    assert not bot.maybe_weekly(client)  # no retry loop
+
+
+def test_plan_week_tool(conn: sqlite3.Connection) -> None:
+    db.save_plan(conn, PLAN)
+    week = tools.call_tool(conn, "plan_week", {"date": "2026-11-05"})
+    assert week["week"] == 1 and week["of_weeks"] == 1
+    assert [s["weekday"] for s in week["sessions"]] == ["Saturday", "Sunday"]
+    assert week["sessions"][0] == {
+        "date": "2026-11-07",
+        "weekday": "Saturday",
+        "kind": "long",
+        "distance_meters": 16093,
+        "miles": 10.0,
+        "details": None,
+    }
+    assert tools.call_tool(conn, "plan_week", {"date": "2027-01-01"})["week"] is None

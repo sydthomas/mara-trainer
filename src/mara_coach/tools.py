@@ -78,6 +78,13 @@ def show_plan(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"plan": db.load_accepted_plan(conn)}
 
 
+def plan_week(conn: sqlite3.Connection, date: str) -> dict[str, Any]:
+    week = reports.plan_week(db.load_accepted_plan(conn), date)
+    if week is None:
+        return {"date": date, "week": None, "message": "That week isn't in the accepted plan."}
+    return week
+
+
 def get_profile(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"profile": profile.get_profile(conn)}
 
@@ -279,6 +286,14 @@ TOOLS: tuple[Tool, ...] = (
         "The runner's accepted training plan (weeks of sessions, meters), or null if none.",
         _schema(),
         show_plan,
+    ),
+    Tool(
+        "plan_week",
+        "One Monday-Sunday week of the accepted plan: week number, phase, weekly target, and each "
+        "session with its date, weekday, kind, miles and notes. Use it instead of show_plan for "
+        "a single week.",
+        _schema({"date": {**_DATE, "description": "Any date in the week"}}, required=["date"]),
+        plan_week,
     ),
     Tool(
         "get_profile",

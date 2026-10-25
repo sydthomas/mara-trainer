@@ -77,6 +77,14 @@ most once a day. Answer however you like; the coach asks at most one follow-up, 
 back and asks "Save it?". Reply **yes** to save it to your fuel log or **no** to drop it.
 Anything else is treated as a correction. The bot has to be running for the check-in to arrive.
 
+## Sunday weekly check-in
+
+Sundays at 6pm (your timezone; late until 10pm if the bot was off) the bot sends one message:
+a recap of the week that just ended (plan vs. imported runs and your fuel log), a preview of the
+coming week (each run with effort, strength days, and the week's focus from approved knowledge
+sections), and one question about your week. Reply to adjust anything. It only runs while the
+plan covers that week or the next, and costs about 15 to 20 cents each.
+
 ## Notes
 
 - Each answer costs about 10 to 15 cents in API usage, the same as `coach ask`.
