@@ -27,6 +27,7 @@ EXPECTED = {
     "allowed_domains",
     "read_knowledge",
     "propose_fuel_entry",
+    "plan_week",
 }
 
 

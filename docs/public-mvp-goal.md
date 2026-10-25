@@ -215,3 +215,7 @@ caps per user.
   athlete-local (Sydney's choice; late until 8pm if the bot was off; once a day via migration
   008 `notifications`). The coach gathers details and calls `propose_fuel_entry` (validates and
   reads back, never saves); the bot saves in code only on "yes", drops on "no".
+- 2026-10-25 (cont.): Sunday weekly check-in in Slack at 6pm athlete-local (Sydney's choice):
+  recap of the ending week (plan_week vs summary and fuel log) and preview of the next (runs,
+  effort, strength, the phase's focus from approved knowledge only), ending with one question.
+  New `plan_week` tool gives one plan week with dates and miles computed in code.

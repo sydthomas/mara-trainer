@@ -72,7 +72,7 @@ be summarized. If no approved source covers a question, the coach says so.
   body hash (edits send a section back to review). Only Sydney approves.
 - `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
   read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile, fuel_log,
-  search_sources, read_knowledge, propose_fuel_entry, allowed_domains); exit 1 on bad args or a tool error
+  search_sources, read_knowledge, propose_fuel_entry, plan_week, allowed_domains); exit 1 on bad args or a tool error
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
@@ -80,7 +80,8 @@ be summarized. If no approved source covers a question, the coach says so.
   `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USER_ID` and `ANTHROPIC_API_KEY` in `.env`;
   answers only the allowed user. On plan long-run days it DMs a debrief check-in at 10am local
   (once a day); the coach proposes the entry with `propose_fuel_entry` (validates, never saves)
-  and the bot saves it in code only when she replies yes. Setup: `docs/slack-setup.md`
+  and the bot saves it in code only when she replies yes. Sundays at 6pm local it sends a weekly
+  check-in (last week recap + next week preview). Setup: `docs/slack-setup.md`
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
