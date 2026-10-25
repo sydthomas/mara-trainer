@@ -12,7 +12,7 @@ Two packages:
 - `src/mara_coach/` — the coach: Claude API agent, source registry, profile, channels, eval set.
   Calls into `mara_trainer` for every number.
 
-Claude Code is still the dev interface and Sydney's personal interface (skills + Strava MCP). The
+Claude Code is still the dev interface and Sydney's personal interface (skills + COROS MCP). The
 repo is also a public portfolio piece: original code only (no employer code, no AGPL/GPL code),
 no personal data, MIT licensed.
 
@@ -91,18 +91,26 @@ be summarized. If no approved source covers a question, the coach says so.
   Add a case whenever the coach gets something wrong.
 
 ## Data sources and rules (read before touching integrations)
-- **Strava — official MCP only, and never in `mara_coach`.** The coach agent and any public
-  feature must not receive Strava data; other runners bring FIT/GPX/Apple Health files. Since the Strava API Policy of 2026-06-01, Strava data must not be
-  fed into AI apps except through Strava's official MCP, must not be stored permanently (a transient
-  cache of at most 7 days is the ceiling), and third-party MCP servers may not expose it.
-  Use only `strava-mcp` (`https://mcp.strava.com/mcp`, registered in `.mcp.json`), which requires a
-  paid Strava subscription on a personal account (the Strava + Runna bundle qualifies).
-  - Use Strava MCP results **in-session only**, for Sydney's own analysis. Do NOT write them to
-    `coach.db`, `data/`, `plans/`, docs, commits, PRs, issues, or any file.
-  - Do NOT add stravalib, Strava OAuth, webhooks, or sync code. Do NOT install third-party Strava MCPs.
-  - The DB schema has no `strava` source on purpose. Don't add one.
-- **Runna has no public API.** Never scrape Runna or call private endpoints. Runna runs reach Strava
-  (see via Strava MCP) and the watch (import the FIT). Runna plans: Sydney enters them by hand.
+- **COROS — official MCP only.** Sydney's watch data comes through COROS's official MCP server
+  (`coros`, `https://mcpus.coros.com/mcp` (US region; `mcp.coros.com` fails OAuth because its
+  metadata names the regional host), registered in `.mcp.json`; the claude.ai COROS connector
+  is the same server). Authorize with `/mcp`. Do NOT use unofficial or reverse-engineered COROS
+  APIs or third-party COROS MCPs.
+  - Read tools: fine in-session for Sydney's own analysis. Runs reach `coach.db` only as FIT files
+    (`downloadActivityFitFiles` into `exports/`, then `coach import`, so dedup applies; source
+    stays `fit`). Don't write raw MCP results (sleep, HRV, stress, menstrual cycles) to `data/`,
+    `plans/`, docs, commits, PRs, issues or any file. Use cycle data only when she asks.
+  - Write tools (create/schedule/update workouts or training plans) change her COROS account:
+    only with her explicit OK each time, and only for sessions from a plan that passed `validate-plan`.
+  - Planned: a `coros-run-planner` skill that, at the Sunday weekly check-in, writes the coming
+    week's sessions from the accepted plan as COROS workouts and schedules them on her account
+    (with her OK each week). Not built yet.
+  - Not in `mara_coach` yet: wiring COROS into the coach agent is a separate, planned step.
+- **Strava — not used.** Strava's API Policy of 2026-06-01 bars storing Strava data or feeding it
+  to AI apps outside Strava's own MCP. Don't add Strava MCPs, stravalib, OAuth, webhooks or sync
+  code, and don't add a `strava` source to the DB (the schema leaves it out on purpose).
+- **Runna has no public API.** Never scrape Runna or call private endpoints. Runna runs reach the
+  COROS watch (see via the COROS MCP, or import the FIT). Runna plans: Sydney enters them by hand.
 - **Garmin:** FIT files exported from the watch / Garmin Connect are the default path.
   `garmin_mcp` / `python-garminconnect` use unofficial endpoints: optional, personal use only,
   OFF by default (`GARMIN_MCP_ENABLED=false`), not in `.mcp.json`. Never commit tokens.

@@ -18,8 +18,9 @@ Run `uv run coach race show`. If there's no race set, or Sydney wants changes, c
 - Constraints such as injuries, travel, or Runna sessions she wants kept (notes)
 
 Optional context: `uv run coach summary --weeks 6` (imported FIT/GPX/Health data). With her OK,
-you can also check the Strava MCP in-session for recent volume. Use it only to sanity-check the
-baseline she states, and never write Strava data to any file.
+you can also check the COROS MCP for recent volume. Use it only to sanity-check the baseline she
+states. Don't push sessions to COROS (create/schedule tools) unless she asks and the plan has
+passed `validate-plan`.
 
 Save the inputs with `uv run coach race set ...` (see CLAUDE.md for flags). Confirm the values with her first.
 

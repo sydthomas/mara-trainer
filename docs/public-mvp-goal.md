@@ -219,3 +219,10 @@ caps per user.
   recap of the ending week (plan_week vs summary and fuel log) and preview of the next (runs,
   effort, strength, the phase's focus from approved knowledge only), ending with one question.
   New `plan_week` tool gives one plan week with dates and miles computed in code.
+- 2026-10-25 (cont.): Switched the Claude Code data source from Strava to COROS's official MCP
+  (`https://mcpus.coros.com/mcp`; `mcp.coros.com` fails OAuth because its metadata names the
+  US regional host). Runs reach `coach.db` only as FIT files via `coach import`. Next (Sydney's
+  plan): use the COROS connection for writing as well as reading. A `coros-run-planner` skill will
+  take the coming week's sessions from the accepted plan (the same week the Sunday 6pm check-in
+  previews), build them as COROS workouts and schedule them on her COROS account, after her OK
+  each week. Only sessions from a plan that passed `validate-plan` get pushed.

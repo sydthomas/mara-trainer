@@ -8,7 +8,9 @@ allowed-tools: Bash(uv run coach import *) Bash(uv run coach summary *) Bash(uv 
 
 Supported files: `.fit` (the default path for Garmin and Runna-on-watch runs), `.gpx`, and Apple
 Health `export.zip` or `export.xml` (running workouts plus daily HRV and resting HR; sleep isn't
-imported yet). Strava data is never imported. It isn't allowed to be stored (see CLAUDE.md).
+imported yet). COROS runs come in as FIT files: if the COROS MCP is connected, download them with
+`downloadActivityFitFiles` into `exports/`, then import as below. Strava data is never imported
+(see CLAUDE.md).
 
 Personal files belong in `exports/` (gitignored). Never copy them into `tests/` or any committed path.
 
