@@ -114,8 +114,11 @@ be summarized. If no approved source covers a question, the coach says so.
 - Plan guardrails (`src/mara_trainer/plan_rules.py`, ported from legacy `buildScheduleBrief` /
   `validateAiSchedule`): exact weekly running total (±100 m), exactly `runs_per_week` runs on
   available days, one long run on the chosen day within [target, max], ≤1 quality workout per week
-  and none in base/taper, ≥1 easy/rest day between long run and workout, ≤1 strength day, runs ≥1 km,
-  3-week taper, race week = race on race day (42195 m) and rest otherwise.
+  (any phase), ≥1 easy/rest day between long run and workout, ≤2 strength days (≤1 in taper and
+  race week), runs ≥1 km, 3-week taper, race week = race on race day (42195 m) plus up to
+  runs_per_week - 1 short runs (no long run, ≤25% of peak week). **Rules follow the sources:**
+  every coaching rule maps to approved sources in `docs/plan-rules-sources.md`; change a rule only
+  when the sources (knowledge base) say so, and list unsourced defaults there.
 - No medical diagnoses, no invented paces without a recent race result. For pain, illness or health
   concerns, tell the runner to see a qualified professional.
 - Nutrition: general, cited guidance only (fueling ranges come from sources, not memory). Medical

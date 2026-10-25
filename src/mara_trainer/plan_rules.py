@@ -1,9 +1,11 @@
 """Deterministic plan guardrails: "Claude proposes, code validates".
 
 Ported from the legacy TypeScript `buildScheduleBrief` (packages/domain) and `validateAiSchedule`
-(apps/api/src/schedule-ai.ts). Semantics are kept identical, including JavaScript rounding, so
-legacy behaviour carries over. The validator reports *every* violation (the original threw on the
-first) so Claude can fix a draft in one pass.
+(apps/api/src/schedule-ai.ts), including JavaScript rounding, then audited against the knowledge
+base (`knowledge/training.md`, `race-week.md`, `strength.md`). Every coaching rule comes from an
+approved source; `docs/plan-rules-sources.md` maps each rule to its sources and lists the ones
+still waiting for a source. The validator reports *every* violation so Claude can fix a draft in
+one pass.
 
 Weekdays: 0=Sunday ... 6=Saturday. Distances: integer meters.
 """
@@ -17,6 +19,16 @@ from typing import Any, Literal
 from .dates import days_before, js_round, parse_date, weekday_sun0
 
 MARATHON_METERS = 42195
+# Race week: pre-race running capped at a quarter of the peak week. Higdon's Novice 1 race week is
+# 9 mi of easy running against a 40 mi peak (22.5%); LA Road Runners and Chicago also keep short
+# runs. The taper meta-analysis (Wang 2023) found keeping session frequency helped.
+RACE_WEEK_RUNNING_SHARE = 0.25
+# Strength: about 2 sessions a week build strength; 1 a week maintains it in the racing phase
+# (Blagrove 2018; ACSM 2026).
+MAX_STRENGTH_PER_WEEK = 2
+MAX_STRENGTH_PER_WEEK_TAPER = 1
+# Chicago Marathon advises against plans shorter than 12 weeks.
+MIN_RECOMMENDED_WEEKS = 12
 RUN_KINDS = ("easy", "workout", "long")
 SESSION_KINDS = ("easy", "workout", "long", "race", "strength", "rest")
 Phase = Literal["base", "build", "marathon_specific", "taper", "race"]
@@ -138,6 +150,7 @@ class ScheduleBrief:
     runs_per_week: int
     weeks: list[WeekTarget]
     notes: list[str]
+    race_week_running_max_meters: int = 0
     generated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: str = "draft"
 
@@ -219,6 +232,11 @@ def build_schedule_brief(
             else "Current volume points to a base-building level. This 24-week block builds your "
             "foundation; create a race-specific plan afterward."
         )
+    if ends_at_race and count < MIN_RECOMMENDED_WEEKS:
+        notes.append(
+            f"Only {count} weeks until race week. The Chicago Marathon advises against plans "
+            "shorter than 12 weeks; consider a later race or keep this one as a finish goal."
+        )
     if weeks_until_race > 24:
         notes.append(
             "The race is more than 24 weeks away. This draft starts 24 weeks before race week."
@@ -275,6 +293,9 @@ def build_schedule_brief(
         runs_per_week=min(len(setup.training_days), preferred_runs),
         weeks=weeks,
         notes=notes,
+        race_week_running_max_meters=js_round(weekly_peak * RACE_WEEK_RUNNING_SHARE)
+        if ends_at_race
+        else 0,
         **({"generated_at": generated_at} if generated_at else {}),
     )
 
@@ -401,8 +422,34 @@ def check_schedule(value: Any, setup: RaceSetup, brief: ScheduleBrief) -> Valida
                         bad(f"race must be on day {race_day} (race date weekday)")
                     if s["distance_meters"] != MARATHON_METERS:
                         bad(f"race distance must be {MARATHON_METERS} m")
-                elif s["kind"] != "rest" or s["distance_meters"] != 0:
-                    bad("every non-race day in race week must be rest with 0 m")
+            # Short easy runs (and at most one small quality session) are allowed before the
+            # race; no long run. Sources: Higdon, LA Road Runners, Chicago, Wang 2023.
+            runs = [s for s in sessions if s["kind"] in RUN_KINDS]
+            if any(s["kind"] == "long" for s in runs):
+                bad("no long run in race week")
+            off_days = sorted(s["day"] for s in runs if s["day"] not in allowed)
+            if off_days:
+                bad(f"runs scheduled on non-training days {off_days}")
+            if len(runs) > brief.runs_per_week - 1:
+                bad(
+                    f"{len(runs)} race-week runs; at most {brief.runs_per_week - 1} before the race"
+                )
+            if sum(1 for s in runs if s["kind"] == "workout") > 1:
+                bad("at most one quality workout per week")
+            if any(s["distance_meters"] < 1000 for s in runs):
+                bad("every run must be at least 1000 m")
+            pre_race = sum(s["distance_meters"] for s in runs)
+            if pre_race > brief.race_week_running_max_meters:
+                bad(
+                    f"race-week running {pre_race} m exceeds "
+                    f"{brief.race_week_running_max_meters} m (a quarter of the peak week)"
+                )
+            if sum(1 for s in sessions if s["kind"] == "strength") > MAX_STRENGTH_PER_WEEK_TAPER:
+                bad(f"at most {MAX_STRENGTH_PER_WEEK_TAPER} strength session in race week")
+            if any(
+                s["kind"] in ("strength", "rest") and s["distance_meters"] != 0 for s in sessions
+            ):
+                bad("rest and strength sessions must have 0 m")
         else:
             runs = [s for s in sessions if s["kind"] in RUN_KINDS]
             longs = [s for s in runs if s["kind"] == "long"]
@@ -436,10 +483,15 @@ def check_schedule(value: Any, setup: RaceSetup, brief: ScheduleBrief) -> Valida
                     bad("need at least one easy/rest day between the long run and the workout")
             if len(workouts) > 1:
                 bad("at most one quality workout per week")
-            if len(strengths) > 1:
-                bad("at most one strength session per week")
-            if expected.phase in ("base", "taper") and workouts:
-                bad(f"no quality workouts during {expected.phase} weeks")
+            strength_cap = (
+                MAX_STRENGTH_PER_WEEK_TAPER if expected.phase == "taper" else MAX_STRENGTH_PER_WEEK
+            )
+            if len(strengths) > strength_cap:
+                bad(
+                    f"at most {strength_cap} strength session"
+                    f"{'s' if strength_cap > 1 else ''} per week"
+                    f"{' in taper weeks' if expected.phase == 'taper' else ''}"
+                )
             if any(s["distance_meters"] < 1000 for s in runs):
                 bad("every run must be at least 1000 m")
             if any(

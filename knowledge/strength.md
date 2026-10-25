@@ -13,7 +13,7 @@ content_sha256:
 - Start with heavy, multi-joint, free-weight lower-body lifts (squats, deadlifts, step-ups, lunges); the review's authors suggest heavy work as the starting point and a mix with explosive and plyometric work later on. [@blagrove-strength-training-distance-runners-2018]
 - A building dose is 2 sessions a week of 2 to 3 hard sets per exercise; for maximal strength, general adult guidance points to loads of at least 80% of a one-rep max, but runners gained just as much with moderate loads (60 to 80%, 5 to 15 reps). Sets do not need to go to failure; stopping 2 to 3 reps short is enough. [@acsm-resistance-training-2026] [@blagrove-strength-training-distance-runners-2018]
 - Keep strength away from key runs: at least 24 hours between a lifting session and a hard running session, and more than 3 hours after hard running if both fall on the same day. [@blagrove-strength-training-distance-runners-2018]
-- In the racing phase, one session a week appeared to hold the gains; stopping completely let them fade back to baseline within about 6 weeks. Note that the plan validator currently allows at most one strength day per week, which matches maintenance but sits below the 2 to 3 sessions used to build strength in the studies. [@blagrove-strength-training-distance-runners-2018]
+- In the racing phase, one session a week appeared to hold the gains; stopping completely let them fade back to baseline within about 6 weeks. The plan rules allow 2 strength days a week, and 1 in taper and race week. [@blagrove-strength-training-distance-runners-2018]
 - For women the evidence is thin but encouraging: trained women gained a lot of strength with no loss of endurance, and women in a collegiate in-season study likely raced slightly faster. One women-only trial found no change in running economy or 40-minute run performance, so promise strength and resilience, not a guaranteed faster marathon. [@vikmoen-heavy-strength-female-endurance-2016] [@barnes-resistance-training-cross-country-2013]
 - Runners new to lifting should start with 1 to 2 sets and get coaching on technique; studies without supervision showed no strength gains. [@blagrove-strength-training-distance-runners-2018]
 
@@ -56,7 +56,6 @@ content_sha256:
 - Core, hip and upper-body work for runners is not covered by any approved source.
 - Menstrual cycle phase and contraception were not reported in the women-tested strength studies.
 - Barnes 2013 was read from its abstract only (copyrighted, not fetchable); exact sex counts and program details were not checked.
-- The plan validator allows at most one strength day per week; the studies used 2 to 3 sessions to build strength. Sydney may want to decide whether that guardrail fits her goals.
 
 ## Works cited
 - [@acsm-resistance-training-2026] Currier, B. S., et al. "American College of Sports Medicine Position Stand. Resistance Training Prescription for Muscle Function, Hypertrophy, and Physical Performance in Healthy Adults: An Overview of Reviews." *Medicine and Science in Sports and Exercise*, vol. 58, no. 4, 2026, pp. 851-872. https://doi.org/10.1249/MSS.0000000000003897

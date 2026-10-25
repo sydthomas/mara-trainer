@@ -38,9 +38,13 @@ Read `docs/legacy-notes.md` § "Plan-drafting reference" for the full principles
 - Schedule exactly `runs_per_week` runs on her available days, and one long run on her long-run day
   within [target, max]. Run distances must add up to the weekly target (±100 m), and every run must
   be at least 1000 m.
-- Allow at most 1 quality workout, only in build or marathon-specific weeks, with at least one
-  easy or rest day between it and the long run. Allow at most one light strength day (0 m).
-- Race week: the race on race day (42195 m) and rest every other day.
+- Allow at most 1 quality workout a week, with at least one easy or rest day between it and the
+  long run. For a first marathon keep it small or skip it early on (sources differ: Higdon has
+  none, Chicago has one every week). Up to 2 strength days (0 m), 1 in taper and race week.
+- Race week: the race on race day plus up to `runs_per_week - 1` short easy runs (optionally
+  strides or a short marathon-pace piece), no long run, at most a quarter of the peak week.
+- Why each rule exists: `docs/plan-rules-sources.md`; the evidence: `knowledge/training.md`,
+  `race-week.md`, `strength.md`.
 - Mostly easy, conversational running. Pick plausible, unequal supporting runs. The long run is
   usually 25-40% of the week.
 

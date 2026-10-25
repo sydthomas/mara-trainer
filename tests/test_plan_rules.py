@@ -113,6 +113,16 @@ def test_brief_race_week_targets(brief) -> None:  # type: ignore[no-untyped-def]
     race = brief.weeks[-1]
     assert race.target_distance_meters == race.long_run_target_meters == MARATHON_METERS
     assert race.long_run_maximum_meters == MARATHON_METERS
+    peak = max(w.target_distance_meters for w in brief.weeks[:-1])
+    assert brief.race_week_running_max_meters == js_round(peak * 0.25)
+
+
+def test_brief_warns_on_short_plans(setup: RaceSetup) -> None:
+    # Chicago advises against plans shorter than 12 weeks.
+    short = replace(setup, race_date="2027-03-07")
+    notes = " ".join(build_schedule_brief(short, "2026-12-28").notes)
+    assert "12 weeks" in notes
+    assert "12 weeks" not in " ".join(build_schedule_brief(setup, TODAY).notes)
 
 
 def test_brief_training_level_and_runs(setup: RaceSetup, brief) -> None:  # type: ignore[no-untyped-def]
@@ -358,15 +368,11 @@ def test_long_run_at_maximum_is_ok(plan, setup, brief) -> None:  # type: ignore[
     assert violations(plan, setup, brief) == []
 
 
-def test_rejects_workout_in_base_week(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
-    session(plan, 0, 4)["kind"] = "workout"
-    assert any("no quality workouts during base" in m for m in violations(plan, setup, brief))
-
-
-def test_rejects_workout_in_taper_week(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
-    wi = week_index(brief, "taper")
-    session(plan, wi, 4)["kind"] = "workout"
-    assert any("during taper" in m for m in violations(plan, setup, brief))
+@pytest.mark.parametrize("phase", ["base", "taper"])
+def test_allows_one_workout_in_base_and_taper(phase: str, plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+    # Chicago and LA Road Runners schedule speed from early weeks; tapers keep intensity.
+    session(plan, week_index(brief, phase), 4)["kind"] = "workout"
+    assert violations(plan, setup, brief) == []
 
 
 def test_allows_one_workout_in_build(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
@@ -398,15 +404,22 @@ def test_rejects_workout_adjacent_to_long_run(day: int, setup: RaceSetup) -> Non
     assert any("between the long run and the workout" in m for m in msgs)
 
 
-def test_rejects_two_strength_days(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+def test_two_strength_days_ok_three_rejected(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+    # Building strength takes about 2 sessions a week (Blagrove 2018, ACSM 2026).
     for d in (1, 3):
         session(plan, 0, d)["kind"] = "strength"
-    assert any("strength" in m for m in violations(plan, setup, brief))
-
-
-def test_one_strength_day_ok(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
-    session(plan, 0, 1)["kind"] = "strength"
     assert violations(plan, setup, brief) == []
+    session(plan, 0, 5)["kind"] = "strength"
+    assert any("at most 2 strength" in m for m in violations(plan, setup, brief))
+
+
+def test_taper_allows_one_strength_day(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+    # One session a week maintains strength in the racing phase (Blagrove 2018).
+    wi = week_index(brief, "taper")
+    session(plan, wi, 1)["kind"] = "strength"
+    assert violations(plan, setup, brief) == []
+    session(plan, wi, 3)["kind"] = "strength"
+    assert any("at most 1 strength" in m for m in violations(plan, setup, brief))
 
 
 def test_rejects_distance_on_rest_day(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
@@ -447,9 +460,40 @@ def test_race_week_wrong_distance(plan, setup, brief) -> None:  # type: ignore[n
     assert any("42195" in m for m in violations(plan, setup, brief))
 
 
-def test_race_week_shakeout_run_not_allowed(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+def test_race_week_allows_short_easy_runs(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+    # Published plans keep short easy runs in race week (Higdon, LA Road Runners, Chicago).
+    for d in (2, 4):
+        session(plan, -1, d).update(kind="easy", distance_meters=5000)
+    assert violations(plan, setup, brief) == []
+
+
+def test_race_week_running_cap(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+    cap = brief.race_week_running_max_meters
+    assert cap > 0
+    session(plan, -1, 2).update(kind="easy", distance_meters=cap - 1000)
+    session(plan, -1, 4).update(kind="easy", distance_meters=1000)
+    assert violations(plan, setup, brief) == []
+    session(plan, -1, 4)["distance_meters"] = 1001
+    assert any("race-week running" in m for m in violations(plan, setup, brief))
+
+
+def test_race_week_rejects_long_run_and_off_day_runs(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+    session(plan, -1, 4).update(kind="long", distance_meters=5000)
+    assert any("no long run in race week" in m for m in violations(plan, setup, brief))
     session(plan, -1, 4).update(kind="easy", distance_meters=5000)
-    assert any("must be rest" in m for m in violations(plan, setup, brief))
+    off = next(d for d in range(7) if d not in setup.training_days)
+    session(plan, -1, off).update(kind="easy", distance_meters=1000)
+    assert any("non-training days" in m for m in violations(plan, setup, brief))
+
+
+def test_race_week_run_count_and_tiny_runs(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
+    days = [d for d in setup.training_days if d != 0]
+    for d in days:
+        session(plan, -1, d).update(kind="easy", distance_meters=1000)
+    if len(days) >= brief.runs_per_week:
+        assert any("race-week runs" in m for m in violations(plan, setup, brief))
+    session(plan, -1, days[0]).update(kind="easy", distance_meters=999)
+    assert any("at least 1000 m" in m for m in violations(plan, setup, brief))
 
 
 def test_race_week_missing_race(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
@@ -461,7 +505,8 @@ def test_race_week_missing_race(plan, setup, brief) -> None:  # type: ignore[no-
 
 
 def test_reports_all_violations_with_week_numbers(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
-    session(plan, 0, 4)["kind"] = "workout"
+    for d in (2, 4):
+        session(plan, 0, d)["kind"] = "workout"
     session(plan, 1, 1)["distance_meters"] = 300
     r = check_schedule(plan, setup, brief)
     assert {v.week for v in r.violations} >= {1, 2}
@@ -470,7 +515,7 @@ def test_reports_all_violations_with_week_numbers(plan, setup, brief) -> None:  
 
 def test_validate_schedule_raises_with_code(plan, setup, brief) -> None:  # type: ignore[no-untyped-def]
     bad = copy.deepcopy(plan)
-    session(bad, 0, 4)["kind"] = "workout"
+    session(bad, 0, 4)["distance_meters"] = 999
     with pytest.raises(ScheduleValidationError) as exc:
         validate_schedule(bad, setup, brief)
     assert exc.value.code == OUT_OF_BOUNDS

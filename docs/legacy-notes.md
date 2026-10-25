@@ -57,13 +57,15 @@ Don't go over the brief's weekly or long-run limits, and don't claim the distanc
   25-40% of the weekly running, and closer to 50% for low-frequency beginners.
 - Split the remaining distance into plausible supporting runs. Don't split it equally by default. The
   integer distances must add up to the weekly target.
-- At most one quality workout, and none in base or taper weeks. Keep at least one recovery day between
+- At most one quality workout a week (the legacy "none in base or taper" was dropped on
+  2026-10-24; see `docs/plan-rules-sources.md`). Keep at least one recovery day between
   the long run and the workout. If her available days make that impractical, schedule easy running
   instead. Workouts can be controlled hills, steady running, or a small amount of marathon-effort practice.
 - No exact paces without a recent race result. For a first marathon, keep workouts conservative and
   aimed at finishing. Returning marathoners can get more specific work within the same limits.
 
-**Race week.** The race goes on its exact weekday (42195 m). Every other day is rest.
+**Race week.** The race goes on its exact weekday (42195 m). Legacy made every other day rest;
+since 2026-10-24 short easy runs are allowed, as in the published plans (`docs/plan-rules-sources.md`).
 
 **Using logged data.** Recent imported activity (and Strava, in-session only) gives context on
 consistency and workout detail. Logs can be incomplete, so a missing session isn't proof of
