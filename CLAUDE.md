@@ -44,6 +44,8 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Commands
 - `uv sync` — install deps
+- `uv run pre-commit install` — once per clone: ruff + hygiene hooks run before each commit (CI runs
+  everything on every PR: `.github/workflows/ci.yml`). Don't bypass with `--no-verify`.
 - `uv run pytest` — tests (must pass before every commit)
 - `uv run ruff check . && uv run ruff format --check . && uv run mypy src/`
 - `uv run coach init-db [--timezone America/Los_Angeles]` — create/upgrade the DB

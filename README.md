@@ -18,6 +18,7 @@ accepted, and advice is grounded in a vetted, cited source list rather than scra
 brew install uv              # Python toolchain manager (fetches Python 3.12 automatically)
 cd ~/Desktop/mara-trainer
 uv sync                      # create .venv and install dependencies
+uv run pre-commit install    # lint/format hooks before each commit
 uv run pytest                # all tests should pass
 uv run coach init-db         # creates data/coach.db (timezone defaults to America/Los_Angeles)
 claude                       # start Claude Code in this folder
