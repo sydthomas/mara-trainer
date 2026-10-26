@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Added
+- `coach eval live`: run the eval set against the live coach, save the report to
+  `data/eval-runs/`, and show regressions and fixes vs the previous run. Eval routine in
+  CONTRIBUTING.md.
+
 ## [0.1.0] - 2026-10-26
 
 First tagged version: a working single-athlete coach.
