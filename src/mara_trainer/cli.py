@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import db, fueling, imports, paces, reports
+from . import coros_workouts, db, fueling, imports, paces, reports
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -30,8 +30,13 @@ fuel_app = typer.Typer(
     help="Fueling log: what you ate before and took during runs (no calories).",
     no_args_is_help=True,
 )
+coros_app = typer.Typer(
+    help="COROS workouts built from the accepted plan (sent by Claude via the COROS MCP).",
+    no_args_is_help=True,
+)
 app.add_typer(plan_app, name="plan")
 app.add_typer(fuel_app, name="fuel")
+app.add_typer(coros_app, name="coros")
 
 KM = 1000.0
 MI = 1609.344
@@ -296,6 +301,31 @@ def pace_cmd(
         _fail(str(exc))
     report["input"] = {"source": source, **report["input"]}
     _out(report)
+
+
+@coros_app.command("week")
+def coros_week_cmd(
+    day: Annotated[
+        str | None,
+        typer.Option("--date", help="Any date in the plan week (default: athlete-local tomorrow)"),
+    ] = None,
+    today: Annotated[str | None, typer.Option(help="Override today (YYYY-MM-DD)")] = None,
+) -> None:
+    """One plan week as COROS course JSON: runs with watch targets, skipped days with reasons."""
+    conn = _conn()
+    setup = db.load_race_setup(conn)
+    if setup is None:
+        _fail("no race set; run `coach race set` first")
+    try:
+        local_today = today or reports.athlete_today(conn)
+        week_day = day or (date.fromisoformat(local_today) + timedelta(days=1)).isoformat()
+        date.fromisoformat(week_day)
+    except (ValueError, reports.ReportError) as exc:
+        _fail(str(exc))
+    week = coros_workouts.coros_week(db.load_accepted_plan(conn), setup, week_day, local_today)
+    if week is None:
+        _fail(f"the week of {week_day} isn't in the accepted plan")
+    _out(week)
 
 
 @fuel_app.command("log")

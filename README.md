@@ -8,8 +8,8 @@ A small local Python core stores workouts in SQLite, computes timezone-aware sum
 training-plan guardrails. Claude drafts plans and answers; **code validates every plan** before it's
 accepted, and advice is grounded in a vetted, cited source list rather than scraped content.
 
-- Data in: Garmin/watch **FIT** files (default), GPX, Apple Health export, and the **official Strava
-  MCP** (in Claude Code sessions only, never stored, never sent to the coach agent).
+- Data in: watch **FIT** files (default), GPX, Apple Health export, and the **official COROS MCP**
+  in Claude Code (runs are imported as FIT files).
 - Data stays local in `data/coach.db` (gitignored). API keys live only in `.env`.
 
 ## Quick start (macOS)
@@ -18,24 +18,24 @@ accepted, and advice is grounded in a vetted, cited source list rather than scra
 brew install uv              # Python toolchain manager (fetches Python 3.12 automatically)
 cd ~/Desktop/mara-trainer
 uv sync                      # create .venv and install dependencies
+uv run pre-commit install    # lint/format hooks before each commit
 uv run pytest                # all tests should pass
 uv run coach init-db         # creates data/coach.db (timezone defaults to America/Los_Angeles)
 claude                       # start Claude Code in this folder
 ```
 
 The first time you run `claude` here, accept the workspace-trust prompt and approve the project
-MCP server `strava-mcp` from `.mcp.json`.
+MCP server `coros` from `.mcp.json`.
 
-### Authorize the Strava MCP
+### Authorize the COROS MCP
 
-1. You need a **paid Strava subscription** on your personal account (the Strava + Runna bundle counts).
-2. In Claude Code, run `/mcp`, select **strava-mcp**, and choose **Authenticate**. Finish the
-   Strava login in your browser.
-3. Run `/mcp` again to check it shows as connected.
+1. In Claude Code, run `/mcp`, select **coros**, and choose **Authenticate**. Finish the COROS
+   login in your browser.
+2. Run `/mcp` again to check it shows as connected.
 
-Strava data is only used live inside the Claude session. Under Strava's API policy (effective
-2026-06-01) it isn't stored in this project, and no third-party Strava MCP servers are used.
-Runna has no public API; Runna runs reach Strava and your watch (import the FIT).
+Only COROS's official MCP is used (no unofficial COROS APIs). Runs reach the database as FIT
+files through `coach import`. Strava isn't used: its API policy (effective 2026-06-01) bars storing
+its data or feeding it to AI apps. Runna has no public API; Runna runs reach your COROS watch.
 
 ## Good first prompts
 
@@ -44,10 +44,11 @@ Runna has no public API; Runna runs reach Strava and your watch (import the FIT)
 2. "Build me a training plan for my spring marathon." (uses the **plan-builder** skill)
 3. "Import the FIT files in ~/Desktop/mara-trainer/exports/ and flag anything that looks like a duplicate."
 4. "Import my Apple Health export at exports/export.zip."
-5. "Do my weekly review: how did this week go against the plan? Check Strava for anything I didn't import."
+5. "Do my weekly review: how did this week go against the plan? Check COROS for anything I didn't import."
 6. "I'm traveling next Thursday through Sunday. Rework next week so it still passes validation."
 7. "Show my last 6 weeks of mileage and long runs in miles."
 8. "Explain the guardrails in `coach plan brief` for my race in plain English."
+9. "Push my week to COROS." (uses the **coros-run-planner** skill: builds next week's runs from the plan and schedules them on your COROS calendar after one yes)
 
 ## CLI
 
@@ -72,8 +73,8 @@ src/mara_coach/     the coach: eval-set loader now; Claude agent, sources, profi
 evals/              coach-questions.json (synthetic questions + grading rubrics)
 tests/              pytest suite (synthetic FIT generated in memory; no real data)
 examples/           sample-plan.json (synthetic, passes validation)
-.claude/skills/     plan-builder, weekly-review, import-workouts
-.mcp.json           official Strava MCP (http, https://mcp.strava.com/mcp)
+.claude/skills/     plan-builder, weekly-review, import-workouts, coros-run-planner, ...
+.mcp.json           official COROS MCP (http, https://mcpus.coros.com/mcp)
 docs/               public-mvp-goal.md, strava-requirements.md, legacy-notes.md
 ```
 

@@ -12,7 +12,7 @@ Two packages:
 - `src/mara_coach/` — the coach: Claude API agent, source registry, profile, channels, eval set.
   Calls into `mara_trainer` for every number.
 
-Claude Code is still the dev interface and Sydney's personal interface (skills + Strava MCP). The
+Claude Code is still the dev interface and Sydney's personal interface (skills + COROS MCP). The
 repo is also a public portfolio piece: original code only (no employer code, no AGPL/GPL code),
 no personal data, MIT licensed.
 
@@ -44,6 +44,8 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Commands
 - `uv sync` — install deps
+- `uv run pre-commit install` — once per clone: ruff + hygiene hooks run before each commit (CI runs
+  everything on every PR: `.github/workflows/ci.yml`). Don't bypass with `--no-verify`.
 - `uv run pytest` — tests (must pass before every commit)
 - `uv run ruff check . && uv run ruff format --check . && uv run mypy src/`
 - `uv run coach init-db [--timezone America/Los_Angeles]` — create/upgrade the DB
@@ -55,6 +57,10 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
+- `uv run coach coros week [--date YYYY-MM-DD] [--today YYYY-MM-DD]` — one plan week (default: the
+  week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
+  targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
+  with reasons; exit 1 if no race or the week isn't in the accepted plan
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
@@ -91,18 +97,27 @@ be summarized. If no approved source covers a question, the coach says so.
   Add a case whenever the coach gets something wrong.
 
 ## Data sources and rules (read before touching integrations)
-- **Strava — official MCP only, and never in `mara_coach`.** The coach agent and any public
-  feature must not receive Strava data; other runners bring FIT/GPX/Apple Health files. Since the Strava API Policy of 2026-06-01, Strava data must not be
-  fed into AI apps except through Strava's official MCP, must not be stored permanently (a transient
-  cache of at most 7 days is the ceiling), and third-party MCP servers may not expose it.
-  Use only `strava-mcp` (`https://mcp.strava.com/mcp`, registered in `.mcp.json`), which requires a
-  paid Strava subscription on a personal account (the Strava + Runna bundle qualifies).
-  - Use Strava MCP results **in-session only**, for Sydney's own analysis. Do NOT write them to
-    `coach.db`, `data/`, `plans/`, docs, commits, PRs, issues, or any file.
-  - Do NOT add stravalib, Strava OAuth, webhooks, or sync code. Do NOT install third-party Strava MCPs.
-  - The DB schema has no `strava` source on purpose. Don't add one.
-- **Runna has no public API.** Never scrape Runna or call private endpoints. Runna runs reach Strava
-  (see via Strava MCP) and the watch (import the FIT). Runna plans: Sydney enters them by hand.
+- **COROS — official MCP only.** Sydney's watch data comes through COROS's official MCP server
+  (`coros`, `https://mcpus.coros.com/mcp` (US region; `mcp.coros.com` fails OAuth because its
+  metadata names the regional host), registered in `.mcp.json`; the claude.ai COROS connector
+  is the same server). Authorize with `/mcp`. Do NOT use unofficial or reverse-engineered COROS
+  APIs or third-party COROS MCPs.
+  - Read tools: fine in-session for Sydney's own analysis. Runs reach `coach.db` only as FIT files
+    (`downloadActivityFitFiles` into `exports/`, then `coach import`, so dedup applies; source
+    stays `fit`). Don't write raw MCP results (sleep, HRV, stress, menstrual cycles) to `data/`,
+    `plans/`, docs, commits, PRs, issues or any file. Use cycle data only when she asks.
+  - Write tools (create/schedule/update workouts or training plans) change her COROS account:
+    only with her explicit OK each time, and only for sessions from a plan that passed `validate-plan`.
+  - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar
+    (Sunday, after the weekly check-in; the Slack check-in ends with a nudge). Workouts come only
+    from `coach coros week`, sent unchanged after one yes for the week. The MCP can't move or
+    delete scheduled workouts, so check `queryTrainingSchedule` first and never create twice.
+  - Not in `mara_coach` yet: wiring COROS into the coach agent is a separate, planned step.
+- **Strava — not used.** Strava's API Policy of 2026-06-01 bars storing Strava data or feeding it
+  to AI apps outside Strava's own MCP. Don't add Strava MCPs, stravalib, OAuth, webhooks or sync
+  code, and don't add a `strava` source to the DB (the schema leaves it out on purpose).
+- **Runna has no public API.** Never scrape Runna or call private endpoints. Runna runs reach the
+  COROS watch (see via the COROS MCP, or import the FIT). Runna plans: Sydney enters them by hand.
 - **Garmin:** FIT files exported from the watch / Garmin Connect are the default path.
   `garmin_mcp` / `python-garminconnect` use unofficial endpoints: optional, personal use only,
   OFF by default (`GARMIN_MCP_ENABLED=false`), not in `.mcp.json`. Never commit tokens.
@@ -156,7 +171,7 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Layout
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
-  `fueling.py` (fueling log), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  `fueling.py` (fueling log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
@@ -166,7 +181,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
-- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit}/SKILL.md` (`ask-coach` is
+- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit,coros-run-planner}/SKILL.md` (`ask-coach` is
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)

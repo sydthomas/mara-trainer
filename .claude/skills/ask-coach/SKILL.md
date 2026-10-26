@@ -31,8 +31,8 @@ Run `uv run coach tools call NAME --args '{json}'` (`uv run coach tools list` sh
 - `validate_plan` with `{"path": "plans/<file>.json"}` checks a draft. It never accepts; plan
   changes go through the plan-builder skill.
 
-Strava: you may use the Strava MCP in-session if she asks, but never write its data to any file,
-the DB or a tool argument, and label it "from Strava (not stored)".
+COROS: you may use the COROS MCP read tools if she asks (recent runs, sleep, HRV, recovery). Label
+anything not yet imported "from COROS (not imported)", and don't write it to any file.
 
 ## 3. Find sources
 - `read_knowledge` with `{"section": "<section>"}` first (no args lists sections). An

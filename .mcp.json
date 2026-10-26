@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "strava-mcp": {
+    "coros": {
       "type": "http",
-      "url": "https://mcp.strava.com/mcp"
+      "url": "https://mcpus.coros.com/mcp"
     }
   }
 }

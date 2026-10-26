@@ -50,5 +50,5 @@ log it anyway if she wants.
   approach (`search_sources` with topic fueling, women-tested first). If none covers it, say so.
 - End with one small thing to try next long run, or nothing if it went well.
 
-Strava: don't pull or store Strava data in this skill. If she wants it, the weekly-review skill
-covers that, in-session only.
+COROS: if the run isn't imported yet and the COROS MCP is connected, offer to import its FIT
+(import-workouts skill) so the entry can link to it with `--activity-id`.

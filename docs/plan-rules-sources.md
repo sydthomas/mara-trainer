@@ -28,6 +28,23 @@ Audited 2026-10-24 against `knowledge/training.md`, `race-week.md` and `strength
 | Plan length warning | note if under 12 weeks | chicago-marathon-training-plan | A note, not a block. |
 | Paces only from a recent race | no invented paces | chicago-marathon-training-plan, la-marathon-larr-training-plans | Enforced in `coach pace` and the coach prompt. |
 
+## Watch targets for COROS workouts
+
+`src/mara_trainer/coros_workouts.py` (`coach coros week`) turns a plan week into COROS workouts.
+Targets follow how the sources measure each run type. Added 2026-10-25.
+
+| Run type | On the watch | Sources (slug) | Notes |
+|---|---|---|---|
+| Easy, long, shakeout | distance only, no pace or heart-rate alert | la-marathon-larr-training-plans (easy about 6/10), chicago-marathon-training-plan (recovery 4-5/10), fitzgerald-80-20-running | The sources define easy by effort and conversation, not a number. |
+| Tempo / threshold | pace range: Riegel 10K pace to Riegel 5K pace + 35 s/mi | la-marathon-larr-training-plans (threshold between 5K and 10K pace), chicago-marathon-training-plan (tempo 30-35 s/mi slower than 5K pace), riegel-athletic-records-human-endurance-1981 | Spans both plans' definitions. Needs a recent race; otherwise effort only. Riegel predictions are rough, so the description says effort comes first. Riegel source approved by Sydney 2026-10-25. |
+| Marathon effort | goal marathon pace, else Riegel marathon pace | la-marathon-larr-training-plans, boston-marathon-baa-training-plans, chicago-marathon-training-plan (marathon-pace segments) | Goal pace is the runner's own number. Neither available: effort only. |
+| Hills, intervals, fartlek | distance only, effort in the description | chicago-marathon-training-plan (run hills by effort, not pace) | |
+| Strength, race day, rest | not sent | | The COROS MCP can't create strength workouts. |
+
+Unsourced defaults here: 1 mi warm-up and cool-down on tempo and marathon-effort workouts (the
+lower end of the plan's own "1-2 mi easy"), and workout types read from keywords in the plan's
+session text ("tempo", "threshold", "marathon", "goal-race").
+
 ## Structural rules (not coaching claims)
 
 - 7 sessions a week, each weekday once; runs only on the runner's chosen days; the long run on her
