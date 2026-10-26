@@ -21,7 +21,7 @@ from mara_trainer.plan_rules import RaceSetup, RecentRace
 # Synthetic athlete: 10K in 50:00, goal 4:30:00. Week 1 starts Monday 2026-11-02.
 SETUP = RaceSetup(
     race_name="Synthetic Marathon",
-    race_date="2027-03-07",
+    race_date="2027-04-25",
     goal="time",
     target_seconds=16200,
     training_days=(0, 2, 4, 6),

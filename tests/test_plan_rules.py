@@ -119,7 +119,7 @@ def test_brief_race_week_targets(brief) -> None:  # type: ignore[no-untyped-def]
 
 def test_brief_warns_on_short_plans(setup: RaceSetup) -> None:
     # Chicago advises against plans shorter than 12 weeks.
-    short = replace(setup, race_date="2027-03-07")
+    short = replace(setup, race_date="2027-03-14")
     notes = " ".join(build_schedule_brief(short, "2026-12-28").notes)
     assert "12 weeks" in notes
     assert "12 weeks" not in " ".join(build_schedule_brief(setup, TODAY).notes)
