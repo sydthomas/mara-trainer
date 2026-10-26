@@ -168,6 +168,10 @@ be summarized. If no approved source covers a question, the coach says so.
 - `yihong0618/running_page` (MIT) is fine as a reference; credit adapted code in `NOTICE.md`.
 - Ask before anything that needs network auth or real credentials. Don't `git commit` or `git push`
   unless Sydney asks; she commits under her own identity.
+- Process lives in `CONTRIBUTING.md`: branch names (`feature/ fix/ docs/ chore/`), the PR template,
+  and **who merges**. You may merge your own PR only if CI is green, no guarded path is touched, no
+  dependency is added, and Sydney asked for the work this session. Otherwise leave it for her
+  batch review.
 
 ## Layout
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
