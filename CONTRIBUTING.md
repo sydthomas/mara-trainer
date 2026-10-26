@@ -46,6 +46,18 @@ Gate on risk, not on who wrote it.
 | `CLAUDE.md` rules sections (data sources, privacy, domain conventions) | The rules agents follow |
 | `pyproject.toml` dependencies, `uv.lock` | License and supply-chain review |
 
+## Changelog and releases
+- Every PR that changes behavior adds a line under `## [Unreleased]` in `CHANGELOG.md` (Added /
+  Changed / Fixed / Removed), with the PR number.
+- Release when a set of changes is worth naming (for example, after a batch merge):
+  1. Pick the version (SemVer; before 1.0, minor = features, patch = fixes).
+  2. Move `Unreleased` items under `## [x.y.z] - YYYY-MM-DD`; bump `version` in `pyproject.toml`
+     (then `uv lock`); update the compare links at the bottom.
+  3. Merge that PR, then tag the merge commit and publish:
+     `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`
+     `gh release create vX.Y.Z --title vX.Y.Z --notes "<that version's section>"`
+- Tags are permanent: never move or delete a published tag; release a new patch instead.
+
 ## Review rhythm
 Batch: at the end of a work session, Sydney reviews and merges everything green in one pass,
 instead of one PR at a time.
