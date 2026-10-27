@@ -14,6 +14,12 @@
 - Weekly check-in: Sundays at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`), when
   the week ending or the next one is in the plan. The coach writes a recap of the week and a
   preview of the next one; her reply continues the conversation.
+- Asleep-proof: fixed-time messages are also queued on Slack's servers (`slack_schedule`), so
+  they arrive while the laptop sleeps; the live versions replace them when the bot is awake.
+  On start, after a sleep, and every `CATCH_UP_EVERY`, the bot answers DMs it missed (last
+  `CATCH_UP_WINDOW`) in one reply. A stored cursor of the newest handled message means Slack
+  retries and catch-up never answer the same message twice. Debrief context comes from the DB
+  (plan, ping record, fuel log), so it survives restarts.
 - Tokens come from the environment (`.env`); this module never reads, prints or logs them.
 - No Strava data: the coach's tools don't have any.
 """
@@ -33,8 +39,18 @@ from zoneinfo import ZoneInfo
 
 from mara_trainer import db, fueling, reports
 
-from . import tools
+from . import slack_schedule, tools
 from .agent import Coach, CoachError
+from .slack_schedule import (
+    DEBRIEF_KIND,
+    PING_HOUR,
+    RUN_KINDS,
+    SYNC_HOUR,
+    SYNC_KIND,
+    WEEKLY_HOUR,
+    WEEKLY_KIND,
+    ping_text,
+)
 
 log = logging.getLogger(__name__)
 
@@ -46,22 +62,21 @@ FAILED = "Sorry, I couldn't answer that just now. Try again in a minute."
 REQUIRED_ENV = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USER_ID", "ANTHROPIC_API_KEY")
 SETUP_ENV = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN")
 
-DEBRIEF_KIND = "long_run_debrief"
-PING_HOUR = 10  # athlete-local, Sydney's choice
 LAST_PING_HOUR = 20  # don't send a late check-in after this
 DEBRIEF_TTL = 36 * 60 * 60  # seconds a check-in stays open
 CHECK_EVERY = 60  # seconds between schedule checks
-WEEKLY_KIND = "weekly_checkin"
-WEEKLY_HOUR = 18  # Sunday, athlete-local, Sydney's choice
 WEEKLY_LAST_HOUR = 22
 WEEKLY_FAILED = (
     'I couldn\'t put together your weekly check-in just now. Message me "weekly check-in" '
     "anytime and I'll try again."
 )
 
-SYNC_KIND = "sync_nudge"
-SYNC_HOUR = 17  # Sunday, athlete-local: an hour before the weekly check-in
-RUN_KINDS = ("easy", "workout", "long")
+DEBRIEF_CLOSED = "long_run_debrief_closed"  # she said no to saving: don't reopen that day
+CURSOR_KEY = "last_handled_ts"  # newest DM handled, so retries and catch-up never answer twice
+CATCH_UP_WINDOW = 36 * 60 * 60  # seconds: older missed DMs are stale
+CATCH_UP_EVERY = 15 * 60  # seconds between routine catch-up checks
+WOKE_GAP = 3 * 60  # seconds: a loop gap this long means the laptop slept
+OFFLINE_NOTE = "(Sent while I was offline, oldest first:)"
 
 
 def sync_nudge_text(imported: int, planned: int) -> str:
@@ -102,14 +117,6 @@ SAVE_FOLLOW_UP = (
 )
 
 
-def ping_text(miles: float) -> str:
-    return (
-        f"Long run day: {miles:g} mi on the plan. How'd it go? When you have a minute, tell me "
-        "the distance and time, effort (1-10), what you ate before and how long before, what "
-        "you took during, and how your stomach and energy held up."
-    )
-
-
 def setup_reply(user: str) -> str:
     return (
         f"Setup mode. Your Slack member ID is `{user}`. Add `SLACK_ALLOWED_USER_ID={user}` to "
@@ -130,6 +137,9 @@ class SlackClient(Protocol):
     def chat_postMessage(self, **kwargs: Any) -> Any: ...  # noqa: N802 (Slack SDK name)
     def chat_update(self, **kwargs: Any) -> Any: ...
     def conversations_open(self, **kwargs: Any) -> Any: ...
+    def conversations_history(self, **kwargs: Any) -> Any: ...
+    def chat_scheduleMessage(self, **kwargs: Any) -> Any: ...  # noqa: N802
+    def chat_deleteScheduledMessage(self, **kwargs: Any) -> Any: ...  # noqa: N802
 
 
 class Asker(Protocol):
@@ -226,10 +236,16 @@ class SlackCoach:
             return
         convo = self._conversation(channel)
         with convo.lock:
+            if not self._claim(event.get("ts")):
+                return  # already handled (a Slack retry, or answered by catch-up)
+            if convo.debrief is None:
+                convo.debrief = self._open_debrief()
             if convo.pending is not None and YES.match(text):
                 self._save(channel, convo, client)
                 return
             if convo.pending is not None and NO.match(text):
+                if convo.debrief is not None:
+                    self._mark(DEBRIEF_CLOSED, convo.debrief.date)
                 convo.pending, convo.debrief = None, None
                 client.chat_postMessage(channel=channel, text=CANCELLED)
                 return
@@ -282,8 +298,8 @@ class SlackCoach:
             sent = conn.execute(
                 "SELECT 1 FROM notifications WHERE kind = ? AND date = ?", (DEBRIEF_KIND, day)
             ).fetchone()
-            if sent:
-                return False
+            if sent or slack_schedule.queued(conn, DEBRIEF_KIND, day):
+                return False  # already pinged live, or Slack has it queued
             miles = round(session["distance_meters"] / tools.MI_METERS, 1)
             channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
             convo = self._conversation(channel)
@@ -313,6 +329,8 @@ class SlackCoach:
                 1 for s in week["sessions"] if s["kind"] in RUN_KINDS and s["date"] <= sunday
             )
             imported = reports.summary(conn, week=sunday, now=now)["summary"]["run_count"]
+            if slack_schedule.queued(conn, SYNC_KIND, sunday):
+                return False  # the fallback couldn't be cancelled; Slack posts it
             if imported >= planned or not reports.mark_notified(conn, SYNC_KIND, sunday):
                 return False
         finally:
@@ -349,6 +367,122 @@ class SlackCoach:
             client.chat_postMessage(channel=channel, text=text)
         return True
 
+    def maybe_schedule(self, client: SlackClient) -> int:
+        """Keep Slack's queue of fallback messages in step with the plan; cancel the ones about
+        to be replaced by a live message. Slack calls happen only when something changed."""
+        conn = self.connect()
+        try:
+            now = self.now()
+            slack_schedule.cancel_for_live(conn, client, now)
+            channel = self._channel(conn, client)
+            return slack_schedule.reconcile(conn, client, channel, now)
+        finally:
+            conn.close()
+
+    def catch_up(self, client: SlackClient) -> int:
+        """Answer DMs that arrived while the bot was down (last CATCH_UP_WINDOW), in one reply.
+        The first run only records where history ends. Returns how many messages it answered."""
+        conn = self.connect()
+        try:
+            channel = self._channel(conn, client)
+            cursor = _state(conn, CURSOR_KEY)
+        finally:
+            conn.close()
+        oldest = self.now().timestamp() - CATCH_UP_WINDOW
+        if cursor is not None:
+            oldest = max(oldest, float(cursor))
+        history = client.conversations_history(channel=channel, oldest=f"{oldest:.6f}", limit=50)
+        mine = [
+            m
+            for m in history.get("messages", [])
+            if m.get("user") == self.allowed_user
+            and not m.get("subtype")
+            and not m.get("bot_id")
+            and (m.get("text") or "").strip()
+            and (cursor is None or float(m["ts"]) > float(cursor))
+        ]
+        mine.sort(key=lambda m: float(m["ts"]))
+        if cursor is None:  # first run: start from here, don't answer old history
+            latest = max([self.now().timestamp()] + [float(m["ts"]) for m in mine])
+            self._claim(f"{latest:.6f}")
+            return 0
+        if not mine:
+            return 0
+        text = mine[0]["text"].strip()
+        if len(mine) > 1:
+            text = OFFLINE_NOTE + "\n" + "\n".join("- " + m["text"].strip() for m in mine)
+        event = {
+            "channel_type": "im",
+            "channel": channel,
+            "user": self.allowed_user,
+            "text": text,
+            "ts": mine[-1]["ts"],
+        }
+        self.handle(event, client)
+        return len(mine)
+
+    def _channel(self, conn: sqlite3.Connection, client: SlackClient) -> str:
+        channel = _state(conn, "dm_channel")
+        if channel is None:
+            channel = str(client.conversations_open(users=self.allowed_user)["channel"]["id"])
+            _set_state(conn, "dm_channel", channel)
+        return channel
+
+    def _claim(self, ts: Any) -> bool:
+        """Record `ts` as handled; False if it (or something newer) already was."""
+        if not ts:
+            return True
+        conn = self.connect()
+        try:
+            cursor = _state(conn, CURSOR_KEY)
+            if cursor is not None and float(ts) <= float(cursor):
+                return False
+            _set_state(conn, CURSOR_KEY, str(ts))
+            return True
+        finally:
+            conn.close()
+
+    def _mark(self, kind: str, day: str) -> None:
+        conn = self.connect()
+        try:
+            reports.mark_notified(conn, kind, day)
+        finally:
+            conn.close()
+
+    def _open_debrief(self) -> Debrief | None:
+        """Today's or yesterday's long-run debrief, if its ping went out (live or by Slack), it's
+        within DEBRIEF_TTL, no fuel entry exists for that day, and she didn't decline saving."""
+        conn = self.connect()
+        try:
+            try:
+                tz = ZoneInfo(db.athlete_timezone(conn))
+            except LookupError:
+                return None  # no athlete set up yet: plain chat, no debrief context
+            now = self.now()
+            plan = db.load_accepted_plan(conn)
+            today = now.astimezone(tz).date()
+            for day in (today, today - timedelta(days=1)):
+                iso = day.isoformat()
+                session = reports.planned_session(plan, iso)
+                if not session or session["kind"] != "long":
+                    continue
+                pinged_at = datetime.combine(day, datetime.min.time().replace(hour=PING_HOUR), tz)
+                if not pinged_at <= now < pinged_at + timedelta(seconds=DEBRIEF_TTL):
+                    continue
+                sent = conn.execute(
+                    "SELECT 1 FROM notifications WHERE kind = ? AND date = ?", (DEBRIEF_KIND, iso)
+                ).fetchone() or slack_schedule.queued(conn, DEBRIEF_KIND, iso)
+                closed = conn.execute(
+                    "SELECT 1 FROM notifications WHERE kind = ? AND date = ?", (DEBRIEF_CLOSED, iso)
+                ).fetchone()
+                logged = conn.execute("SELECT 1 FROM fuel_log WHERE date = ?", (iso,)).fetchone()
+                if sent and not closed and not logged:
+                    miles = round(session["distance_meters"] / tools.MI_METERS, 1)
+                    return Debrief(iso, miles, self.clock() + DEBRIEF_TTL)
+            return None
+        finally:
+            conn.close()
+
     def _answer(self, text: str, convo: Conversation) -> str:
         conn = self.connect()
         history = list(convo.turns)
@@ -372,6 +506,20 @@ class SlackCoach:
         ]
         convo.turns = convo.turns[-2 * MAX_TURNS :]
         return answer
+
+
+def _state(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM slack_state WHERE key = ?", (key,)).fetchone()
+    return None if row is None else str(row[0])
+
+
+def _set_state(conn: sqlite3.Connection, key: str, value: str) -> None:
+    with conn:
+        conn.execute(
+            "INSERT INTO slack_state(key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
 
 
 def _connect() -> sqlite3.Connection:
@@ -408,11 +556,21 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
             bot.handle(event, client)
 
         def check_in_loop() -> None:
-            checks = (bot.maybe_ping, bot.maybe_sync_nudge, bot.maybe_weekly)
+            client = cast(SlackClient, app.client)
+            checks = (bot.maybe_schedule, bot.maybe_ping, bot.maybe_sync_nudge, bot.maybe_weekly)
+            last_tick, last_catch_up = 0.0, 0.0
             while True:
+                tick = time.time()  # wall clock: jumps forward when the laptop slept
+                if tick - last_tick > WOKE_GAP or tick - last_catch_up > CATCH_UP_EVERY:
+                    try:
+                        bot.catch_up(client)
+                    except Exception:
+                        log.exception("catch-up failed")
+                    last_catch_up = tick
+                last_tick = tick
                 for check in checks:
                     try:
-                        check(cast(SlackClient, app.client))
+                        check(client)
                     except Exception:
                         log.exception("scheduled check-in failed")
                 time.sleep(CHECK_EVERY)

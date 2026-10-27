@@ -49,6 +49,13 @@ Coach API cost is the same everywhere (see `docs/model-tiers.md`).
 - Limits: lid closed without an external display still sleeps; so does battery-only idle once
   the bot isn't running.
 
+## Asleep-proof Slack (2026-10-26)
+Scheduling moved to the platform that's always on. The bot queues fixed-time messages on Slack's
+servers (`chat.scheduleMessage`) a week ahead, so the 10am debrief ping, the 5pm sync reminder
+and a 6pm note with next week's runs arrive even when the laptop sleeps. When it's awake, live
+versions replace the 5pm and 6pm fallbacks (real counts, the coach's recap). DMs sent while it
+slept are answered when it wakes. Only answers and the recap still need the laptop awake.
+
 ## Recommendation
 1. **Now:** Option 0. Free, and it covers the scheduled windows this week.
 2. **On 2026-11-15:** if check-ins still get missed, or before any second user, move to **2a or
