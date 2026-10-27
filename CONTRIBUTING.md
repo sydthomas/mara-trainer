@@ -71,7 +71,9 @@ pytest on every PR; answers are checked by a live run, which costs money, so it 
 
 ## Review rhythm
 Batch: at the end of a work session, Sydney reviews and merges everything green in one pass,
-instead of one PR at a time.
+instead of one PR at a time. `gh pr list` shows the queue; `gh pr checks N` shows CI.
+Approvals (sources, knowledge sections) batch the same way: `coach knowledge list` shows drafts,
+`coach knowledge check` must pass, then one `coach knowledge approve A B C --by Sydney`.
 
 ## Done means
 Docs move with the code in the same PR: CLAUDE.md commands and layout, a roadmap entry in
