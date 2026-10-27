@@ -1,10 +1,10 @@
 ---
 section: hydration
 title: Hydration, sodium and heat
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: 5fbbe806cde344614d4b5b7523525cfe8c8c60be2fd7c4bf86a1432a22ade3a1
 ---
 # Hydration, sodium and heat
 

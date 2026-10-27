@@ -1,10 +1,10 @@
 ---
 section: fueling-after
 title: Fueling after runs
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: b3477f10942213b4a72950f494572820d42f1dfe1899292e6b0780444187dd4e
 ---
 # Fueling after runs
 

@@ -1,10 +1,10 @@
 ---
 section: daily-nutrition
 title: Daily nutrition for training
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: 7f77df81f38d1eea01c4839b5580e98c264b0985b52beaba1e5a68dcf865e3c5
 ---
 # Daily nutrition for training
 

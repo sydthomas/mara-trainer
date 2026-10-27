@@ -1,10 +1,10 @@
 ---
 section: recovery
 title: Recovery, sleep and rest
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: 0ef284cd8fec372b9fa5033ae369e8b79e9e11a508c788a1547a539e85551ff0
 ---
 # Recovery, sleep and rest
 

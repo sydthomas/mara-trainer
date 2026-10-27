@@ -1,10 +1,10 @@
 ---
 section: health-referrals
 title: Warning signs and referrals
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: ab4d016ef0ce31b9fdd93da80762108a0c63b665171f024b7d441da62c569ae3
 ---
 # Warning signs and referrals
 

@@ -1,10 +1,10 @@
 ---
 section: race-week
 title: Taper, race week and race day
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: aa4a9353762d2eff77e29951d9bda5490db9ea809f0aabffa7c7922013bac5cf
 ---
 # Taper, race week and race day
 

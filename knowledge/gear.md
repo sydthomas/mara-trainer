@@ -1,10 +1,10 @@
 ---
 section: gear
 title: Running shoes and gear
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: e956a31075d5acd53b42c67dc22f6d677864971c6fb2ff26dcd780e91078cae7
 ---
 # Running shoes and gear
 

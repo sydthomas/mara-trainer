@@ -1,10 +1,10 @@
 ---
 section: fueling-before
 title: Fueling before runs and the race
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: f92c14d311411fa4db6ab55a5121d158f10c0ab6eb7e3a63a69467dfb2cf063c
 ---
 # Fueling before runs and the race
 
