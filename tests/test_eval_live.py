@@ -128,7 +128,7 @@ def test_cli_eval_live_saves_and_compares(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(cli, "load_env", lambda: None)
     answers = {"a": "carb 30-60 g/h", "b": "carb too"}
-    monkeypatch.setattr(cli.agent, "Coach", lambda conn, effort: FakeCoach(answers))
+    monkeypatch.setattr(cli.agent, "Coach", lambda conn, **_: FakeCoach(answers))
     out = tmp_path / "runs"
     args = ["eval", "live", "--evals", str(evals_file), "--out", str(out)]
 

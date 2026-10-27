@@ -9,6 +9,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - `coach eval live`: run the eval set against the live coach, save the report to
   `data/eval-runs/`, and show regressions and fixes vs the previous run. Eval routine in
   CONTRIBUTING.md.
+- Usage and cost logging: one `api_usage` row per coach answer (channel, model, tokens, cost; no
+  text), `coach usage` report with a 30-day projection, `coach eval live --model` to test a
+  cheaper tier. Decision record in `docs/model-tiers.md`.
 
 ## [0.1.0] - 2026-10-26
 

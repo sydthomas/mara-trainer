@@ -91,10 +91,13 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
-- `uv run coach eval live [--only ID ...] [--category C] [--effort low|medium|high]` — ask the live
+- `uv run coach eval live [--only ID ...] [--category C] [--effort low|medium|high] [--model M]` — ask the live
   coach each case (**costs API money: ask Sydney first**), score with the same checks, save the full
   report to `data/eval-runs/` (gitignored; answers can hold her data) and print totals, failures,
   token usage and regressions/fixes vs the previous run; exit 3 if any failed
+- `uv run coach usage [--days 30]` — Claude API spend from the `api_usage` table (one row per coach
+  answer: channel, model, tokens, cost; never text): totals, by channel/model, per answer, 30-day
+  projection. Tier decisions and how to test a cheaper model: `docs/model-tiers.md`
 - Eval set: `evals/coach-questions.json`, loaded and checked by `mara_coach.evals` (tests enforce
   its shape), scored by `mara_coach.evals_runner`. Optional per-case `checks`: `require` (regex
   groups, one match each), `forbid`, `cite`; referral cases are always checked for a referral.
