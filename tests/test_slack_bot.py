@@ -12,7 +12,7 @@ from mara_coach import slack_bot
 from mara_coach.agent import CoachError, CoachReply
 from mara_coach.cli import app
 from mara_coach.slack_bot import SlackCoach, to_mrkdwn
-from mara_trainer import db, fueling
+from mara_trainer import db, fueling, imports
 
 SYDNEY = "U123"
 
@@ -173,7 +173,7 @@ def test_setup_mode_switch() -> None:
 
 # ------------------------------------------------------------------ long-run debrief
 
-from datetime import UTC, datetime  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
 from types import SimpleNamespace as NS  # noqa: E402
 
 from mara_coach import tools  # noqa: E402
@@ -424,3 +424,34 @@ def test_plan_week_tool(conn: sqlite3.Connection) -> None:
         "details": None,
     }
     assert tools.call_tool(conn, "plan_week", {"date": "2027-01-01"})["week"] is None
+
+
+# ------------------------------------------------------------------ Sunday 5pm sync nudge
+
+
+def _import_run(conn: sqlite3.Connection, start: datetime) -> None:
+    now = start + timedelta(hours=2)
+    draft = imports.make_draft("fit", start, 16093, 5400, now)
+    imports.commit(conn, imports.DecodedFile("fit", draft.fingerprint, [draft]), "x.fit")
+
+
+def test_sync_nudge_at_five_when_planned_runs_are_missing() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)  # week of 2026-11-02: one long run, Saturday 11-07
+    coach = FakeCoach([])
+    assert not _debrief_bot(coach, shared, _sun(0, 9)).maybe_sync_nudge(client)  # Sun 4pm LA
+    bot = _debrief_bot(coach, shared, _sun(1, 9))  # Sun 5pm LA
+    assert bot.maybe_sync_nudge(client)
+    assert client.posted[-1]["text"] == slack_bot.sync_nudge_text(0, 1)
+    assert "sync my runs" in client.posted[-1]["text"]
+    assert not bot.maybe_sync_nudge(client)  # once per Sunday
+    assert coach.calls == []  # plain text, no API call
+
+
+def test_no_sync_nudge_when_runs_are_in_or_no_plan_week() -> None:
+    shared, client = SharedDB(), SlackFake()
+    assert not _debrief_bot(FakeCoach([]), shared, _sun(1, 9)).maybe_sync_nudge(client)  # no plan
+    db.save_plan(shared.conn, PLAN)
+    _import_run(shared.conn, datetime(2026, 11, 7, 16, 0, tzinfo=UTC))  # Sat 8am LA
+    assert not _debrief_bot(FakeCoach([]), shared, _sun(1, 9)).maybe_sync_nudge(client)
+    assert client.posted == []

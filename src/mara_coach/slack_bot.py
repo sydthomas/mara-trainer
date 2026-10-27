@@ -59,6 +59,18 @@ WEEKLY_FAILED = (
     "anytime and I'll try again."
 )
 
+SYNC_KIND = "sync_nudge"
+SYNC_HOUR = 17  # Sunday, athlete-local: an hour before the weekly check-in
+RUN_KINDS = ("easy", "workout", "long")
+
+
+def sync_nudge_text(imported: int, planned: int) -> str:
+    return (
+        f"Your runs this week: {imported} of {planned} planned are imported. Before your 6pm "
+        'check-in, say "sync my runs" in Claude Code so the recap has your data.'
+    )
+
+
 COROS_NUDGE = '\n\n_Want this week on your watch? In Claude Code, say "push my week to COROS"._'
 
 
@@ -284,6 +296,31 @@ class SlackCoach:
         finally:
             conn.close()
 
+    def maybe_sync_nudge(self, client: SlackClient) -> bool:
+        """Sunday 5pm: if fewer runs are imported this week than the plan had so far, ask her to
+        sync before the check-in. Plain text, no API call. True if sent."""
+        conn = self.connect()
+        try:
+            now = self.now()
+            local = now.astimezone(ZoneInfo(db.athlete_timezone(conn)))
+            if local.weekday() != 6 or local.hour != SYNC_HOUR:
+                return False
+            sunday = local.date().isoformat()
+            week = reports.plan_week(db.load_accepted_plan(conn), sunday)
+            if week is None:
+                return False
+            planned = sum(
+                1 for s in week["sessions"] if s["kind"] in RUN_KINDS and s["date"] <= sunday
+            )
+            imported = reports.summary(conn, week=sunday, now=now)["summary"]["run_count"]
+            if imported >= planned or not reports.mark_notified(conn, SYNC_KIND, sunday):
+                return False
+        finally:
+            conn.close()
+        channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
+        client.chat_postMessage(channel=channel, text=sync_nudge_text(imported, planned))
+        return True
+
     def maybe_weekly(self, client: SlackClient) -> bool:
         """Send the Sunday check-in if it's due. True if one was sent (or a failure note)."""
         conn = self.connect()
@@ -371,7 +408,7 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
             bot.handle(event, client)
 
         def check_in_loop() -> None:
-            checks = (bot.maybe_ping, bot.maybe_weekly)  # long-run, then Sunday weekly
+            checks = (bot.maybe_ping, bot.maybe_sync_nudge, bot.maybe_weekly)
             while True:
                 for check in checks:
                     try:
