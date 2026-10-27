@@ -115,7 +115,8 @@ be summarized. If no approved source covers a question, the coach says so.
     `plans/`, docs, commits, PRs, issues or any file. Use cycle data only when she asks.
   - Write tools (create/schedule/update workouts or training plans) change her COROS account:
     only with her explicit OK each time, and only for sessions from a plan that passed `validate-plan`.
-  - Sync: the `coros-sync` skill pulls the last 8 days of runs (FIT URL per run into
+  - Sync: the `coros-sync` skill pulls the current training week's runs (Monday through today;
+    Monday-Sunday weeks, like the plan) (FIT URL per run into
     `exports/coros/<labelId>.fit`, skipped if present; then `coach import`, so re-running is safe).
     Sundays at 5pm local the Slack bot nudges her to sync if fewer runs are imported than planned.
   - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar

@@ -1,6 +1,6 @@
 ---
 name: coros-sync
-description: Pull Sydney's recent runs from COROS into the local database. Use when she says "sync my runs", "import from COROS", "get my runs in", before the Sunday check-in, or when a review or recap is missing runs. Finds the last 8 days of runs with the official COROS MCP, downloads each FIT once into exports/coros/, and imports them with the import-workouts flow (dedup and duplicate confirmation).
+description: Pull Sydney's recent runs from COROS into the local database. Use when she says "sync my runs", "import from COROS", "get my runs in", before the Sunday check-in, or when a review or recap is missing runs. Finds this training week's runs (Monday through today) with the official COROS MCP, downloads each FIT once into exports/coros/, and imports them with the import-workouts flow (dedup and duplicate confirmation).
 allowed-tools: Bash(uv run coach import *) Bash(uv run coach summary *) Bash(uv run coach summary) Bash(ls exports/coros*) Bash(mkdir -p exports/coros)
 ---
 
@@ -20,8 +20,10 @@ nothing twice.
 
 ## 1. Find runs
 `querySportRecords` with `sportTypeCodes: [100, 101, 102, 103]` (outdoor, indoor, trail, track),
-`startDate` = 8 days ago and `endDate` = today (yyyyMMdd, her timezone). A fixed window means no
-state to keep; dedup handles overlap with the last sync. Note each run's `labelId` and `sportType`.
+the current training week: `startDate` = this week's Monday, `endDate` = today (yyyyMMdd, her
+timezone). Training weeks run Monday to Sunday, the same weeks as the plan, so on Sunday this is
+the whole week. If she asks for last week (for example, syncing on a Monday), use last Monday
+through last Sunday instead. A fixed window means no state to keep; dedup handles any overlap. Note each run's `labelId` and `sportType`.
 
 ## 2. Download only what's new
 - `mkdir -p exports/coros` and `ls exports/coros/` once.
