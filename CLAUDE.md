@@ -86,8 +86,8 @@ be summarized. If no approved source covers a question, the coach says so.
   `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USER_ID` and `ANTHROPIC_API_KEY` in `.env`;
   answers only the allowed user. On plan long-run days it DMs a debrief check-in at 10am local
   (once a day); the coach proposes the entry with `propose_fuel_entry` (validates, never saves)
-  and the bot saves it in code only when she replies yes. Sundays at 6pm local it sends a weekly
-  check-in (last week recap + next week preview). Setup: `docs/slack-setup.md`
+  and the bot saves it in code only when she replies yes. Sundays at 5pm local it nudges her to sync runs if any planned
+  ones are missing, and at 6pm it sends a weekly check-in (last week recap + next week preview). Setup: `docs/slack-setup.md`
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
@@ -115,6 +115,9 @@ be summarized. If no approved source covers a question, the coach says so.
     `plans/`, docs, commits, PRs, issues or any file. Use cycle data only when she asks.
   - Write tools (create/schedule/update workouts or training plans) change her COROS account:
     only with her explicit OK each time, and only for sessions from a plan that passed `validate-plan`.
+  - Sync: the `coros-sync` skill pulls the last 8 days of runs (FIT URL per run into
+    `exports/coros/<labelId>.fit`, skipped if present; then `coach import`, so re-running is safe).
+    Sundays at 5pm local the Slack bot nudges her to sync if fewer runs are imported than planned.
   - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar
     (Sunday, after the weekly check-in; the Slack check-in ends with a nudge). Workouts come only
     from `coach coros week`, sent unchanged after one yes for the week. The MCP can't move or
@@ -192,7 +195,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
-- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit,coros-run-planner}/SKILL.md` (`ask-coach` is
+- `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit,coros-run-planner,coros-sync}/SKILL.md` (`ask-coach` is
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)

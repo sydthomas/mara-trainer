@@ -12,6 +12,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - Usage and cost logging: one `api_usage` row per coach answer (channel, model, tokens, cost; no
   text), `coach usage` report with a 30-day projection, `coach eval live --model` to test a
   cheaper tier. Decision record in `docs/model-tiers.md`.
+- `coros-sync` skill: pull the last 8 days of COROS runs as FIT files and import them (idempotent:
+  files kept per activity, fingerprint dedup). Slack nudges at 5pm Sunday when planned runs are
+  missing, so the 6pm check-in has data.
 
 ## [0.1.0] - 2026-10-26
 
