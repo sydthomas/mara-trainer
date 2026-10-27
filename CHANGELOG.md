@@ -15,6 +15,12 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - `coros-sync` skill: pull the current training week's (Monday-Sunday) COROS runs as FIT files and import them (idempotent:
   files kept per activity, fingerprint dedup). Slack nudges at 5pm Sunday when planned runs are
   missing, so the 6pm check-in has data.
+- `deploy/macos/install.sh`: run the Slack bot as a LaunchAgent with auto-restart and
+  keep-awake (hosting Option 0).
+
+### Fixed
+- `coros-sync` downloads through `downloadActivityFitFiles` (URL + curl is blocked by permission
+  settings; the date-range download errors on COROS's side). Found in the first live sync.
 
 ## [0.1.0] - 2026-10-26
 

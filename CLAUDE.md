@@ -82,6 +82,8 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
+- `deploy/macos/install.sh` / `uninstall.sh` — run the Slack bot as a LaunchAgent (hosting Option 0,
+  `docs/hosting.md`); the repo must stay outside `~/Desktop`/`~/Documents` (macOS privacy blocks it)
 - `uv run coach slack run` — the coach in Slack DMs (Socket Mode, `mara_coach/slack_bot.py`); needs
   `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USER_ID` and `ANTHROPIC_API_KEY` in `.env`;
   answers only the allowed user. On plan long-run days it DMs a debrief check-in at 10am local
@@ -116,7 +118,7 @@ be summarized. If no approved source covers a question, the coach says so.
   - Write tools (create/schedule/update workouts or training plans) change her COROS account:
     only with her explicit OK each time, and only for sessions from a plan that passed `validate-plan`.
   - Sync: the `coros-sync` skill pulls the current training week's runs (Monday through today;
-    Monday-Sunday weeks, like the plan) (FIT URL per run into
+    Monday-Sunday weeks, like the plan) (`downloadActivityFitFiles` per run, copied to
     `exports/coros/<labelId>.fit`, skipped if present; then `coach import`, so re-running is safe).
     Sundays at 5pm local the Slack bot nudges her to sync if fewer runs are imported than planned.
   - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar
