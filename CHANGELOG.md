@@ -18,6 +18,10 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - `deploy/macos/install.sh`: run the Slack bot as a LaunchAgent with auto-restart and
   keep-awake (hosting Option 0).
 
+- Slack works while the laptop sleeps: fixed-time messages are queued on Slack's servers a week
+  ahead (live versions replace them when awake), missed DMs are answered on wake, never twice.
+  Debrief context comes from the database, so it survives restarts.
+
 ### Fixed
 - `coros-sync` downloads through `downloadActivityFitFiles` (URL + curl is blocked by permission
   settings; the date-range download errors on COROS's side). Found in the first live sync.

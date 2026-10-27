@@ -82,6 +82,10 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
+- Slack while the laptop sleeps: the bot queues the next 7 days of fixed-time messages on Slack
+  (`slack_schedule.py`, table `scheduled_messages`: debrief pings, a sync reminder, a 6pm note with
+  next week's runs); awake, it cancels the sync/6pm fallbacks 5 min early and sends the live ones.
+  Missed DMs are answered on wake (cursor in `slack_state`), never twice.
 - `deploy/macos/install.sh` / `uninstall.sh` — run the Slack bot as a LaunchAgent (hosting Option 0,
   `docs/hosting.md`); the repo must stay outside `~/Desktop`/`~/Documents` (macOS privacy blocks it)
 - `uv run coach slack run` — the coach in Slack DMs (Socket Mode, `mara_coach/slack_bot.py`); needs
