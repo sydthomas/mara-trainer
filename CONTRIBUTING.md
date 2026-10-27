@@ -75,5 +75,5 @@ instead of one PR at a time.
 
 ## Done means
 Docs move with the code in the same PR: CLAUDE.md commands and layout, a roadmap entry in
-`docs/public-mvp-goal.md` for milestones, and a new eval case whenever the coach got something
-wrong.
+`docs/public-mvp-goal.md` for milestones, a new eval case whenever the coach got something
+wrong, and a row in `docs/multi-user.md` if the change assumes a single user.

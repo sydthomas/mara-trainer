@@ -198,6 +198,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
 - `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit,coros-run-planner,coros-sync}/SKILL.md` (`ask-coach` is
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
-- `docs/public-mvp-goal.md` (goal + roadmap), `docs/strava-requirements.md`,
+- `docs/public-mvp-goal.md` (goal + roadmap), `docs/multi-user.md` (single-user assumptions; add a row
+  when new code adds one), `docs/model-tiers.md` (model and cost decisions), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)
 - `plans/` — Sydney's personal plan JSON (gitignored)
