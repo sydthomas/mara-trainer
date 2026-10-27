@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -285,6 +286,63 @@ def eval_run(
         _fail("invalid eval input", problems=exc.problems)
     report = evals_runner.run_eval(cases, answerer)
     _out(report)
+    if not report["ok"]:
+        raise typer.Exit(3)
+
+
+EVAL_RUNS_DIR = Path("data/eval-runs")  # gitignored: answers can include the runner's own data
+
+
+@eval_app.command("live")
+def eval_live(
+    only: Annotated[list[str] | None, typer.Option(help="Case id (repeatable)")] = None,
+    category: Annotated[str | None, typer.Option(help="Only this category")] = None,
+    effort: Annotated[str, typer.Option(help="low, medium or high")] = agent.EFFORT,
+    evals_file: Annotated[
+        Path, typer.Option("--evals", exists=True, dir_okay=False, help="Eval set JSON")
+    ] = evals.DEFAULT_PATH,
+    out: Annotated[Path, typer.Option(help="Where run reports are saved")] = EVAL_RUNS_DIR,
+) -> None:
+    """Ask the live coach every selected case (costs API money), score, save the full report and
+    compare with the previous run. Prints a summary without answers. Exit 3 if any case failed."""
+    if effort not in ("low", "medium", "high"):
+        _fail("--effort must be low, medium or high")
+    try:
+        cases = evals_runner.select_cases(evals.load_eval_set(evals_file), only, category)
+    except evals.EvalSetError as exc:
+        _fail("invalid eval input", problems=exc.problems)
+    if not cases:
+        _fail("no cases match --only/--category")
+    load_env()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        _fail("ANTHROPIC_API_KEY is not set; add it to .env (see .env.example)")
+    answerer = evals_runner.CoachAnswerer(agent.Coach(_conn(), effort=effort))
+    report = evals_runner.live_report(evals_runner.run_eval(cases, answerer), answerer)
+    report["run"] = {"effort": effort, "model": agent.MODEL, "cases": [c.id for c in cases]}
+    path = evals_runner.save_run(report, out, datetime.now().strftime("%Y%m%d-%H%M%S"))
+    previous = evals_runner.latest_run(out, before=path)
+    changes = (
+        evals_runner.compare_runs(json.loads(previous.read_text(encoding="utf-8")), report)
+        if previous
+        else None
+    )
+    _out(
+        {
+            "ok": report["ok"],
+            "totals": report["totals"],
+            "by_category": report["by_category"],
+            "failed": [
+                {"id": r["id"], "reasons": r["reasons"]}
+                for r in report["results"]
+                if r["status"] in ("fail", "missing")
+            ],
+            "usage": report["usage"],
+            "errors": report["errors"],
+            "saved": str(path),
+            "compared_with": str(previous) if previous else None,
+            "changes": changes,
+        }
+    )
     if not report["ok"]:
         raise typer.Exit(3)
 

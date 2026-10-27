@@ -16,7 +16,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from .evals import CATEGORIES, EvalCase, EvalSetError
 
@@ -158,3 +158,95 @@ def _tally(results: list[CaseResult]) -> dict[str, int]:
     for r in results:
         counts[r.status] += 1
     return counts
+
+
+# --- live runs ------------------------------------------------------------------------------
+# `coach eval live` asks the real coach every selected case, scores the answers with the same
+# checks, saves the full report under data/eval-runs/ (gitignored: answers can contain the
+# runner's own data) and compares it with the previous run.
+
+
+class _Reply(Protocol):
+    text: str
+    usage: dict[str, int]
+    tools_used: list[str]
+
+
+class _Asker(Protocol):
+    def ask(self, question: str) -> Any: ...
+
+
+class CoachAnswerer:
+    """Answers each case with a live coach and keeps what came back per case id."""
+
+    def __init__(self, coach: _Asker) -> None:
+        self.coach = coach
+        self.records: dict[str, dict[str, Any]] = {}
+
+    def __call__(self, case: EvalCase) -> str | None:
+        question = case.question
+        if case.context.strip():
+            question += f"\n\n(Context for this question: {case.context.strip()})"
+        try:
+            reply: _Reply = self.coach.ask(question)
+        except Exception as exc:  # one failed case must not stop the run
+            self.records[case.id] = {"error": f"{type(exc).__name__}: {exc}"}
+            return None
+        self.records[case.id] = {
+            "answer": reply.text,
+            "tools_used": list(reply.tools_used),
+            "usage": dict(reply.usage),
+        }
+        return reply.text
+
+
+def select_cases(
+    cases: list[EvalCase], only: list[str] | None = None, category: str | None = None
+) -> list[EvalCase]:
+    return [
+        c
+        for c in cases
+        if (not only or c.id in only) and (category is None or c.category == category)
+    ]
+
+
+def live_report(report: dict[str, Any], answerer: CoachAnswerer) -> dict[str, Any]:
+    """Add each case's answer, tools, usage or error to a `run_eval` report, plus total usage."""
+    usage: dict[str, int] = {}
+    for result in report["results"]:
+        record = answerer.records.get(result["id"], {})
+        result.update(record)
+        for key, value in record.get("usage", {}).items():
+            usage[key] = usage.get(key, 0) + value
+    errors = sum(1 for r in answerer.records.values() if "error" in r)
+    return report | {"usage": usage, "errors": errors}
+
+
+def compare_runs(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    """Status changes per case between two reports: regressions (was pass), fixes (now pass)."""
+    old = {r["id"]: r["status"] for r in before.get("results", [])}
+    regressions, fixes, new = [], [], []
+    for r in after.get("results", []):
+        was, now = old.get(r["id"]), r["status"]
+        if was is None:
+            new.append(r["id"])
+        elif was == "pass" and now != "pass":
+            regressions.append({"id": r["id"], "before": was, "after": now})
+        elif was != "pass" and now == "pass":
+            fixes.append({"id": r["id"], "before": was, "after": now})
+    return {"regressions": regressions, "fixes": fixes, "new": new}
+
+
+def save_run(report: dict[str, Any], directory: Path, stamp: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{stamp}.json"
+    path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+    return path
+
+
+def latest_run(directory: Path, before: Path | None = None) -> Path | None:
+    """Most recent saved run (names sort by time), optionally the one before `before`."""
+    runs = sorted(directory.glob("*.json")) if directory.is_dir() else []
+    if before is not None:
+        runs = [r for r in runs if r.name < before.name]
+    return runs[-1] if runs else None

@@ -46,6 +46,17 @@ Gate on risk, not on who wrote it.
 | `CLAUDE.md` rules sections (data sources, privacy, domain conventions) | The rules agents follow |
 | `pyproject.toml` dependencies, `uv.lock` | License and supply-chain review |
 
+## Evals
+The eval set (`evals/coach-questions.json`) is the coach's test suite. Its shape is checked by
+pytest on every PR; answers are checked by a live run, which costs money, so it stays out of CI.
+- **When:** after any change to the system prompt, tools, knowledge sections or sources, and
+  before a release. Ask Sydney before a full run; `--only`/`--category` keep it cheap.
+- **Run:** `uv run coach eval live`. Read `changes.regressions` first: a case that passed before
+  and fails now is the signal. Paste the summary (totals, regressions, usage) into the PR, never
+  the answers.
+- **Grow it:** every wrong or unsafe answer the coach gives (in Slack, `coach ask`, an eval) becomes
+  a new case with `checks`, in the PR that fixes it. Re-run to show it passing.
+
 ## Changelog and releases
 - Every PR that changes behavior adds a line under `## [Unreleased]` in `CHANGELOG.md` (Added /
   Changed / Fixed / Removed), with the PR number.
