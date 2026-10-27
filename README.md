@@ -16,7 +16,7 @@ accepted, and advice is grounded in a vetted, cited source list rather than scra
 
 ```bash
 brew install uv              # Python toolchain manager (fetches Python 3.12 automatically)
-cd ~/Desktop/mara-trainer
+cd ~/code/mara-trainer        # not ~/Desktop or ~/Documents: macOS blocks background jobs there
 uv sync                      # create .venv and install dependencies
 uv run pre-commit install    # lint/format hooks before each commit
 uv run pytest                # all tests should pass
@@ -42,7 +42,7 @@ its data or feeding it to AI apps. Runna has no public API; Runna runs reach you
 1. "Set up my goal race: <race name> on <date>. I can run Sun, Tue, Thu and Sat, long runs on Sunday,
    I've been doing 25-30 miles a week, longest run 10 miles, goal time 3:59."
 2. "Build me a training plan for my spring marathon." (uses the **plan-builder** skill)
-3. "Import the FIT files in ~/Desktop/mara-trainer/exports/ and flag anything that looks like a duplicate."
+3. "Import the FIT files in ~/code/mara-trainer/exports/ and flag anything that looks like a duplicate."
 4. "Import my Apple Health export at exports/export.zip."
 5. "Do my weekly review: how did this week go against the plan? Check COROS for anything I didn't import."
 6. "I'm traveling next Thursday through Sunday. Rework next week so it still passes validation."
