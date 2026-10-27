@@ -184,7 +184,7 @@ class SlackCoach:
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.allowed_user = allowed_user
-        self.coach_factory = coach_factory or (lambda conn: Coach(conn))
+        self.coach_factory = coach_factory or (lambda conn: Coach(conn, channel="slack"))
         self.connect = connect or _connect
         self.clock = clock
         self.now = now

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -12,7 +12,7 @@ import typer
 
 from mara_trainer.cli import _conn, _fail, _out, app
 
-from . import agent, evals, evals_runner, knowledge, profile, slack_bot, sources, tools
+from . import agent, evals, evals_runner, knowledge, profile, slack_bot, sources, tools, usage
 from .env import load_env
 
 source_app = typer.Typer(help="Source registry: vetted references the coach may cite.")
@@ -302,6 +302,9 @@ def eval_live(
         Path, typer.Option("--evals", exists=True, dir_okay=False, help="Eval set JSON")
     ] = evals.DEFAULT_PATH,
     out: Annotated[Path, typer.Option(help="Where run reports are saved")] = EVAL_RUNS_DIR,
+    model: Annotated[
+        str, typer.Option(help="Model to evaluate (compare tiers before switching)")
+    ] = agent.MODEL,
 ) -> None:
     """Ask the live coach every selected case (costs API money), score, save the full report and
     compare with the previous run. Prints a summary without answers. Exit 3 if any case failed."""
@@ -316,9 +319,11 @@ def eval_live(
     load_env()
     if not os.environ.get("ANTHROPIC_API_KEY"):
         _fail("ANTHROPIC_API_KEY is not set; add it to .env (see .env.example)")
-    answerer = evals_runner.CoachAnswerer(agent.Coach(_conn(), effort=effort))
+    answerer = evals_runner.CoachAnswerer(
+        agent.Coach(_conn(), model=model, effort=effort, channel="eval")
+    )
     report = evals_runner.live_report(evals_runner.run_eval(cases, answerer), answerer)
-    report["run"] = {"effort": effort, "model": agent.MODEL, "cases": [c.id for c in cases]}
+    report["run"] = {"effort": effort, "model": model, "cases": [c.id for c in cases]}
     path = evals_runner.save_run(report, out, datetime.now().strftime("%Y%m%d-%H%M%S"))
     previous = evals_runner.latest_run(out, before=path)
     changes = (
@@ -345,6 +350,15 @@ def eval_live(
     )
     if not report["ok"]:
         raise typer.Exit(3)
+
+
+@app.command("usage")
+def usage_cmd(
+    days: Annotated[int, typer.Option(min=1, help="Look back this many days (UTC)")] = 30,
+) -> None:
+    """Claude API spend: answers, cost by channel and model, cost per answer, 30-day projection."""
+    today = datetime.now(UTC).date().isoformat()
+    _out(usage.report(_conn(), since=usage.since_days(today, days), today=today))
 
 
 slack_app = typer.Typer(help="Slack: chat with the coach by DM (Socket Mode).")

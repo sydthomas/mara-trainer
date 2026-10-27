@@ -20,6 +20,7 @@ from datetime import date
 from typing import Any, Protocol, cast
 
 from . import tools
+from . import usage as usage_log
 
 MODEL = "claude-opus-5-5"
 EFFORT = "medium"
@@ -143,8 +144,10 @@ class Coach:
         model: str = MODEL,
         effort: str = EFFORT,
         today: str | None = None,
+        channel: str = "cli",
     ) -> None:
         self.conn = conn
+        self.channel = channel
         self.api = messages_api or _default_messages_api()
         self.model = model
         self.effort = effort
@@ -183,7 +186,8 @@ class Coach:
         tool_defs = self.tool_definitions()
         used: list[str] = []
         usage: dict[str, int] = {}
-        for _ in range(MAX_STEPS):
+        served = self.model
+        for step in range(1, MAX_STEPS + 1):
             response = self.api.create(
                 model=self.model,
                 max_tokens=MAX_TOKENS,
@@ -196,6 +200,7 @@ class Coach:
                 fallbacks="default",
             )
             _add_usage(usage, getattr(response, "usage", None))
+            served = getattr(response, "model", None) or served
             content = list(response.content)
             messages.append({"role": "assistant", "content": content})
             for block in content:
@@ -203,6 +208,7 @@ class Coach:
                     used.append(block.name)
             stop = response.stop_reason
             if stop == "refusal":
+                self._log(served, usage, step)
                 return CoachReply(
                     "Sorry, I can't help with that one. Try asking it a different way.",
                     stop,
@@ -230,5 +236,13 @@ class Coach:
                 messages.append({"role": "user", "content": results})
                 continue
             # end_turn, max_tokens, stop_sequence: return what we have
+            self._log(served, usage, step)
             return CoachReply(_text(content), stop, used, messages, usage)
+        self._log(served, usage, MAX_STEPS)
         raise CoachError(f"no answer after {MAX_STEPS} steps")
+
+    def _log(self, model: str, tokens: dict[str, int], steps: int) -> None:
+        """Record this answer's token counts and cost (never its text)."""
+        usage_log.record(
+            self.conn, self.channel, model if isinstance(model, str) else self.model, tokens, steps
+        )
