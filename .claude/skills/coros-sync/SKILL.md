@@ -1,7 +1,7 @@
 ---
 name: coros-sync
 description: Pull Sydney's recent runs from COROS into the local database. Use when she says "sync my runs", "import from COROS", "get my runs in", before the Sunday check-in, or when a review or recap is missing runs. Finds this training week's runs (Monday through today) with the official COROS MCP, downloads each FIT once into exports/coros/, and imports them with the import-workouts flow (dedup and duplicate confirmation).
-allowed-tools: Bash(uv run coach import *) Bash(uv run coach summary *) Bash(uv run coach summary) Bash(ls exports/coros*) Bash(mkdir -p exports/coros)
+allowed-tools: Bash(uv run coach import *) Bash(uv run coach summary *) Bash(uv run coach summary) Bash(ls exports/coros*) Bash(mkdir -p exports/coros) Bash(cp * exports/coros/*)
 ---
 
 # COROS sync
@@ -27,10 +27,11 @@ through last Sunday instead. A fixed window means no state to keep; dedup handle
 
 ## 2. Download only what's new
 - `mkdir -p exports/coros` and `ls exports/coros/` once.
-- For each run without `exports/coros/<labelId>.fit`: `queryActivityFitFileDownloadUrls` with its
-  `labelId` and `sportType`, then download that URL to `exports/coros/<labelId>.fit` with curl
-  (`curl -sSfL -o exports/coros/<labelId>.fit "<url>"`). The URL is short-lived and signed: don't
-  print or save it anywhere else.
+- For each run without `exports/coros/<labelId>.fit`: `downloadActivityFitFiles` with its
+  `labelId` and `sportType` (one run per call; the date-range form errors). Claude Code saves the
+  file and prints its path ("Binary content ... saved to <path>"); copy that file to
+  `exports/coros/<labelId>.fit`. Don't use `queryActivityFitFileDownloadUrls` + curl: downloads
+  from URLs are blocked by the permission settings, by design.
 - If the daily limit is hit, import what you have and say how many runs are left for tomorrow.
 
 ## 3. Import

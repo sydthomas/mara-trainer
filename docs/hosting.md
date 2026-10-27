@@ -39,6 +39,16 @@ Coach API cost is the same everywhere (see `docs/model-tiers.md`).
 - **Deploys:** CI already gates `main`; deploy only tagged releases.
 - **Monitoring:** a heartbeat (the bot DMs nothing for 24 h around a check-in → alert).
 
+## Option 0 setup (installed 2026-10-26)
+- `deploy/macos/install.sh` writes a LaunchAgent (`com.maratrainer.slack`): starts at login,
+  restarts within 30 s if the bot exits, runs it under `caffeinate -is` so the Mac stays awake on
+  power. `deploy/macos/uninstall.sh` removes it. Logs: `~/Library/Logs/mara-trainer/slack.log`.
+- **The repo must not live in `~/Desktop`, `~/Documents` or `~/Downloads`.** macOS privacy
+  protection (TCC) blocks background jobs from reading those folders; the bot hangs with
+  "Operation not permitted". The repo lives in `~/code/mara-trainer`.
+- Limits: lid closed without an external display still sleeps; so does battery-only idle once
+  the bot isn't running.
+
 ## Recommendation
 1. **Now:** Option 0. Free, and it covers the scheduled windows this week.
 2. **On 2026-11-15:** if check-ins still get missed, or before any second user, move to **2a or
