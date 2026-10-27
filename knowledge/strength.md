@@ -1,10 +1,10 @@
 ---
 section: strength
 title: Strength training for runners
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: 8867ac6adb8093b4e016d3150c9ebfcada8428d09d25c6ecb3c72358cfb21083
 ---
 # Strength training for runners
 

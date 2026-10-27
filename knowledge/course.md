@@ -1,10 +1,10 @@
 ---
 section: course
 title: Course-specific preparation
-status: draft
-approved_by:
-approved_on:
-content_sha256:
+status: approved
+approved_by: Sydney
+approved_on: 2026-10-26
+content_sha256: e794894b6e6321d0b8c9f882013778cf5df859aba2aa8cfddb382a067131e4bc
 ---
 # Course-specific preparation
 
