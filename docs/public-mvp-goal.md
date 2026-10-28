@@ -72,9 +72,10 @@ coach ask (CLI)      ─┼─> agent (Claude API, tool runner)
 - New tables (forward-only migrations): `athlete_profile` (diet, allergies, shoe likes/dislikes,
   injuries history as free text the runner writes), `sources` (registry), `conversations`
   (Sydney's own chat history; no Strava content).
-- Channels: Slack first (Bolt for Python, Socket Mode, so no public server needed). SMS later
-  via Twilio; US carriers require A2P 10DLC registration, which can take a couple of weeks, so
-  start it early if SMS matters.
+- Channels: Slack first (Bolt for Python, Socket Mode, so no public server needed). Phone-call
+  debriefs next via Twilio (approved 2026-10-24); Twilio needs a public webhook, so a free tunnel
+  first and hosting later. SMS stays a pre-launch item: US carriers require A2P 10DLC
+  registration, which can take a couple of weeks, so start it early if SMS matters.
 
 New dependencies to vet: `anthropic` (MIT), `slack-bolt` (MIT). Both fine under the license rule.
 
