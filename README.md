@@ -1,16 +1,28 @@
 # mara-trainer
 
-An AI marathon coach: training plans fitted to the runner, gear suggestions, fueling and race-week
-food, recovery and cross-training, and a coach you can chat with. Built first for one runner and
-designed to open up later (roadmap: `docs/public-mvp-goal.md`).
+An AI marathon coach that builds a training plan around your race, schedule and current mileage.
+Claude drafts the plan and answers questions; a small Python core sets each week's mileage and
+long-run limits, and **no plan is accepted until it passes those checks**. Built first for one
+runner and designed to open up later (roadmap: `docs/public-mvp-goal.md`).
 
-A small local Python core stores workouts in SQLite, computes timezone-aware summaries, and enforces
-training-plan guardrails. Claude drafts plans and answers; **code validates every plan** before it's
-accepted, and advice is grounded in a vetted, cited source list rather than scraped content.
+## What it does
 
-- Data in: watch **FIT** files (default), GPX, Apple Health export, and the **official COROS MCP**
-  in Claude Code (runs are imported as FIT files).
-- Data stays local in `data/coach.db` (gitignored). API keys live only in `.env`.
+- Builds and reworks plans for a goal race, for example when you travel or miss a week.
+- Imports runs from watch **FIT** files (default), GPX, Apple Health and the **official COROS MCP**
+  in Claude Code (runs are imported as FIT files), and pushes each week's runs to your COROS watch.
+- Weekly review of how training went against the plan.
+- Answers questions on plans, fueling, gear and recovery from a vetted, cited source list rather
+  than scraped content; an eval set of test questions checks the answers after each change.
+- Slack check-ins: a debrief after long runs (saved to a fueling log) and a Sunday recap with next
+  week's runs. Missed messages are answered when the laptop wakes.
+- Workouts are stored locally in SQLite (`data/coach.db`, gitignored). Questions to the coach send
+  the context it needs to the Claude API. API keys live only in `.env`.
+
+## Planned
+
+- Phone-call debriefs after long runs (Twilio)
+- Coach access to COROS data directly, not only through imported runs
+- Accounts for other runners
 
 ## Quick start (macOS)
 
