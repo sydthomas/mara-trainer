@@ -171,6 +171,34 @@ def test_setup_mode_switch() -> None:
     assert not slack_bot.setup_mode({"SLACK_ALLOWED_USER_ID": SYDNEY})
 
 
+# ------------------------------------------------------------------ socket watchdog
+
+
+def test_socket_watch_trips_only_after_errors_keep_coming() -> None:
+    watch = slack_bot.SocketWatch()
+    assert not watch.stuck(1000.0)
+    assert not watch.stuck(1000.0 + slack_bot.STUCK_AFTER - 1)
+    assert watch.stuck(1000.0 + slack_bot.STUCK_AFTER)
+
+
+def test_socket_watch_quiet_gap_starts_over() -> None:
+    watch = slack_bot.SocketWatch()
+    assert not watch.stuck(1000.0)
+    later = 1000.0 + slack_bot.STUCK_AFTER + slack_bot.QUIET_RESET + 1  # e.g. the laptop slept
+    assert not watch.stuck(later)
+    assert not watch.stuck(later + 1)
+
+
+def test_exit_when_stuck_exits_so_launchd_restarts() -> None:
+    clock = iter([1000.0, 1000.0 + slack_bot.STUCK_AFTER])
+    exits: list[int] = []
+    on_error = slack_bot.exit_when_stuck(slack_bot.SocketWatch(), lambda: next(clock), exits.append)
+    on_error(BrokenPipeError())
+    assert exits == []
+    on_error(BrokenPipeError())
+    assert exits == [1]
+
+
 # ------------------------------------------------------------------ long-run debrief
 
 from datetime import UTC, datetime, timedelta  # noqa: E402
