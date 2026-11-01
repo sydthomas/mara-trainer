@@ -29,8 +29,9 @@ MAX_STEPS = 12
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 WEB_FETCH_MAX_USES = 5
 
-SYSTEM_PROMPT = """\
-You are Sydney's marathon coach. She is training for her first marathon. You answer questions
+RUNNER_NAME = "Sydney"
+PROMPT_TEMPLATE = """\
+You are {runner}'s marathon coach. She is training for her first marathon. You answer questions
 about her plan, fueling (runs, daily eating, race week), gear, recovery and cross-training, and
 you debrief her runs. Be warm, direct and brief, like a good coach texting back. Use miles.
 
@@ -43,7 +44,9 @@ Data and numbers:
   Take session dates and weekdays from plan_week or show_plan, never work them out yourself.
   No paces without a recent race result.
 - You can't change her plan or data. Plan changes go through plan rebuilding with her approval;
-  validate_plan checks a draft but never accepts it.
+  validate_plan checks a draft but never accepts it. If she asks to rework a week, offer ideas,
+  say plainly that they haven't passed validation, and that nothing changes until a rebuilt plan
+  passes and she approves it.
 
 Sources:
 - Start with read_knowledge for the relevant section: it is the approved, cited summary of
@@ -79,13 +82,22 @@ Long-run debriefs (a message starting "(Long-run debrief"):
 Safety (always wins):
 - Pain, injury, illness, dizziness, chest symptoms or any health concern: no diagnosis. Tell her
   to see a qualified professional (doctor, physio). General load advice (rest, easy running) is
-  fine; no rehab plans.
+  fine; no rehab plans. For bone stress injuries, low bone density or missed periods, name low
+  energy availability (RED-S) as something to raise with that professional.
 - Medical diets, pregnancy, or any sign of disordered eating (restriction, weight-loss pressure,
   guilt around food): be supportive, give no numbers, and refer her to a doctor or registered
   dietitian. Never discuss calories or body weight targets.
 - Gear: from her stated likes and dislikes plus cited reviews. Never invent a review.
-- Strava data is never available to you. If she asks, say it stays in her Claude Code sessions.
+- The app doesn't use Strava, and you can't get or save Strava data. If she asks, say so and
+  offer her COROS sync or importing FIT, GPX or Apple Health files instead.
 """
+
+
+def system_prompt(runner: str = RUNNER_NAME) -> str:
+    return PROMPT_TEMPLATE.replace("{runner}", runner)
+
+
+SYSTEM_PROMPT = system_prompt()
 
 
 class MessagesAPI(Protocol):
@@ -146,9 +158,11 @@ class Coach:
         effort: str = EFFORT,
         today: str | None = None,
         channel: str = "cli",
+        runner: str = RUNNER_NAME,
     ) -> None:
         self.conn = conn
         self.channel = channel
+        self.system = system_prompt(runner)
         self.api = messages_api or _default_messages_api()
         self.model = model
         self.effort = effort
@@ -192,7 +206,7 @@ class Coach:
             response = self.api.create(
                 model=self.model,
                 max_tokens=MAX_TOKENS,
-                system=SYSTEM_PROMPT,
+                system=self.system,
                 tools=tool_defs,
                 messages=messages,
                 output_config={"effort": self.effort},

@@ -13,10 +13,15 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Protocol
+
+from mara_trainer import db
+from mara_trainer.plan_rules import RaceSetup
 
 from .evals import CATEGORIES, EvalCase, EvalSetError
 
@@ -174,6 +179,30 @@ class _Reply(Protocol):
 
 class _Asker(Protocol):
     def ask(self, question: str) -> Any: ...
+
+
+EVAL_RUNNER = "Alex"  # fictional runner for live evals
+EVAL_TODAY = "2027-01-13"  # inside the sample plan, so "this week" means the same every run
+SAMPLE_PLAN = Path("examples/sample-plan.json")
+
+
+def synthetic_db(path: Path, shared: Path) -> sqlite3.Connection:
+    """A throwaway DB holding the fictional runner and sample plan. Only `sources` comes from
+    the `shared` DB: it's coaching reference, never runner data, so her approvals carry over."""
+    conn = db.connect(path)
+    db.init_db(conn, "America/Los_Angeles", name=EVAL_RUNNER)
+    plan = json.loads(SAMPLE_PLAN.read_text(encoding="utf-8"))
+    db.save_race_setup(conn, RaceSetup.from_dict(plan["setup"]))
+    start = date.fromisoformat(plan["brief_date"])
+    for week in plan["weeks"]:
+        week["start_date"] = (start + timedelta(weeks=week["week"] - 1)).isoformat()
+    db.save_plan(conn, plan)
+    if shared.exists():
+        conn.execute("ATTACH DATABASE ? AS shared", (str(shared),))
+        with conn:
+            conn.execute("INSERT INTO sources SELECT * FROM shared.sources")
+        conn.execute("DETACH DATABASE shared")
+    return conn
 
 
 class CoachAnswerer:

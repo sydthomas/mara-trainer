@@ -7,8 +7,11 @@ from typing import Any
 
 import pytest
 
+from mara_coach import profile, sources
 from mara_coach.evals import EvalCase, parse_eval_set
 from mara_coach.evals_runner import (
+    EVAL_RUNNER,
+    EVAL_TODAY,
     CoachAnswerer,
     compare_runs,
     latest_run,
@@ -16,7 +19,9 @@ from mara_coach.evals_runner import (
     run_eval,
     save_run,
     select_cases,
+    synthetic_db,
 )
+from mara_trainer import db, reports
 
 
 def _case(case_id: str, category: str = "fueling", **extra: Any) -> dict[str, Any]:
@@ -162,3 +167,41 @@ def test_cli_eval_live_needs_key_and_matching_cases(
     assert r.exit_code == 1 and "no cases match" in r.output
     r = CliRunner().invoke(cli.app, ["eval", "live", "--category", "fueling"])
     assert r.exit_code == 1 and "ANTHROPIC_API_KEY" in r.output
+
+
+def test_synthetic_db_has_no_runner_data_and_keeps_shared_sources(tmp_path: Path) -> None:
+    real_path = tmp_path / "real.db"
+    real = db.connect(real_path)
+    db.init_db(real, "America/Los_Angeles", name="Real Runner")
+    profile.update_profile(real, {"diet": "Real diet"})
+    sources.add_source(
+        real,
+        sources.parse_source(
+            {
+                "slug": "shared-source",
+                "title": "Synthetic stand",
+                "author": "Example Society",
+                "kind": "position_stand",
+                "url": "https://journal.example.org/x",
+                "topics": ["fueling"],
+                "license": "open_access",
+                "trust_reason": "Synthetic test source",
+            }
+        ),
+    )
+    real.close()
+
+    conn = synthetic_db(tmp_path / "eval.db", real_path)
+
+    assert profile.get_profile(conn)["diet"] is None
+    assert conn.execute("SELECT name FROM athlete").fetchone()["name"] == EVAL_RUNNER
+    assert conn.execute("SELECT count(*) FROM activities").fetchone()[0] == 0
+    assert [r["slug"] for r in conn.execute("SELECT slug FROM sources")] == ["shared-source"]
+    assert db.load_race_setup(conn) is not None
+    week = reports.plan_week(db.load_accepted_plan(conn), EVAL_TODAY)
+    assert week is not None and week["sessions"]
+
+
+def test_synthetic_db_works_without_a_real_database(tmp_path: Path) -> None:
+    conn = synthetic_db(tmp_path / "eval.db", tmp_path / "missing.db")
+    assert conn.execute("SELECT count(*) FROM sources").fetchone()[0] == 0

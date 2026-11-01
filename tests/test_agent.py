@@ -127,6 +127,20 @@ def test_history_is_kept(conn: sqlite3.Connection) -> None:
     assert [m["role"] for m in api.calls[1]["messages"]] == ["user", "assistant", "user"]
 
 
+def test_system_prompt_uses_the_runner_name() -> None:
+    assert agent.system_prompt("Alex").startswith("You are Alex's marathon coach.")
+    assert "Sydney" not in agent.system_prompt("Alex")
+    assert agent.system_prompt() == agent.SYSTEM_PROMPT
+
+
+def test_system_prompt_strava_and_validation_rules() -> None:
+    p = agent.SYSTEM_PROMPT
+    assert "Claude Code" not in p
+    assert "FIT, GPX or Apple Health" in p
+    assert "haven't passed validation" in p
+    assert "energy availability" in p
+
+
 def test_system_prompt_rules() -> None:
     p = agent.SYSTEM_PROMPT
     for phrase in (
