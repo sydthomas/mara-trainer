@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from mara_trainer import db
 from mara_trainer.cli import _conn, _fail, _out, app
 
 from . import agent, evals, evals_runner, knowledge, profile, slack_bot, sources, tools, usage
@@ -306,8 +308,9 @@ def eval_live(
         str, typer.Option(help="Model to evaluate (compare tiers before switching)")
     ] = agent.MODEL,
 ) -> None:
-    """Ask the live coach every selected case (costs API money), score, save the full report and
-    compare with the previous run. Prints a summary without answers. Exit 3 if any case failed."""
+    """Ask the live coach every selected case (costs API money) as a fictional runner in a
+    throwaway DB, score, save the full report and compare with the previous run. Prints a
+    summary without answers. Exit 3 if any case failed."""
     if effort not in ("low", "medium", "high"):
         _fail("--effort must be low, medium or high")
     try:
@@ -319,10 +322,20 @@ def eval_live(
     load_env()
     if not os.environ.get("ANTHROPIC_API_KEY"):
         _fail("ANTHROPIC_API_KEY is not set; add it to .env (see .env.example)")
-    answerer = evals_runner.CoachAnswerer(
-        agent.Coach(_conn(), model=model, effort=effort, channel="eval")
-    )
-    report = evals_runner.live_report(evals_runner.run_eval(cases, answerer), answerer)
+    with tempfile.TemporaryDirectory() as scratch:
+        conn = evals_runner.synthetic_db(Path(scratch) / "eval.db", db.db_path())
+        answerer = evals_runner.CoachAnswerer(
+            agent.Coach(
+                conn,
+                model=model,
+                effort=effort,
+                today=evals_runner.EVAL_TODAY,
+                channel="eval",
+                runner=evals_runner.EVAL_RUNNER,
+            )
+        )
+        report = evals_runner.live_report(evals_runner.run_eval(cases, answerer), answerer)
+        conn.close()
     report["run"] = {"effort": effort, "model": model, "cases": [c.id for c in cases]}
     path = evals_runner.save_run(report, out, datetime.now().strftime("%Y%m%d-%H%M%S"))
     previous = evals_runner.latest_run(out, before=path)

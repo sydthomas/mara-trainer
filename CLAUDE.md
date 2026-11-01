@@ -98,7 +98,8 @@ be summarized. If no approved source covers a question, the coach says so.
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
 - `uv run coach eval live [--only ID ...] [--category C] [--effort low|medium|high] [--model M]` — ask the live
-  coach each case (**costs API money: ask Sydney first**), score with the same checks, save the full
+  coach each case as fictional runner Alex in a throwaway DB (no runner data; approved `sources` copied, so its
+  cost isn't in `coach usage`) (**costs API money: ask Sydney first**), score with the same checks, save the full
   report to `data/eval-runs/` (gitignored; answers can hold her data) and print totals, failures,
   token usage and regressions/fixes vs the previous run; exit 3 if any failed
 - `uv run coach usage [--days 30]` — Claude API spend from the `api_usage` table (one row per coach

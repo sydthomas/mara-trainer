@@ -5,7 +5,14 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Changed
+- `coach eval live` runs as a fictional runner in a throwaway database, so eval answers no longer
+  mix in the real runner's profile and plan. Eval costs are in its report, not `coach usage`.
+
 ### Fixed
+- Coach: no longer says Strava data lives in Claude Code; offers COROS, FIT, GPX or Apple Health.
+- Coach: says a reworked week hasn't passed validation, and names low energy availability
+  (RED-S) for bone stress injuries, low bone density and missed periods.
 - Coach: `show_plan` gives each session its date and weekday from code, and the accepted plan
   always reads as accepted. The coach had shifted a run by a day and called the plan a draft.
 - Slack bot: exit after 5 minutes of repeating socket errors so launchd restarts it, instead of

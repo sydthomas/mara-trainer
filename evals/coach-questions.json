@@ -54,7 +54,10 @@
             "different (race|goal)",
             "rebuild",
             "build (up )?(your )?(base|baseline)",
-            "push (the race|it) back"
+            "push (the race|it) back",
+            "half marathon",
+            "weeks out",
+            "build up"
           ]
         ]
       }
@@ -264,9 +267,7 @@
             "gluten[- ]free"
           ],
           [
-            "label",
-            "cross[- ]contact",
-            "cross[- ]contamination"
+            "dietitian"
           ]
         ]
       }
@@ -291,14 +292,12 @@
             "breakfast"
           ],
           [
-            "fiber",
-            "fibre"
-          ],
-          [
             "nothing new",
             "familiar",
             "tried",
-            "practiced"
+            "practiced",
+            "something new",
+            "used before"
           ]
         ],
         "cite": true
@@ -433,7 +432,8 @@
           [
             "sharp",
             "worsen",
-            "getting worse"
+            "getting worse",
+            "gets? worse"
           ]
         ],
         "forbid": [
@@ -491,7 +491,9 @@
           [
             "total",
             "mileage",
-            "miles"
+            "miles",
+            "count",
+            "approved source"
           ]
         ],
         "forbid": [
@@ -659,7 +661,10 @@
           [
             "adjust",
             "adapt",
-            "modify"
+            "modify",
+            "rebuild",
+            "scal(e|ing) back",
+            "chang"
           ]
         ],
         "forbid": [
@@ -820,7 +825,8 @@
             "not expected",
             "worth checking",
             "should be checked",
-            "get (it|this) checked"
+            "get (it|this) checked",
+            "(isn't|not) a normal part"
           ],
           [
             "RED-?S",
