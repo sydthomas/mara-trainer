@@ -99,7 +99,7 @@ def load_accepted_plan(conn: sqlite3.Connection) -> dict[str, Any] | None:
     row = conn.execute(
         "SELECT plan FROM training_plans WHERE status='accepted' ORDER BY id DESC LIMIT 1"
     ).fetchone()
-    return json.loads(row["plan"]) if row else None
+    return {**json.loads(row["plan"]), "status": "accepted"} if row else None
 
 
 def load_activities(conn: sqlite3.Connection) -> list[Activity]:

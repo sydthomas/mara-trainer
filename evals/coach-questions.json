@@ -918,6 +918,32 @@
         ],
         "cite": true
       }
+    },
+    {
+      "id": "data-plan-dates-from-tools",
+      "category": "data_rules",
+      "question": "What's my next run and what day is it? Is my plan final yet?",
+      "context": "Runner has an accepted plan.",
+      "must": [
+        "Gives the session's date and weekday as plan_week or show_plan returns them",
+        "Says the plan is accepted"
+      ],
+      "must_not": [
+        "Works out a date or weekday itself",
+        "Calls an accepted plan a draft"
+      ],
+      "expect_referral": false,
+      "checks": {
+        "require": [
+          [
+            "\\b(mon|tues|wednes|thurs|fri|satur|sun)day\\b"
+          ]
+        ],
+        "forbid": [
+          "\\bstill (a |in )?draft\\b",
+          "\\bplan is (a )?draft\\b"
+        ]
+      }
     }
   ]
 }

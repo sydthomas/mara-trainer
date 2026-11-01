@@ -135,10 +135,28 @@ def test_validate_plan_never_accepts(
         tools.call_tool(conn, "validate_plan", {"path": str(tmp_path / "missing.json")})
 
 
+def test_show_plan_dates_sessions_in_code(conn: sqlite3.Connection) -> None:
+    session = {"day": 2, "kind": "easy", "distance_meters": 1609, "details": "Easy."}
+    week = {"week": 1, "start_date": "2026-11-02", "phase": "base", "sessions": [session]}
+    db.save_plan(conn, {"status": "draft", "weeks": [week]})
+    plan = tools.call_tool(conn, "show_plan", {})["plan"]
+    assert plan["status"] == "accepted"
+    assert plan["weeks"][0]["sessions"] == [
+        {
+            "date": "2026-11-03",
+            "weekday": "Tuesday",
+            "kind": "easy",
+            "distance_meters": 1609,
+            "miles": 1.0,
+            "details": "Easy.",
+        }
+    ]
+
+
 def test_show_plan_and_profile(conn: sqlite3.Connection) -> None:
     assert tools.call_tool(conn, "show_plan", {}) == {"plan": None}
     db.save_plan(conn, {"weeks": []})
-    assert tools.call_tool(conn, "show_plan", {}) == {"plan": {"weeks": []}}
+    assert tools.call_tool(conn, "show_plan", {}) == {"plan": {"weeks": [], "status": "accepted"}}
     assert tools.call_tool(conn, "get_profile", {})["profile"]["diet"] is None
     profile.update_profile(conn, {"diet": "Vegetarian", "allergies": []})
     got = tools.call_tool(conn, "get_profile", {})["profile"]

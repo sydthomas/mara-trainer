@@ -192,6 +192,13 @@ def plan_week(plan: dict[str, Any] | None, day: str) -> dict[str, Any] | None:
     return None
 
 
+def dated_plan(plan: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The accepted plan with every week from `plan_week`, so readers never map day numbers."""
+    if not plan:
+        return None
+    return {**plan, "weeks": [plan_week(plan, w["start_date"]) for w in plan["weeks"]]}
+
+
 def mark_notified(conn: sqlite3.Connection, kind: str, day: str) -> bool:
     """Record a proactive message; False if one of this kind was already sent that day."""
     with conn:
