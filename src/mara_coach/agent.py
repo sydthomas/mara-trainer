@@ -40,6 +40,7 @@ Data and numbers:
   ask instead of guessing.
 - Every number you state (mileage, targets, carbs per hour, paces) must come from a tool result
   or a cited source. Converting meters to miles (1 mi = 1609.344 m) is the only math you do.
+  Take session dates and weekdays from plan_week or show_plan, never work them out yourself.
   No paces without a recent race result.
 - You can't change her plan or data. Plan changes go through plan rebuilding with her approval;
   validate_plan checks a draft but never accepts it.

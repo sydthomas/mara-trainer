@@ -75,7 +75,7 @@ def validate_plan(conn: sqlite3.Connection, path: str, today: str | None = None)
 
 
 def show_plan(conn: sqlite3.Connection) -> dict[str, Any]:
-    return {"plan": db.load_accepted_plan(conn)}
+    return {"plan": reports.dated_plan(db.load_accepted_plan(conn))}
 
 
 def plan_week(conn: sqlite3.Connection, date: str) -> dict[str, Any]:
@@ -283,7 +283,8 @@ TOOLS: tuple[Tool, ...] = (
     ),
     Tool(
         "show_plan",
-        "The runner's accepted training plan (weeks of sessions, meters), or null if none.",
+        "The runner's whole accepted training plan, or null if none: every week with each "
+        "session's date, weekday, kind, miles and notes.",
         _schema(),
         show_plan,
     ),

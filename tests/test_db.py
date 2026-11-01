@@ -62,7 +62,7 @@ def test_race_setup_roundtrip(conn: sqlite3.Connection) -> None:
 def test_accepting_plan_archives_previous(conn: sqlite3.Connection) -> None:
     db.save_plan(conn, {"v": 1})
     db.save_plan(conn, {"v": 2})
-    assert db.load_accepted_plan(conn) == {"v": 2}
+    assert db.load_accepted_plan(conn) == {"v": 2, "status": "accepted"}
     statuses = [r[0] for r in conn.execute("SELECT status FROM training_plans ORDER BY id")]
     assert statuses == ["archived", "accepted"]
 

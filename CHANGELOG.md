@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Fixed
+- Coach: `show_plan` gives each session its date and weekday from code, and the accepted plan
+  always reads as accepted. The coach had shifted a run by a day and called the plan a draft.
+
 ## [0.2.0] - 2026-10-26
 
 Evals, cost tracking, COROS sync, and a Slack coach that keeps working while the laptop sleeps.
