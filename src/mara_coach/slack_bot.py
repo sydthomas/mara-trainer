@@ -20,6 +20,8 @@
   `CATCH_UP_WINDOW`) in one reply. A stored cursor of the newest handled message means Slack
   retries and catch-up never answer the same message twice. Debrief context comes from the DB
   (plan, ping record, fuel log), so it survives restarts.
+- Socket watchdog: the Slack client can retry broken sessions forever while the process looks
+  healthy, so after `STUCK_AFTER` of repeating socket errors the bot exits and launchd restarts it.
 - Tokens come from the environment (`.env`); this module never reads, prints or logs them.
 - No Strava data: the coach's tools don't have any.
 """
@@ -27,6 +29,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sqlite3
 import threading
@@ -77,6 +80,36 @@ CATCH_UP_WINDOW = 36 * 60 * 60  # seconds: older missed DMs are stale
 CATCH_UP_EVERY = 15 * 60  # seconds between routine catch-up checks
 WOKE_GAP = 3 * 60  # seconds: a loop gap this long means the laptop slept
 OFFLINE_NOTE = "(Sent while I was offline, oldest first:)"
+STUCK_AFTER = 5 * 60  # seconds of repeating socket errors before the bot exits to restart
+QUIET_RESET = 10 * 60  # seconds without a socket error that end a run of them
+
+
+@dataclass
+class SocketWatch:
+    """Spots the Socket Mode client looping on broken sessions, which it can do for days."""
+
+    first: float | None = None
+    last: float | None = None
+
+    def stuck(self, now: float) -> bool:
+        """Record one socket error; True once errors have kept coming for `STUCK_AFTER`."""
+        if self.first is None or self.last is None or now - self.last > QUIET_RESET:
+            self.first = now
+        self.last = now
+        return now - self.first >= STUCK_AFTER
+
+
+def exit_when_stuck(
+    watch: SocketWatch, clock: Callable[[], float], leave: Callable[[int], None]
+) -> Callable[[Exception], None]:
+    """Socket error listener: a stuck client leaves, and launchd starts a fresh process."""
+
+    def on_error(error: Exception) -> None:
+        if watch.stuck(clock()):
+            log.error("Socket Mode stuck (%s); exiting so launchd restarts", type(error).__name__)
+            leave(1)
+
+    return on_error
 
 
 def sync_nudge_text(imported: int, planned: int) -> str:
@@ -577,4 +610,6 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
 
         threading.Thread(target=check_in_loop, name="long-run-check-in", daemon=True).start()
 
-    SocketModeHandler(app, env["SLACK_APP_TOKEN"]).start()  # type: ignore[no-untyped-call]
+    handler = SocketModeHandler(app, env["SLACK_APP_TOKEN"])
+    handler.client.on_error_listeners.append(exit_when_stuck(SocketWatch(), time.time, os._exit))
+    handler.start()  # type: ignore[no-untyped-call]

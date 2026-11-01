@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Fixed
+- Slack bot: exit after 5 minutes of repeating socket errors so launchd restarts it, instead of
+  looping on broken sessions while it looks healthy.
+
 ## [0.2.0] - 2026-10-26
 
 Evals, cost tracking, COROS sync, and a Slack coach that keeps working while the laptop sleeps.
