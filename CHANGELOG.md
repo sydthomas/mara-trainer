@@ -8,6 +8,8 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 ### Fixed
 - Coach: `show_plan` gives each session its date and weekday from code, and the accepted plan
   always reads as accepted. The coach had shifted a run by a day and called the plan a draft.
+- Slack bot: exit after 5 minutes of repeating socket errors so launchd restarts it, instead of
+  looping on broken sessions while it looks healthy.
 
 ## [0.2.0] - 2026-10-26
 
