@@ -3,8 +3,8 @@ section: training
 title: Marathon training
 status: approved
 approved_by: Sydney
-approved_on: 2026-10-25
-content_sha256: 13db5b8efba6061b15a283ebdbeb7aac820fa4e39f4f6159562246eb3c18442f
+approved_on: 2026-11-01
+content_sha256: b3fd3e5dde0691a56581ebc0bbd17d0843d090db8f1c51cbc414002590f85efa
 ---
 # Marathon training
 
@@ -33,6 +33,7 @@ content_sha256: 13db5b8efba6061b15a283ebdbeb7aac820fa4e39f4f6159562246eb3c18442f
 
 ## Where they differ
 - **Speed work for a first marathon.** Higdon Novice 1 has no speed work at all: every run is easy. Chicago has one speed run every week from week 1 (short intervals at 5K pace in week 1). LA Road Runners size speed work as a share of weekly mileage: 5% at Level 1, 10% at Level 2, up to 20% at Level 4. Why: Higdon's novice plan aims only to finish. Chicago and LA Road Runners serve every level from one template and scale intensity by level. For a first-timer the safest common ground is no more than one quality session a week, kept small. [@hal-higdon-marathon-training] [@chicago-marathon-training-plan] [@la-marathon-larr-training-plans]
+- **More speed in a club plan.** Venice Run Club's 18-week LA Marathon 2027 plans go further: Level I has 4 runs a week plus Sunday cross-training, with track every Tuesday and tempo or race-pace running on Thursday in 8 weeks. Level II has 6 runs a week and adds Sunday race-pace running in many weeks. Level I peaks at about 36 miles a week and Level II at about 52, and both reach 20 miles. They set effort by share of maximum heart rate: easy 65 to 75%, race pace 75 to 85%, track and tempo 80 to 90%. Two hard days a week goes beyond the one-session common ground above, and neither plan lists strength work, so don't copy that load onto a runner who also lifts. This is community club material, not a study. [@venice-run-club-marathon-training]
 - **How long the longest run is, and when.** Higdon and Chicago peak at 20 mi; Boston Level One stops at 16 to 18 mi. Higdon peaks three weeks out, Chicago and LA Road Runners four weeks out. Chicago also schedules a 99-minute run three weeks out, and LA Road Runners an 18-miler six weeks out, so their last big efforts are spread over more weeks. [@hal-higdon-marathon-training] [@chicago-marathon-training-plan] [@la-marathon-larr-training-plans] [@boston-marathon-baa-training-plans]
 - **Long run versus weekly total.** Higdon says never skip the long run. The LA Road Runners FAQ says total weekly volume matters more than any single long run, and that a missed long run should be made up by adding a few miles across later runs, never all in one. Both agree not to cram missed miles close to race day. [@hal-higdon-marathon-training] [@la-marathon-larr-training-plans]
 - **What "easy" and "tempo" mean.** Chicago rates recovery pace at 4 to 5/10 and tempo at 6/10 (about 30 to 35 seconds per mile slower than 5K pace). LA Road Runners rate easy at 6/10 and threshold at 8/10 ("comfortably uncomfortable", between 5K and 10K pace). The same workout name can mean different efforts across plans, so translate by description, not label. Note that Chicago's printed definition of recovery pace repeats its tempo text, which looks like a layout error. [@chicago-marathon-training-plan] [@la-marathon-larr-training-plans]
@@ -54,7 +55,7 @@ content_sha256: 13db5b8efba6061b15a283ebdbeb7aac820fa4e39f4f6159562246eb3c18442f
 - No approved source read for this section gives a tested rule for how fast weekly mileage or long-run distance may rise. The IOC consensus full text (which may contain such guidance) is paywalled and only its abstract was read. The "10% rule" is not supported by anything read here.
 - No approved peer-reviewed study of intensity distribution (polarized versus threshold training) was read. The 80/20 claim rests on a book's publisher page and the LA Road Runners guidance.
 - *Daniels' Running Formula* and *Advanced Marathoning* (Pfitzinger and Douglas): the publisher pages returned rate-limit errors (HTTP 429) during the audit, so nothing is taken from them.
-- Venice Run Club: the page returned HTTP 429 and wasn't read.
+- Venice Run Club: the web page returned HTTP 429. Only its 2027 Level I and II plan PDFs, supplied by Sydney, were read; other levels were not.
 - London Marathon and Marathon Handbook plans are marked not fetchable in the registry and were not read.
 - No approved source compares training plans or responses for women versus men, and none covers training around pregnancy, postpartum or menopause here (see `women.md`).
 - Strength and cross-training evidence lives in `strength.md` and `cross-training.md`, not here.
@@ -72,3 +73,4 @@ content_sha256: 13db5b8efba6061b15a283ebdbeb7aac820fa4e39f4f6159562246eb3c18442f
 - [@la-marathon-larr-training-plans] Levine, David. "LA Road Runners Training Resources" and "2027 ASICS LA Marathon Training Schedule, Level 2." *The McCourt Foundation*, 2026, https://www.mccourtfoundation.org/la-road-runners-training-resources/. Accessed 24 Oct. 2026.
 - [@mcnulty-menstrual-cycle-performance-2020] McNulty, Kelly L., et al. "The Effects of Menstrual Cycle Phase on Exercise Performance in Eumenorrheic Women: A Systematic Review and Meta-Analysis." *Sports Medicine*, vol. 50, no. 10, 2020, pp. 1813-27, https://doi.org/10.1007/s40279-020-01319-3.
 - [@rrca-coaching-certification] Road Runners Club of America. "RRCA Coaching Certification Program." *RRCA*, https://www.rrca.org/education/coaching-certification/. Accessed 24 Oct. 2026.
+- [@venice-run-club-marathon-training] Venice Run Club. "LA Marathon 2027 18 Week Training Plan," Levels I and II. *Venice Run Club*, https://venicerunclub.co/pages/marathon-training. Accessed 1 Nov. 2026.
