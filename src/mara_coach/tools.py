@@ -6,7 +6,7 @@ Rules:
 - No mileage or pace math here. Every number comes from `mara_trainer` (or the DB) unchanged.
 - Read-only. `validate_plan` checks a draft but never accepts it; Sydney accepts via the CLI.
   `propose_fuel_entry` checks a debrief entry but never saves it; the Slack channel saves it in
-  code after she replies yes.
+  code after she replies yes. `propose_week` works the same way for one week.
 - No Strava data. The DB has no Strava source, and no tool may fetch or receive it.
 - Sources: only `approved` rows are visible to the coach.
 """
@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from mara_trainer import db, fueling, reports
+from mara_trainer.plan_rules import SESSION_KINDS
 
 from . import knowledge, profile, sources
 
@@ -167,6 +168,25 @@ def propose_fuel_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
         "message": "Not saved yet. Read this back in one or two lines and ask 'Save it?'. "
         "The app saves it when she says yes.",
     }
+
+
+def propose_week(
+    conn: sqlite3.Connection,
+    start_date: str,
+    sessions: list[dict[str, Any]],
+    cut: bool = False,
+    focus: str | None = None,
+) -> dict[str, Any]:
+    plan = db.load_accepted_plan(conn)
+    try:
+        revised, problems = reports.revise_week(
+            plan, start_date, sessions, reports.athlete_today(conn), db.load_race_setup(conn), cut
+        )
+    except (reports.ReportError, ValueError) as exc:
+        raise ToolError(str(exc)) from exc
+    if revised is None:
+        return {"ok": False, "problems": problems, "saved": False}
+    return {"ok": True, "week": reports.plan_week(revised, start_date), "saved": False}
 
 
 def approved_slugs(conn: sqlite3.Connection) -> set[str]:
@@ -366,6 +386,47 @@ TOOLS: tuple[Tool, ...] = (
         propose_fuel_entry,
     ),
     Tool(
+        "propose_week",
+        "Write the current or a coming week: all 7 sessions with exact details, checked against "
+        "the plan guardrails, so the total must match the target. Passed days stay unchanged. "
+        "With cut true (illness or a warning sign) sessions may only be shortened or rested. It "
+        "does NOT save; the app saves it in code after the runner replies yes.",
+        _schema(
+            {
+                "start_date": {**_DATE, "description": "The week's Monday, from plan_week"},
+                "cut": {"type": "boolean", "description": "Lower the week: illness, warning sign"},
+                "focus": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "description": "The week's focus and a coaching line, in your own words",
+                },
+                "sessions": {
+                    "type": "array",
+                    "minItems": 7,
+                    "maxItems": 7,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["date", "kind", "distance_meters", "details"],
+                        "properties": {
+                            "date": _DATE,
+                            "kind": {"type": "string", "enum": list(SESSION_KINDS)},
+                            "distance_meters": {"type": "integer", "minimum": 0},
+                            "details": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500,
+                                "description": "Exact session. Strength: lifts, sets, reps, effort",
+                            },
+                        },
+                    },
+                },
+            },
+            required=["start_date", "sessions"],
+        ),
+        propose_week,
+    ),
+    Tool(
         "allowed_domains",
         "Web domains the coach may fetch from at answer time (approved, fetchable sources only).",
         _schema(),
@@ -395,12 +456,13 @@ _TYPES: dict[str, Callable[[Any], bool]] = {
     "number": lambda v: isinstance(v, int | float) and not isinstance(v, bool),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
     "boolean": lambda v: isinstance(v, bool),
+    "array": lambda v: isinstance(v, list),
 }
 
 
 def check_args(schema: dict[str, Any], args: Any) -> list[str]:
     """The subset of JSON Schema the registry uses: object, required, no extra keys, and per
-    property type, enum, minimum, maximum, pattern."""
+    property type, enum, minimum, maximum, pattern, length and array items."""
     if not isinstance(args, dict):
         return ["arguments must be a JSON object"]
     props: dict[str, Any] = schema["properties"]
@@ -421,4 +483,13 @@ def check_args(schema: dict[str, Any], args: Any) -> list[str]:
             problems.append(f"{key} must be <= {rule['maximum']}")
         if "pattern" in rule and not re.fullmatch(rule["pattern"], value):
             problems.append(f"{key} must be YYYY-MM-DD")
+        if "minLength" in rule and len(value) < rule["minLength"]:
+            problems.append(f"{key} must have at least {rule['minLength']} characters")
+        if "maxLength" in rule and len(value) > rule["maxLength"]:
+            problems.append(f"{key} must have at most {rule['maxLength']} characters")
+        if rule["type"] == "array":
+            if not rule["minItems"] <= len(value) <= rule["maxItems"]:
+                problems.append(f"{key} must have {rule['minItems']} items")
+            for i, item in enumerate(value):
+                problems += [f"{key}[{i}]: {p}" for p in check_args(rule["items"], item)]
     return problems

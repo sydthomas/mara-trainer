@@ -15,6 +15,7 @@ from typing import Any
 from . import db
 from .dates import date_in_timezone
 from .plan_rules import (
+    OUT_OF_BOUNDS,
     RaceSetup,
     ScheduleBrief,
     ValidationResult,
@@ -197,6 +198,96 @@ def dated_plan(plan: dict[str, Any] | None) -> dict[str, Any] | None:
     if not plan:
         return None
     return {**plan, "weeks": [plan_week(plan, w["start_date"]) for w in plan["weeks"]]}
+
+
+MIN_RUN_METERS = 1000  # same floor as the plan guardrails
+
+
+def _cut_problems(planned: dict[int, dict[str, Any]], sessions: list[dict[str, Any]]) -> list[str]:
+    """A cut (illness, a warning sign) may only shorten or rest what was planned."""
+    problems = []
+    for s in sessions:
+        was = planned[s["day"]]
+        name = WEEKDAYS[s["day"]]
+        distance = s["distance_meters"]
+        if was["kind"] == "race" and s != was:
+            problems.append("a cut can't change the race")
+        if distance > was["distance_meters"]:
+            problems.append(f"a cut can't add distance on {name}")
+        if s["kind"] not in (was["kind"], "rest") and (was["kind"], s["kind"]) != (
+            "workout",
+            "easy",
+        ):
+            problems.append(f"a cut can't turn {name}'s {was['kind']} into {s['kind']}")
+        if s["kind"] == "rest" and distance != 0:
+            problems.append(f"{name}'s rest must be 0 m")
+        if s["kind"] != "rest" and distance and distance < MIN_RUN_METERS:
+            problems.append(f"{name}'s run must be at least {MIN_RUN_METERS} m")
+    if sum(s["distance_meters"] for s in sessions) >= sum(
+        s["distance_meters"] for s in planned.values()
+    ):
+        problems.append("a cut must lower the week's total")
+    return problems
+
+
+def revise_week(
+    plan: dict[str, Any] | None,
+    start_date: str,
+    sessions: list[dict[str, Any]],
+    today: str,
+    saved_setup: RaceSetup | None,
+    cut: bool = False,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """The accepted plan with one week's sessions replaced, or None and the problems. Sessions
+    carry dates, not day numbers. Days before `today` can't change. The week must pass the plan
+    guardrails, unless `cut` is set: then it may only shorten or rest sessions. Stores nothing."""
+    week = next(
+        (w for w in (plan or {}).get("weeks", []) if w.get("start_date") == start_date), None
+    )
+    if plan is None or week is None:
+        return None, [f"week of {start_date} isn't in the accepted plan"]
+    monday = date.fromisoformat(start_date)
+    planned = {s["day"]: s for s in week["sessions"]}
+    revised_sessions = []
+    for session in sessions:
+        offset = (date.fromisoformat(session["date"]) - monday).days
+        if not 0 <= offset <= 6:
+            return None, [f"{session['date']} isn't in the week of {start_date}"]
+        fields = {k: v for k, v in session.items() if k != "date"}
+        revised_sessions.append({"day": (offset + 1) % 7, **fields})
+    if sorted(s["day"] for s in revised_sessions) != list(range(7)):
+        return None, ["each day of the week must appear exactly once"]
+    for session, revised_session in zip(sessions, revised_sessions, strict=True):
+        if session["date"] < today and revised_session != planned[revised_session["day"]]:
+            return None, [f"{session['date']} has already passed and can't change"]
+    revised = {
+        **plan,
+        "weeks": [{**w, "sessions": revised_sessions} if w is week else w for w in plan["weeks"]],
+    }
+    violations = [
+        v
+        for v in check_plan(revised, saved_setup).result.violations
+        if v.week in (week["week"], None)
+    ]
+    if cut:
+        problems = _cut_problems(planned, revised_sessions)
+        problems += [v.message for v in violations if v.code != OUT_OF_BOUNDS]
+    else:
+        problems = [v.message for v in violations]
+    return (None, problems) if problems else (revised, [])
+
+
+def week_card(week: dict[str, Any], focus: str | None = None) -> str:
+    """One week as plain text to read on a phone or paste into notes."""
+    total = sum(s["distance_meters"] for s in week["sessions"]) / 1609.344
+    lines = [f"Week {week['week']} of {week['of_weeks']}, {week['phase']}: {total:.1f} mi"]
+    if focus:
+        lines.append(f"Focus: {focus}")
+    for s in week["sessions"]:
+        day = date.fromisoformat(s["date"]).strftime("%a %b %-d")
+        miles = f" {s['miles']:g} mi" if s["distance_meters"] else ""
+        lines.append(f"{day}: {s['kind'].capitalize()}{miles}. {s['details']}")
+    return "\n".join(lines)
 
 
 def mark_notified(conn: sqlite3.Connection, kind: str, day: str) -> bool:

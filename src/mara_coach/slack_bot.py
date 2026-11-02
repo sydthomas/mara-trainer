@@ -119,7 +119,17 @@ def sync_nudge_text(imported: int, planned: int) -> str:
     )
 
 
-COROS_NUDGE = '\n\n_Want this week on your watch? In Claude Code, say "push my week to COROS"._'
+COROS_NUDGE = (
+    '\n\n_Once your week is set, say "push my week to COROS" in Claude Code to put it on your '
+    "watch._"
+)
+
+
+PUSH_WEEK = 'Say "push my week" in Claude Code to put it on your watch.'
+WATCH_STALE = (
+    "If this week is already on your watch, change or remove those workouts in the COROS app; "
+    "I can't move them."
+)
 
 
 def weekly_prompt(sunday: str) -> str:
@@ -137,7 +147,8 @@ zero) and recap from the fuel log and what I told you.
 days, then the week's focus for its phase (for example easy volume, the workout, hills, speed, \
 long-run fueling practice). Take that focus only from approved read_knowledge sections and say \
 if none covers something.
-3. End with one question: anything coming up this week (travel, soreness, busy days)?
+3. End with one question: anything coming up this week (travel, soreness, busy days)? Say you'll \
+write the week's exact sessions from her answer.
 Keep it brief and cite sources at the end."""
 
 
@@ -194,13 +205,22 @@ class Debrief:
     expires: float
 
 
+@dataclass(frozen=True)
+class WeekProposal:
+    start_date: str
+    sessions: list[dict[str, Any]]
+    cut: bool = False
+    focus: str | None = None
+
+
 @dataclass
 class Conversation:
     turns: list[dict[str, Any]] = field(default_factory=list)
     last_seen: float = 0.0
     lock: threading.Lock = field(default_factory=threading.Lock)
     debrief: Debrief | None = None
-    pending: fueling.FuelEntry | None = None  # proposed by the coach, saved only on "yes"
+    # proposed by the coach, saved only on "yes"
+    pending: fueling.FuelEntry | WeekProposal | None = None
 
 
 def _get(block: Any, key: str) -> Any:
@@ -226,7 +246,25 @@ def proposed_entry(messages: list[dict[str, Any]]) -> fueling.FuelEntry | None:
     return None
 
 
+def proposed_week(messages: list[dict[str, Any]]) -> WeekProposal | None:
+    """The last well-formed `propose_week` call in these messages. Its rules run in the bot."""
+    for message in reversed(messages):
+        if message.get("role") != "assistant" or not isinstance(message.get("content"), list):
+            continue
+        for block in reversed(message["content"]):
+            if _get(block, "type") != "tool_use" or _get(block, "name") != "propose_week":
+                continue
+            args = _get(block, "input")
+            if not isinstance(args, dict) or tools.check_args(_WEEK_SCHEMA, args):
+                return None
+            return WeekProposal(
+                args["start_date"], args["sessions"], args.get("cut", False), args.get("focus")
+            )
+    return None
+
+
 _PROPOSE_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_fuel_entry")
+_WEEK_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_week")
 
 
 class SlackCoach:
@@ -277,9 +315,12 @@ class SlackCoach:
                 self._save(channel, convo, client)
                 return
             if convo.pending is not None and NO.match(text):
-                if convo.debrief is not None:
-                    self._mark(DEBRIEF_CLOSED, convo.debrief.date)
-                convo.pending, convo.debrief = None, None
+                if isinstance(convo.pending, WeekProposal):
+                    convo.pending = None
+                else:
+                    if convo.debrief is not None:
+                        self._mark(DEBRIEF_CLOSED, convo.debrief.date)
+                    convo.pending, convo.debrief = None, None
                 client.chat_postMessage(channel=channel, text=CANCELLED)
                 return
             question = text
@@ -295,8 +336,53 @@ class SlackCoach:
         answer = self._answer(question, convo)
         client.chat_update(channel=channel, ts=placeholder["ts"], text=to_mrkdwn(answer))
 
+    def today(self, conn: sqlite3.Connection) -> str:
+        return self.now().astimezone(ZoneInfo(db.athlete_timezone(conn))).date().isoformat()
+
+    def _revised_week(
+        self, conn: sqlite3.Connection, week: WeekProposal
+    ) -> tuple[dict[str, Any] | None, list[str]]:
+        try:
+            return reports.revise_week(
+                db.load_accepted_plan(conn),
+                week.start_date,
+                week.sessions,
+                self.today(conn),
+                db.load_race_setup(conn),
+                week.cut,
+            )
+        except (reports.ReportError, ValueError) as exc:
+            return None, [str(exc)]
+
+    def _save_week(
+        self, channel: str, convo: Conversation, week: WeekProposal, client: SlackClient
+    ) -> None:
+        conn = self.connect()
+        try:
+            revised, problems = self._revised_week(conn, week)
+            if revised is not None:
+                db.save_plan(conn, revised)
+            today = self.today(conn)
+        finally:
+            conn.close()
+        convo.pending = None
+        saved = reports.plan_week(revised, week.start_date)
+        if saved is None:
+            client.chat_postMessage(
+                channel=channel, text="Couldn't save that week: " + "; ".join(problems)
+            )
+            return
+        note = WATCH_STALE if week.start_date <= today else PUSH_WEEK
+        client.chat_postMessage(
+            channel=channel,
+            text=f"Saved Week {saved['week']}. {note}\n\n{reports.week_card(saved, week.focus)}",
+        )
+
     def _save(self, channel: str, convo: Conversation, client: SlackClient) -> None:
         assert convo.pending is not None
+        if isinstance(convo.pending, WeekProposal):
+            self._save_week(channel, convo, convo.pending, client)
+            return
         conn = self.connect()
         try:
             saved = fueling.add_entry(conn, convo.pending)
@@ -521,6 +607,13 @@ class SlackCoach:
         history = list(convo.turns)
         try:
             reply = self.coach_factory(conn).ask(text, history=history)
+            messages = list(getattr(reply, "messages", []))[len(history) :]
+            entry = proposed_entry(messages)
+            if entry is not None:
+                convo.pending = entry
+            week = proposed_week(messages)
+            if week is not None and self._revised_week(conn, week)[0] is not None:
+                convo.pending = week
         except CoachError:
             log.warning("coach could not finish a Slack reply")
             return FAILED
@@ -530,9 +623,6 @@ class SlackCoach:
         finally:
             conn.close()
         answer = reply.text or FAILED
-        entry = proposed_entry(list(getattr(reply, "messages", []))[len(history) :])
-        if entry is not None:
-            convo.pending = entry
         convo.turns += [
             {"role": "user", "content": text},
             {"role": "assistant", "content": answer},
