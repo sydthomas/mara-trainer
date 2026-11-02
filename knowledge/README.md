@@ -41,6 +41,7 @@ Rules (checked by `coach knowledge check` and the tests):
 | `women.md` | menstrual cycle, hormonal contraception, low energy availability / RED-S, iron, heat, postpartum |
 | `health-referrals.md` | warning signs and when to send the runner to a professional (bone stress, heat illness, hyponatremia, etc.) |
 | `course.md` | course-specific preparation (LA Marathon and general course notes) |
+| `coaching-practice.md` | how a coach works with one runner: communication, autonomy, weighing how she feels, pushing or backing off, missed sessions, illness as a coaching decision, remote coaching, raising the menstrual cycle |
 
 ## Section format
 

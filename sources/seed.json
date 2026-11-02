@@ -1058,6 +1058,305 @@
       "fetchable": false,
       "female_evidence": "sex_reported",
       "population_note": "50 male and female collegiate runners randomized to heavy resistance or plyometric plus heavy resistance; results given by sex. Sex counts not in the abstract; full text not reviewed."
+    },
+    {
+      "slug": "spiering-minimal-dose-2021",
+      "title": "Maintaining Physical Performance: The Minimal Dose of Exercise Needed to Preserve Endurance and Strength Over Time",
+      "author": "Spiering BA, Mujika I, Sharp MA, Foulis SA",
+      "kind": "review",
+      "url": "https://doi.org/10.1519/JSC.0000000000003964",
+      "topics": [
+        "training",
+        "cross_training"
+      ],
+      "license": "copyrighted",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Maintenance dose in younger adults; athlete data insufficient.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "leppanen-run-rct-2024",
+      "title": "Hip and core exercise programme prevents running-related overuse injuries in adult novice recreational runners (Run RCT)",
+      "author": "Leppänen M et al.",
+      "kind": "research",
+      "url": "https://doi.org/10.1136/bjsports-2023-107926",
+      "topics": [
+        "injury",
+        "training",
+        "cross_training"
+      ],
+      "license": "copyrighted",
+      "year": 2024,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Three-arm RCT in novice runners; hip and core arm had fewer overuse injuries, ankle and foot arm more acute injuries.",
+      "fetchable": false,
+      "female_evidence": "sex_reported",
+      "population_note": "325 novice runners, 245 women."
+    },
+    {
+      "slug": "toresdahl-nyc-marathon-strength-2020",
+      "title": "A Randomized Study of a Strength Training Program to Prevent Injuries in Runners of the New York City Marathon",
+      "author": "Toresdahl BG et al.",
+      "kind": "research",
+      "url": "https://doi.org/10.1177/1941738119877180",
+      "topics": [
+        "injury",
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2020,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Self-directed program showed no overall benefit; adherence subgroup not powered.",
+      "fetchable": false,
+      "female_evidence": "sex_reported",
+      "population_note": "720 first-time marathoners, 69.4% women."
+    },
+    {
+      "slug": "landauer-hip-abductor-running-2026",
+      "title": "Influence of Hip Abductor Strength on Running Biomechanics in Healthy Populations: A Scoping Review",
+      "author": "Landauer S, Konrad A, Paternoster FK",
+      "kind": "review",
+      "url": "https://doi.org/10.1186/s40798-026-01009-w",
+      "topics": [
+        "injury",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2026,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "No consistent link between hip strength and running mechanics; mostly cross-sectional.",
+      "fetchable": false,
+      "female_evidence": "sex_reported",
+      "population_note": "683 healthy runners, 372 female."
+    },
+    {
+      "slug": "afonso-post-exercise-stretching-2021",
+      "title": "The Effectiveness of Post-exercise Stretching in Short-Term and Delayed Recovery of Strength, Range of Motion and Delayed Onset Muscle Soreness",
+      "author": "Afonso J et al.",
+      "kind": "review",
+      "url": "https://doi.org/10.3389/fphys.2021.677581",
+      "topics": [
+        "recovery"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Meta-analysis of RCTs; mostly male, small samples.",
+      "fetchable": false,
+      "female_evidence": "mostly_male",
+      "population_note": "229 participants, mostly male."
+    },
+    {
+      "slug": "wiewelhove-foam-rolling-2019",
+      "title": "A Meta-Analysis of the Effects of Foam Rolling on Performance and Recovery",
+      "author": "Wiewelhove T et al.",
+      "kind": "review",
+      "url": "https://doi.org/10.3389/fphys.2019.00376",
+      "topics": [
+        "recovery"
+      ],
+      "license": "cc_by",
+      "year": 2019,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Small effects on flexibility and soreness.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "mageau-vallerand-motivational-model-2003",
+      "title": "The coach-athlete relationship: a motivational model",
+      "author": "Mageau GA, Vallerand RJ",
+      "kind": "review",
+      "url": "https://doi.org/10.1080/0264041031000140374",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2003,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Theory of autonomy-supportive coaching; no numbers.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "saw-monitoring-subjective-2016",
+      "title": "Monitoring the athlete training response: subjective self-reported measures trump commonly used objective measures",
+      "author": "Saw AE, Main LC, Gastin PB",
+      "kind": "review",
+      "url": "https://doi.org/10.1136/bjsports-2015-094758",
+      "topics": [
+        "training",
+        "recovery"
+      ],
+      "license": "open_access",
+      "year": 2016,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Systematic review of 56 studies; supports weighing how the athlete feels. CC BY-NC per search report.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "malisoux-parallel-shoes-2015",
+      "title": "Can parallel use of different running shoes decrease running-related injury risk?",
+      "author": "Malisoux L et al.",
+      "kind": "research",
+      "url": "https://doi.org/10.1111/sms.12154",
+      "topics": [
+        "gear",
+        "injury"
+      ],
+      "license": "copyrighted",
+      "year": 2015,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Observational; rotation went with lower injury risk. Not a shoe lifespan study.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "talsnes-coaches-underperformance-2025",
+      "title": "Warning Signs, Monitoring Tools, and Actions Taken by World-Class Endurance Coaches in Cases of Underperformance",
+      "author": "Talsnes RK et al.",
+      "kind": "research",
+      "url": "https://doi.org/10.1123/ijspp.2024-0161",
+      "topics": [
+        "training",
+        "recovery"
+      ],
+      "license": "copyrighted",
+      "year": 2025,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "12 Norwegian coaches of elite athletes; limited transfer to recreational runners.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "12 male coaches of elite athletes."
+    },
+    {
+      "slug": "stewart-remote-coaching-2026",
+      "title": "Remote coaching: Coach and athlete perspectives in endurance sports",
+      "author": "Stewart DG, Jowett S, Blagrove RC",
+      "kind": "research",
+      "url": "https://doi.org/10.1177/17479541261474763",
+      "topics": [
+        "training"
+      ],
+      "license": "open_access",
+      "year": 2026,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "10 coaches and 10 athletes. CC BY-NC 4.0. Closest match to a coach working by message.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "10 coaches and 10 athletes; sex and level not seen."
+    },
+    {
+      "slug": "sandbakk-best-practice-coaches-2025",
+      "title": "Best-Practice Training Characteristics Within Olympic Endurance Sports as Described by Norwegian World-Class Coaches",
+      "author": "Sandbakk Ø et al.",
+      "kind": "research",
+      "url": "https://doi.org/10.1186/s40798-025-00848-3",
+      "topics": [
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2025,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Elite coaches, male; interviews cross-checked against training logs.",
+      "fetchable": false,
+      "female_evidence": "mixed_unreported",
+      "population_note": "12 male coaches of elite athletes."
+    },
+    {
+      "slug": "hook-period-communication-2021",
+      "title": "\"Do Elite Sport First, Get Your Period Back Later.\" Are Barriers to Communication Hindering Female Athletes?",
+      "author": "Höök M, Bergström M, Sæther SA, McGawley K",
+      "kind": "research",
+      "url": "https://doi.org/10.3390/ijerph182212075",
+      "topics": [
+        "health",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Elite Swedish skiers; how coaches can raise the menstrual cycle.",
+      "fetchable": false,
+      "female_evidence": "female_specific",
+      "population_note": "13 elite women skiers and 8 coaches."
+    },
+    {
+      "slug": "mossman-autonomy-support-2022",
+      "title": "Autonomy support in sport and exercise settings: a systematic review and meta-analysis",
+      "author": "Mossman LH et al.",
+      "kind": "review",
+      "url": "https://doi.org/10.1080/1750984X.2022.2031252",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2022,
+      "trust_reason": "Peer-reviewed; found by a verified search, abstract or record read; approval pending",
+      "notes": "Correlational, low weight. Full paper unread.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "norris-running-while-sick",
+      "title": "Running While Sick",
+      "author": "Laura Norris",
+      "kind": "coach",
+      "url": "https://lauranorrisrunning.com/running-when-sick/",
+      "topics": [
+        "training",
+        "recovery"
+      ],
+      "license": "copyrighted",
+      "year": 2023,
+      "trust_reason": "Credentialed or experienced practitioner; coaching experience only, never numbers or health rules; credentials not third-party confirmed",
+      "notes": "Practice on illness and missed sessions; mostly uncited. Coaching experience tier.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "mcmillan-bad-workout-days",
+      "title": "Pushing Through or Calling It Quits: How to Handle Bad Workout Days",
+      "author": "Greg McMillan",
+      "kind": "coach",
+      "url": "https://mcmillanrunning.com/pushing-through-or-calling-it-quits-how-to-handle-bad-workout-days/",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2024,
+      "trust_reason": "Credentialed or experienced practitioner; coaching experience only, never numbers or health rules; credentials not third-party confirmed",
+      "notes": "Link only: site terms restrict networked use. Ideas in our own words, no stored text.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
+    },
+    {
+      "slug": "roche-skurka-interview-2018",
+      "title": "Houston Marathon Training: Re-Finding Purpose & Speed || David Roche Interview",
+      "author": "Andrew Skurka, with David Roche",
+      "kind": "coach",
+      "url": "https://andrewskurka.com/houston-marathon-david-roche-interview/",
+      "topics": [
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2018,
+      "trust_reason": "Credentialed or experienced practitioner; coaching experience only, never numbers or health rules; credentials not third-party confirmed",
+      "notes": "Communication and mindset only. Title is descriptive.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": ""
     }
   ]
 }
