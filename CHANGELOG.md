@@ -9,6 +9,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - Coach: writes the coming week after the Sunday check-in, with exact lifts, through a new
   `propose_week` tool. Guardrails check it, and the Slack bot saves it only on a yes; the previous
   plan stays archived.
+- Knowledge: training notes now cover Venice Run Club's 2027 Level I and II LA Marathon plans.
 - Knowledge: new `coaching-practice` section with evidence labels (Supported, Coaching experience),
   and 17 new sources covering coaching, injury, stretching, foam rolling and shoe rotation.
 - Coach: adapts the current week any day. For illness or a warning sign it can shorten or rest
