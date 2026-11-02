@@ -5,6 +5,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Added
+- Coach: writes the coming week after the Sunday check-in, with exact lifts, through a new
+  `propose_week` tool. Guardrails check it, and the Slack bot saves it only on a yes; the previous
+  plan stays archived.
+- Coach: adapts the current week any day. For illness or a warning sign it can shorten or rest
+  sessions, never add. Saved weeks post a plain-text week card to copy into notes.
+
 ### Changed
 - `coach eval live` runs as a fictional runner in a throwaway database, so eval answers no longer
   mix in the real runner's profile and plan. Eval costs are in its report, not `coach usage`.
