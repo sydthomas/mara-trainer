@@ -196,6 +196,11 @@ def test_shipped_seed_file_is_valid_and_unapproved() -> None:
     assert not any(s.may_summarize for s in seed if s.kind == "book")
 
 
+def test_shipped_seed_keeps_sources_fetchable() -> None:
+    # A blanket fetchable=false in the seed would empty the coach's allowed web domains.
+    assert sum(s.fetchable for s in sources.load_seed()) >= 40
+
+
 def test_source_cli_flow(tmp_db: Path, tmp_path: Path) -> None:
     from typer.testing import CliRunner
 
