@@ -3,8 +3,8 @@ section: gear
 title: Running shoes and gear
 status: approved
 approved_by: Sydney
-approved_on: 2026-10-26
-content_sha256: e956a31075d5acd53b42c67dc22f6d677864971c6fb2ff26dcd780e91078cae7
+approved_on: 2026-11-01
+content_sha256: 8b4a967388f34556fa58c88e30819a814f17e481cc32e2f5a4f0fe0d36855207
 ---
 # Running shoes and gear
 
@@ -14,8 +14,8 @@ content_sha256: e956a31075d5acd53b42c67dc22f6d677864971c6fb2ff26dcd780e91078cae7
 - Fit the shoe to the runner's context: her goals, the kinds of runs she does, and any current or past injuries. A very tall stack may challenge someone with weak or unstable ankles. [@agresta-footwear-injury-paradigms-2022]
 - Big changes in shoe type (a switch to minimalist shoes, or to a carbon-plated racing shoe) should be made gradually, not all at once. [@agresta-footwear-injury-paradigms-2022] [@tenforde-carbon-plate-bone-stress-2023]
 - Carbon-plated "super shoes": bring them into training and racing step by step, and don't debut them in a long run or race. Midfoot, top-of-foot or front-of-ankle pain in someone wearing them should go to a sports-medicine clinician promptly, because navicular bone stress injuries are easy to miss. [@tenforde-carbon-plate-bone-stress-2023]
-- Shoe rotation (using more than one pair in parallel) has mixed evidence. Present it as untested, not as injury prevention. [@agresta-footwear-injury-paradigms-2022]
-- The coach never recommends a specific shoe model from these sources. Neither source reviews models, and the gear rule forbids inventing reviews. [@agresta-footwear-injury-paradigms-2022]
+- Shoe rotation (using more than one pair in parallel) has mixed evidence. One cohort of recreational runners linked it with lower injury risk, but that design can't show the shoes caused the difference. Present it as a reasonable option, not as proven injury prevention. [@agresta-footwear-injury-paradigms-2022] [@malisoux-parallel-shoes-2015]
+- The coach never recommends a specific shoe model from these sources. None of them reviews models, and the gear rule forbids inventing reviews. [@agresta-footwear-injury-paradigms-2022]
 
 ## What the sources agree on
 - Shoe design has been driven by four injury theories: pronation control, impact reduction, a habitual joint motion path, and a comfort filter. None of them has strong evidence that the matching shoe feature prevents injury. (Narrative review by running-medicine clinicians, 2022.) [@agresta-footwear-injury-paradigms-2022]
@@ -28,13 +28,16 @@ content_sha256: e956a31075d5acd53b42c67dc22f6d677864971c6fb2ff26dcd780e91078cae7
 - Carbon-plated shoes and bone stress. A case series describes 5 runners (3 male, 2 female; ages 17 to 38; junior elite track athletes and elite triathletes) who had navicular (midfoot) bone stress injuries while using carbon-fiber-plate shoes. Several had little prior use of the shoes, and two had a prior navicular injury in the same foot. A case series can't show that the shoes caused the injuries. [@tenforde-carbon-plate-bone-stress-2023]
 - Proposed mechanisms, all unproven: a stiffer forefoot changes how the foot and ankle load before toe-off; the shoes come with higher peak vertical forces and longer steps; and the soft, compressive foam may let the midfoot bones move more. Faster training paces also load bone more. [@tenforde-carbon-plate-bone-stress-2023]
 - Navicular stress injuries are often diagnosed late (the article cites an average of almost 9 months). Some of the runners kept running after symptoms began. [@tenforde-carbon-plate-bone-stress-2023]
+- Parallel shoe use. In a 22-week prospective cohort of 264 recreational runners, 87 had at least one running injury, and those using more than one pair had lower injury risk (hazard ratio 0.614, 95% CI 0.389 to 0.969). The authors suggest varied load as a possible reason. Runners chose their own shoes, so this is an association. [@malisoux-parallel-shoes-2015]
 
 ## Where they differ
 - The footwear review notes that one study found no change in running economy when the carbon plate was removed. The case series is about injury, not speed. Together they suggest that what the plate itself adds to speed is unclear, while its possible link to injury calls for caution. [@agresta-footwear-injury-paradigms-2022] [@tenforde-carbon-plate-bone-stress-2023]
 - The sources differ in strength of evidence. The footwear review pulls together cohort and randomized studies of hundreds of mostly recreational runners. The carbon-plate paper is 5 elite or junior-elite cases. Treat the carbon-plate concern as a signal to be careful, not as an established risk. [@agresta-footwear-injury-paradigms-2022] [@tenforde-carbon-plate-bone-stress-2023]
+- Rotation. The footwear review says the evidence on rotation conflicts, while the 2015 cohort found lower risk with parallel shoes. One observational cohort doesn't settle a conflict, so rotation stays unproven. [@agresta-footwear-injury-paradigms-2022] [@malisoux-parallel-shoes-2015]
 
 ## Women-specific notes
 - Neither source analyzes shoe effects by sex, and neither gives sex-specific footwear advice. Treat this guidance as mixed-sex evidence, much of it with sex unreported. [@agresta-footwear-injury-paradigms-2022] [@tenforde-carbon-plate-bone-stress-2023]
+- The parallel-shoe cohort's abstract gives no breakdown by sex, so its finding can't be applied to women specifically. [@malisoux-parallel-shoes-2015]
 - In a 13-week half-marathon training study of female recreational runners, those in motion-control shoes missed more days to pain (79) than those in neutral (64) or stability (51) shoes. [@agresta-footwear-injury-paradigms-2022]
 - One study linked greater shoe-related variation in movement, weakly, with being female, lighter and having less strength. That means women may be more affected by a shoe's design, but the evidence is thin. [@agresta-footwear-injury-paradigms-2022]
 - Two of the 5 carbon-plate bone stress cases were young women (17 and 18). The biomechanics research the paper relies on studied competitive male runners, and the authors say both sexes need study. The paper does not discuss low energy availability, RED-S or menstrual health, so for those topics see `women.md` and `health-referrals.md`. [@tenforde-carbon-plate-bone-stress-2023]
@@ -42,11 +45,12 @@ content_sha256: e956a31075d5acd53b42c67dc22f6d677864971c6fb2ff26dcd780e91078cae7
 ## Gaps
 - No approved source reviews or compares specific shoe models, brands, fit, sizing or lifespan (when to replace shoes). Don't recommend models from memory. Lab-tested independent reviews would be needed.
 - Socks, blisters, chafing and anti-chafe products, sports bras, apparel for heat or cold, hydration vests and belts, gel carriers, GPS watches and heart-rate monitors: no approved source.
-- Shoe rotation: the review only notes that the evidence conflicts. The underlying studies (Malisoux et al. 2015 on parallel shoe use) are not in the registry.
+- Shoe rotation: no randomized trial is covered, and Malisoux 2015 was read from its abstract only (copyrighted), so its adjustment details and sex breakdown were not checked.
 - Orthotics and insoles beyond the comfort-insole study: no approved clinical guidance.
 - Women-specific footwear research (sex differences in foot shape, sizing, or response to cushioning or plates): none in the registry.
 - Only the body text of the footwear review was read in full. The reference list was skimmed for titles only.
 
 ## Works cited
 - [@agresta-footwear-injury-paradigms-2022] Agresta, Cristine, et al. "Running Injury Paradigms and Their Influence on Footwear Design Features and Runner Assessment Methods: A Focused Review to Advance Evidence-Based Practice for Running Medicine Clinicians." *Frontiers in Sports and Active Living*, vol. 4, 2022, https://pmc.ncbi.nlm.nih.gov/articles/PMC8959543/. Accessed 24 Oct. 2026.
+- [@malisoux-parallel-shoes-2015] Malisoux, L., et al. "Can Parallel Use of Different Running Shoes Decrease Running-Related Injury Risk?" *Scandinavian Journal of Medicine & Science in Sports*, vol. 25, no. 1, 2015, pp. 110-115. https://doi.org/10.1111/sms.12154
 - [@tenforde-carbon-plate-bone-stress-2023] Tenforde, Adam, et al. "Bone Stress Injuries in Runners Using Carbon Fiber Plate Footwear." *Sports Medicine*, 2023, https://pmc.ncbi.nlm.nih.gov/articles/PMC10356879/. Accessed 24 Oct. 2026.

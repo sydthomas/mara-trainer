@@ -36,6 +36,7 @@ SECTIONS: dict[str, str] = {
     "women": "Menstrual cycle, contraception, low energy availability / RED-S, iron, postpartum",
     "health-referrals": "Warning signs and when to send the runner to a professional",
     "course": "Course-specific preparation (LA Marathon first)",
+    "coaching-practice": "How a coach works with one runner: communication, autonomy, adapting",
 }
 HEADINGS = (
     "Bottom line for the coach",
