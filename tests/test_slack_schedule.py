@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from mara_coach import slack_bot, slack_schedule
-from mara_trainer import db
+from mara_trainer import db, fueling
 
 from .test_slack_bot import PLAN, SYDNEY, FakeCoach, SharedDB, SlackFake, _debrief_bot
 
@@ -153,3 +153,31 @@ def _dm(text: str, ts: str) -> dict[str, Any]:
 
 def _msg(text: str, ts: str) -> dict[str, Any]:
     return {"user": SYDNEY, "text": text, "ts": ts}
+
+
+def _log_long_run(shared: SharedDB) -> None:
+    fueling.add_entry(
+        shared.conn,
+        fueling.FuelEntry("2026-11-07", distance_meters=16093, duration_seconds=5400, during="gel"),
+    )
+
+
+def test_debrief_logged_before_ten_cancels_the_queued_ping() -> None:
+    """Debriefed at 9:50am Saturday: the 10am fallback Slack holds must not post."""
+    shared, client = SharedDB(), ScheduleFake()
+    db.save_plan(shared.conn, PLAN)
+    _debrief_bot(FakeCoach([]), shared, _utc(7, 16)).maybe_schedule(client)  # Sat 8am LA
+    assert slack_schedule.ping_text(10.0) in _queued_texts(client).values()
+    _log_long_run(shared)
+    assert ("long_run_debrief", "2026-11-07") not in slack_schedule.wanted(shared.conn, _utc(7, 17))
+    _debrief_bot(FakeCoach([]), shared, _utc(7, 17, 50)).maybe_schedule(client)  # 9:50am
+    assert slack_schedule.ping_text(10.0) not in _queued_texts(client).values()
+    assert not slack_schedule.queued(shared.conn, "long_run_debrief", "2026-11-07")
+
+
+def test_no_live_ping_once_the_run_is_logged() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    _log_long_run(shared)
+    assert not _debrief_bot(FakeCoach([]), shared, _utc(7, 18)).maybe_ping(client)  # 10am LA
+    assert client.posted == []

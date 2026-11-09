@@ -75,7 +75,8 @@ On days your accepted plan has a long run, the bot DMs you at 10am (your timezon
 went. If the bot was off at 10, it sends the check-in when it starts, until 8pm. It's sent at
 most once a day. Answer however you like; the coach asks at most one follow-up, reads the entry
 back and asks "Save it?". Reply **yes** to save it to your fuel log or **no** to drop it.
-Anything else is treated as a correction. The bot has to be running for the check-in to arrive.
+Anything else is treated as a correction. If you debrief before 10am, the check-in is skipped
+(saved in the last 5 minutes before 10, Slack may already have it on its way).
 
 ## Sunday weekly check-in
 

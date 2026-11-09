@@ -2,7 +2,8 @@
 
 While the bot is awake it keeps the next `HORIZON_DAYS` of fallbacks queued with
 `chat.scheduleMessage` (recorded in `scheduled_messages`):
-- the long-run debrief ping at `PING_HOUR` on plan long-run days (static text, never cancelled),
+- the long-run debrief ping at `PING_HOUR` on plan long-run days, until that day's run is in the
+  fuel log (debriefed early: the queued ping is deleted),
 - a generic sync reminder at `SYNC_HOUR` on plan Sundays,
 - a short weekly note at `WEEKLY_HOUR` on Sundays: next week's runs from the plan, and that the
   full recap follows when the laptop wakes.
@@ -98,7 +99,7 @@ def wanted(conn: sqlite3.Connection, now: datetime) -> dict[tuple[str, str], Wan
         iso = day.isoformat()
         items: list[Wanted] = []
         session = reports.planned_session(plan, iso)
-        if session and session["kind"] == "long":
+        if session and session["kind"] == "long" and not logged(conn, iso):
             miles = round(session["distance_meters"] / MI_METERS, 1)
             items.append(Wanted(DEBRIEF_KIND, iso, _at(day, PING_HOUR, tz), ping_text(miles)))
         if day.weekday() == 6:
@@ -196,6 +197,11 @@ def cancel_for_live(conn: sqlite3.Connection, client: ScheduleClient, now: datet
             _status(conn, kind, day, "cancelled_live")
             done.append(kind)
     return done
+
+
+def logged(conn: sqlite3.Connection, day: str) -> bool:
+    """True if the fuel log has an entry for this day: the debrief is done, don't ask again."""
+    return conn.execute("SELECT 1 FROM fuel_log WHERE date = ?", (day,)).fetchone() is not None
 
 
 def queued(conn: sqlite3.Connection, kind: str, day: str) -> bool:

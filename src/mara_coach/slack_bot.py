@@ -464,8 +464,8 @@ class SlackCoach:
                 return False
             day = local.date().isoformat()
             session = reports.planned_session(db.load_accepted_plan(conn), day)
-            if not session or session["kind"] != "long":
-                return False
+            if not session or session["kind"] != "long" or slack_schedule.logged(conn, day):
+                return False  # no long run, or she already debriefed it
             sent = conn.execute(
                 "SELECT 1 FROM notifications WHERE kind = ? AND date = ?", (DEBRIEF_KIND, day)
             ).fetchone()
@@ -646,8 +646,7 @@ class SlackCoach:
                 closed = conn.execute(
                     "SELECT 1 FROM notifications WHERE kind = ? AND date = ?", (DEBRIEF_CLOSED, iso)
                 ).fetchone()
-                logged = conn.execute("SELECT 1 FROM fuel_log WHERE date = ?", (iso,)).fetchone()
-                if sent and not closed and not logged:
+                if sent and not closed and not slack_schedule.logged(conn, iso):
                     miles = round(session["distance_meters"] / tools.MI_METERS, 1)
                     return Debrief(iso, miles, self.clock() + DEBRIEF_TTL)
             return None
