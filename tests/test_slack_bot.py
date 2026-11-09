@@ -483,3 +483,64 @@ def test_no_sync_nudge_when_runs_are_in_or_no_plan_week() -> None:
     _import_run(shared.conn, datetime(2026, 11, 7, 16, 0, tzinfo=UTC))  # Sat 8am LA
     assert not _debrief_bot(FakeCoach([]), shared, _sun(1, 9)).maybe_sync_nudge(client)
     assert client.posted == []
+
+
+# ------------------------------------------------------------------ COROS sync from Slack
+
+from mara_coach import coros  # noqa: E402
+
+
+def _sync_bot(shared: Any, sync: Any) -> SlackCoach:
+    return SlackCoach(SYDNEY, lambda conn: FakeCoach([]), shared, Clock(), lambda: _sun(4), sync)
+
+
+def test_sync_runs_in_code_without_the_coach() -> None:
+    shared, client, seen = SharedDB(), FakeClient(), []
+
+    def sync(conn: sqlite3.Connection, now: datetime) -> coros.SyncReport:
+        seen.append(now)
+        _import_run(conn, datetime(2026, 11, 7, 16, 0, tzinfo=UTC))
+        return coros.SyncReport("2026-11-02", "2026-11-08", imported=["Sat 11/7: 10.00 mi"])
+
+    _sync_bot(shared, sync).handle(_dm("Sync my runs!"), client)
+    assert seen == [_sun(4)]
+    assert client.posted == [{"channel": "D1", "text": slack_bot.SYNCING}]
+    text = client.updated[0]["text"]
+    assert "Sat 11/7: 10.00 mi" in text and "This week: 1 runs, 10.00 mi" in text
+
+
+@pytest.mark.parametrize("text", ["sync", "sync runs", "please sync my runs from COROS"])
+def test_sync_phrases(text: str) -> None:
+    assert slack_bot.SYNC.match(text)
+    assert not slack_bot.SYNC.match("should I sync my runs before the long run?")
+
+
+def test_sync_errors_become_a_reply() -> None:
+    client = FakeClient()
+
+    def sync(conn: sqlite3.Connection, now: datetime) -> coros.SyncReport:
+        raise coros.SignInNeeded
+
+    _sync_bot(SharedDB(), sync).handle(_dm("sync"), client)
+    assert client.updated[0]["text"] == coros.SIGN_IN_AGAIN
+
+
+def _dup_report(tmp_path: Path) -> coros.SyncReport:
+    path = tmp_path / "1.fit"
+    path.write_bytes(b"")
+    pending = coros.Pending(path, ("k",), ("Sat 11/7: 10.00 mi, 1:30:00",))
+    return coros.SyncReport("2026-11-02", "2026-11-08", pending=[pending])
+
+
+def test_duplicates_import_only_on_yes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    confirmed: list[Any] = []
+    monkeypatch.setattr(coros, "import_confirmed", lambda conn, items: confirmed.append(items) or 1)
+    shared, client = SharedDB(), FakeClient()
+    bot = _sync_bot(shared, lambda conn, now: _dup_report(tmp_path))
+    bot.handle({**_dm("sync"), "ts": "1"}, client)
+    assert "Reply *yes*" in client.updated[0]["text"]
+    bot.handle({**_dm("yes"), "ts": "2"}, client)
+    assert len(confirmed) == 1 and client.posted[-1]["text"] == "Imported 1 more run(s)."
+    bot.handle({**_dm("sync"), "ts": "3"}, client)
+    bot.handle({**_dm("no"), "ts": "4"}, client)
+    assert len(confirmed) == 1 and client.posted[-1]["text"] == slack_bot.SKIPPED

@@ -16,6 +16,8 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | One DM channel and message cursor | `slack_state` (`dm_channel`, `last_handled_ts`), `scheduled_messages` | Key both by athlete (and Slack user) |
 | Schedule constants | `slack_bot.py`: 10am debrief, 5pm sync nudge, 6pm weekly ("Sydney's choice") | Per-athlete settings in the DB |
 | COROS through Claude Code | `.mcp.json`, one OAuth login on her laptop; `coros-sync` and `coros-run-planner` are skills | Per-user OAuth with tokens stored server-side; sync and push become server jobs |
+| One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
+| One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
 | Local files | `exports/`, `plans/`, `data/eval-runs/` | Object storage keyed by athlete, or rows in the DB |
 | Approvals by name | `sources.approved_by`, knowledge approvals, "only Sydney approves" | A coach/admin role. Sources and knowledge stay shared; runners never approve them |
 | Cost by channel only | `api_usage` | Add `athlete_id` for cost per user and per-user limits |

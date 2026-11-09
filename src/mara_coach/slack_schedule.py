@@ -37,8 +37,8 @@ LIVE_REPLACEABLE = (SYNC_KIND, WEEKLY_KIND)
 MI_METERS = 1609.344
 RUN_KINDS = ("easy", "workout", "long")
 SYNC_FALLBACK = (
-    "Check-in at 6pm. If you haven't synced this week's runs, say \"sync my runs\" in Claude "
-    "Code first so the recap has your data."
+    "Check-in at 6pm. If you haven't synced this week's runs, reply \"sync my runs\" here "
+    "first so the recap has your data."
 )
 
 

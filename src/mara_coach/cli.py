@@ -12,9 +12,20 @@ from typing import Annotated
 import typer
 
 from mara_trainer import db
-from mara_trainer.cli import _conn, _fail, _out, app
+from mara_trainer.cli import _conn, _fail, _out, app, coros_app
 
-from . import agent, evals, evals_runner, knowledge, profile, slack_bot, sources, tools, usage
+from . import (
+    agent,
+    coros,
+    evals,
+    evals_runner,
+    knowledge,
+    profile,
+    slack_bot,
+    sources,
+    tools,
+    usage,
+)
 from .env import load_env
 
 source_app = typer.Typer(help="Source registry: vetted references the coach may cite.")
@@ -372,6 +383,47 @@ def usage_cmd(
     """Claude API spend: answers, cost by channel and model, cost per answer, 30-day projection."""
     today = datetime.now(UTC).date().isoformat()
     _out(usage.report(_conn(), since=usage.since_days(today, days), today=today))
+
+
+@coros_app.command("login")
+def coros_login() -> None:
+    """Sign in to COROS once in the browser (official MCP server). Tokens go to the keychain."""
+    try:
+        coros.login()
+    except coros.CorosError as exc:
+        _fail(str(exc))
+    _out({"ok": True, "status": "COROS connected; `coach coros sync` and Slack sync can run"})
+
+
+@coros_app.command("sync")
+def coros_sync() -> None:
+    """Import this training week's COROS runs (Monday through today) as FIT files. Exit 2 when
+    near-duplicates need confirmation: nothing is written for those files."""
+    conn = _conn()
+    try:
+        report = coros.sync_week(conn)
+    except (coros.CorosError, LookupError) as exc:
+        _fail(str(exc))
+    out = {
+        "start": report.start,
+        "end": report.end,
+        "imported": report.imported,
+        "already_present": report.already_present,
+        "not_downloaded": report.not_downloaded,
+        "error": report.error,
+        "possible_duplicates": [
+            {"file": str(p.path), "keys": list(p.keys), "runs": list(p.runs)}
+            for p in report.pending
+        ],
+    }
+    if report.pending:
+        out["message"] = (
+            "Possible duplicates; those files weren't imported. Confirm with the runner, then "
+            "`coach import FILE --allow-duplicate KEY` for runs that are genuinely different."
+        )
+        typer.echo(json.dumps(out, indent=2))
+        raise typer.Exit(2)
+    _out(out)
 
 
 slack_app = typer.Typer(help="Slack: chat with the coach by DM (Socket Mode).")

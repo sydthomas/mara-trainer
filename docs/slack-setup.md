@@ -85,6 +85,19 @@ coming week (each run with effort, strength days, and the week's focus from appr
 sections), and one question about your week. Reply to adjust anything. It only runs while the
 plan covers that week or the next, and costs about 15 to 20 cents each.
 
+## Sync your runs from Slack
+
+DM the bot **sync my runs** (or just **sync**) to pull this week's COROS runs into the database,
+from your phone or anywhere. It runs the same steps as the `coros-sync` skill in plain code, with
+no API cost: it lists this week's runs, downloads each new FIT file once, imports it, and replies
+with each run and the week's total. If a run looks like one already imported (often an Apple
+Health copy), it asks first: **yes** imports it as a separate run, **no** skips it.
+
+One-time setup on the laptop: `uv run coach coros login` opens the COROS sign-in in your browser.
+The sign-in is saved in your macOS keychain (not in `.env`). If COROS ever asks you to sign in
+again, the bot tells you to rerun that command. Like everything else, it needs the laptop awake;
+a "sync" sent while it sleeps runs when it wakes.
+
 ## Notes
 
 - Each answer costs about 10 to 15 cents in API usage, the same as `coach ask`.

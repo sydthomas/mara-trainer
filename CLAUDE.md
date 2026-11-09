@@ -61,6 +61,12 @@ be summarized. If no approved source covers a question, the coach says so.
   week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
   targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
   with reasons; exit 1 if no race or the week isn't in the accepted plan
+- `uv run coach coros login` — one-time COROS sign-in in the browser for code-side sync (official MCP
+  server, OAuth via the `mcp` SDK; client registration + tokens in the macOS keychain, service
+  `mara-trainer-coros`, never in a file)
+- `uv run coach coros sync` — `coros-sync` in plain code (`mara_coach/coros.py`, no LLM): this week's
+  runs (Monday through today), FIT downloaded once into `exports/coros/`, then the normal import;
+  exit 2 = near-duplicates need confirmation (those files not imported). Slack: "sync my runs"
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
@@ -125,12 +131,16 @@ be summarized. If no approved source covers a question, the coach says so.
   - Sync: the `coros-sync` skill pulls the current training week's runs (Monday through today;
     Monday-Sunday weeks, like the plan) (`downloadActivityFitFiles` per run, copied to
     `exports/coros/<labelId>.fit`, skipped if present; then `coach import`, so re-running is safe).
-    Sundays at 5pm local the Slack bot nudges her to sync if fewer runs are imported than planned.
+    Sundays at 5pm local the Slack bot nudges her to sync if fewer runs are imported than planned;
+    she can reply "sync my runs" in Slack (code-side sync, below).
   - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar
     (Sunday, after the weekly check-in; the Slack check-in ends with a nudge). Workouts come only
     from `coach coros week`, sent unchanged after one yes for the week. The MCP can't move or
     delete scheduled workouts, so check `queryTrainingSchedule` first and never create twice.
-  - Not in `mara_coach` yet: wiring COROS into the coach agent is a separate, planned step.
+  - Code-side sync (`mara_coach/coros.py`, `coach coros sync`, "sync my runs" in Slack): the same
+    read-only flow as `coros-sync` without an LLM; it calls only `querySportRecords` and
+    `downloadActivityFitFiles`. Its own OAuth sign-in (`coach coros login`), tokens in the keychain.
+  - Not in `mara_coach` yet: COROS tools for the coach agent itself are a separate, planned step.
 - **Strava — not used.** Strava's API Policy of 2026-06-01 bars storing Strava data or feeding it
   to AI apps outside Strava's own MCP. Don't add Strava MCPs, stravalib, OAuth, webhooks or sync
   code, and don't add a `strava` source to the DB (the schema leaves it out on purpose).
@@ -195,7 +205,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
   `fueling.py` (fueling log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
-- `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
+- `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent); agent and Slack land here
 - `knowledge/` — the knowledge base: one cited Markdown section per topic (README = format)
