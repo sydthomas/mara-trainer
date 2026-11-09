@@ -6,6 +6,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 ## [Unreleased]
 
 ### Added
+- Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
+  API cost), asks before importing possible duplicates, and replies with the week's total. Also
+  `coach coros login` (one-time sign-in, saved in the macOS keychain) and `coach coros sync`.
 - Coach: writes the coming week after the Sunday check-in, with exact lifts, through a new
   `propose_week` tool. Guardrails check it, and the Slack bot saves it only on a yes; the previous
   plan stays archived.

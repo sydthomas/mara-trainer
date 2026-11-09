@@ -20,6 +20,8 @@
   `CATCH_UP_WINDOW`) in one reply. A stored cursor of the newest handled message means Slack
   retries and catch-up never answer the same message twice. Debrief context comes from the DB
   (plan, ping record, fuel log), so it survives restarts.
+- COROS sync: "sync my runs" (or just "sync") pulls this week's runs in code with `coros`, no
+  coach call. Possible duplicates are imported only if she replies yes.
 - Socket watchdog: the Slack client can retry broken sessions forever while the process looks
   healthy, so after `STUCK_AFTER` of repeating socket errors the bot exits and launchd restarts it.
 - Tokens come from the environment (`.env`); this module never reads, prints or logs them.
@@ -42,7 +44,7 @@ from zoneinfo import ZoneInfo
 
 from mara_trainer import db, fueling, reports
 
-from . import slack_schedule, tools
+from . import coros, slack_schedule, tools
 from .agent import Coach, CoachError
 from .slack_schedule import (
     DEBRIEF_KIND,
@@ -115,7 +117,7 @@ def exit_when_stuck(
 def sync_nudge_text(imported: int, planned: int) -> str:
     return (
         f"Your runs this week: {imported} of {planned} planned are imported. Before your 6pm "
-        'check-in, say "sync my runs" in Claude Code so the recap has your data.'
+        'check-in, reply "sync my runs" here so the recap has your data.'
     )
 
 
@@ -152,6 +154,9 @@ write the week's exact sessions from her answer.
 Keep it brief and cite sources at the end."""
 
 
+SYNC = re.compile(r"^\s*(please\s+)?sync(\s+my)?(\s+runs)?(\s+from\s+coros)?\b[\s.!]*$", re.I)
+SYNCING = "Syncing your runs from COROS..."
+SKIPPED = "Okay, skipped those."
 YES = re.compile(r"^\s*(y|yes|yep|yeah|yup|sure|ok|okay|save|save it|do it)\b[\s.!]*$", re.I)
 NO = re.compile(r"^\s*(n|no|nope|cancel|don'?t save|do not save)\b[\s.!]*$", re.I)
 CANCELLED = "Okay, not saved."
@@ -213,6 +218,11 @@ class WeekProposal:
     focus: str | None = None
 
 
+@dataclass(frozen=True)
+class DuplicateRuns:
+    items: tuple[coros.Pending, ...]
+
+
 @dataclass
 class Conversation:
     turns: list[dict[str, Any]] = field(default_factory=list)
@@ -220,7 +230,7 @@ class Conversation:
     lock: threading.Lock = field(default_factory=threading.Lock)
     debrief: Debrief | None = None
     # proposed by the coach, saved only on "yes"
-    pending: fueling.FuelEntry | WeekProposal | None = None
+    pending: fueling.FuelEntry | WeekProposal | DuplicateRuns | None = None
 
 
 def _get(block: Any, key: str) -> Any:
@@ -275,12 +285,14 @@ class SlackCoach:
         connect: Callable[[], sqlite3.Connection] | None = None,
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        sync: Callable[[sqlite3.Connection, datetime], coros.SyncReport] = coros.sync_week,
     ) -> None:
         self.allowed_user = allowed_user
         self.coach_factory = coach_factory or (lambda conn: Coach(conn, channel="slack"))
         self.connect = connect or _connect
         self.clock = clock
         self.now = now
+        self.sync = sync
         self.conversations: dict[str, Conversation] = {}
         self._guard = threading.Lock()
 
@@ -309,12 +321,19 @@ class SlackCoach:
         with convo.lock:
             if not self._claim(event.get("ts")):
                 return  # already handled (a Slack retry, or answered by catch-up)
+            if SYNC.match(text):
+                self._sync(channel, convo, client)
+                return
             if convo.debrief is None:
                 convo.debrief = self._open_debrief()
             if convo.pending is not None and YES.match(text):
                 self._save(channel, convo, client)
                 return
             if convo.pending is not None and NO.match(text):
+                if isinstance(convo.pending, DuplicateRuns):
+                    convo.pending = None
+                    client.chat_postMessage(channel=channel, text=SKIPPED)
+                    return
                 if isinstance(convo.pending, WeekProposal):
                     convo.pending = None
                 else:
@@ -378,8 +397,41 @@ class SlackCoach:
             text=f"Saved Week {saved['week']}. {note}\n\n{reports.week_card(saved, week.focus)}",
         )
 
+    def _sync(self, channel: str, convo: Conversation, client: SlackClient) -> None:
+        """Pull this week's COROS runs in code. A possible duplicate waits for her yes."""
+        placeholder = client.chat_postMessage(channel=channel, text=SYNCING)
+        conn = self.connect()
+        try:
+            report = self.sync(conn, self.now())
+            text = coros.report_text(conn, report)
+        except coros.CorosError as exc:
+            report, text = None, str(exc)
+        except Exception:  # network or SDK surprises: keep the bot up
+            log.exception("COROS sync failed")
+            report, text = None, "Couldn't sync from COROS just now. Try again in a few minutes."
+        finally:
+            conn.close()
+        if report is not None and report.pending:
+            convo.pending = DuplicateRuns(tuple(report.pending))
+            text += "\n\n" + coros.duplicate_question(report.pending)
+        client.chat_update(channel=channel, ts=placeholder["ts"], text=text)
+
+    def _save_duplicates(
+        self, channel: str, convo: Conversation, runs: DuplicateRuns, client: SlackClient
+    ) -> None:
+        convo.pending = None
+        conn = self.connect()
+        try:
+            count = coros.import_confirmed(conn, runs.items)
+        finally:
+            conn.close()
+        client.chat_postMessage(channel=channel, text=f"Imported {count} more run(s).")
+
     def _save(self, channel: str, convo: Conversation, client: SlackClient) -> None:
         assert convo.pending is not None
+        if isinstance(convo.pending, DuplicateRuns):
+            self._save_duplicates(channel, convo, convo.pending, client)
+            return
         if isinstance(convo.pending, WeekProposal):
             self._save_week(channel, convo, convo.pending, client)
             return
