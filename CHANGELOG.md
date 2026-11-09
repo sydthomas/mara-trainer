@@ -23,6 +23,8 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   mix in the real runner's profile and plan. Eval costs are in its report, not `coach usage`.
 
 ### Fixed
+- Slack: no 10am long-run check-in once that day's run is in the fuel log (it asked again
+  after an early debrief).
 - Coach: no longer says Strava data lives in Claude Code; offers COROS, FIT, GPX or Apple Health.
 - Coach: says a reworked week hasn't passed validation, and names low energy availability
   (RED-S) for bone stress injuries, low bone density and missed periods.
