@@ -544,3 +544,130 @@ def test_duplicates_import_only_on_yes(tmp_path: Path, monkeypatch: pytest.Monke
     bot.handle({**_dm("sync"), "ts": "3"}, client)
     bot.handle({**_dm("no"), "ts": "4"}, client)
     assert len(confirmed) == 1 and client.posted[-1]["text"] == slack_bot.SKIPPED
+
+
+# ------------------------------------------------------------------ restart-proof replies
+
+NOON = _sun(20)  # Sun 2026-11-08 noon LA
+
+
+def _leftover(shared: SharedDB, **job: Any) -> None:
+    """What a bot killed mid-reply leaves behind."""
+    job = {
+        "kind": "answer",
+        "channel": "D1",
+        "placeholder": "ts9",
+        "tries": 1,
+        "question": "Q",
+        "at": NOON.timestamp(),
+        **job,
+    }
+    slack_bot._set_state(shared.conn, slack_bot.INFLIGHT_KEY, json.dumps(job))
+
+
+def _inflight(shared: SharedDB) -> dict[str, Any] | None:
+    raw = slack_bot._state(shared.conn, slack_bot.INFLIGHT_KEY)
+    return None if raw is None else json.loads(raw)
+
+
+def test_a_reply_is_recorded_while_it_is_written_then_cleared() -> None:
+    shared, seen = SharedDB(), []
+
+    class Peek(FakeCoach):
+        def ask(self, question: str, history: list[dict[str, Any]] | None = None) -> CoachReply:
+            seen.append(_inflight(shared))
+            return super().ask(question, history)
+
+    _debrief_bot(Peek(["A"]), shared, NOON).handle(_dm("How's my week?"), FakeClient())
+    assert seen[0] is not None
+    assert (seen[0]["question"], seen[0]["placeholder"], seen[0]["tries"]) == (
+        "How's my week?",
+        "ts1",
+        1,
+    )
+    assert _inflight(shared) is None
+
+
+def test_resume_finishes_a_cut_off_reply_in_its_placeholder() -> None:
+    shared, client, coach = SharedDB(), FakeClient(), FakeCoach(["Here's your week."])
+    _leftover(shared)
+    bot = _debrief_bot(coach, shared, NOON)
+    assert bot.resume(client)
+    assert coach.calls == [("Q", [])]
+    assert client.posted == []  # no second placeholder
+    assert client.updated == [{"channel": "D1", "ts": "ts9", "text": "Here's your week."}]
+    assert _inflight(shared) is None and not bot.resume(client)
+
+
+@pytest.mark.parametrize(
+    "job",
+    [{"tries": slack_bot.MAX_TRIES}, {"at": NOON.timestamp() - slack_bot.CATCH_UP_WINDOW - 1}],
+)
+def test_resume_gives_up_after_max_tries_or_when_stale(job: dict[str, Any]) -> None:
+    shared, client, coach = SharedDB(), FakeClient(), FakeCoach([])
+    _leftover(shared, **job)
+    assert _debrief_bot(coach, shared, NOON).resume(client)
+    assert coach.calls == []
+    assert client.updated == [{"channel": "D1", "ts": "ts9", "text": slack_bot.LOST}]
+    assert _inflight(shared) is None
+
+
+def test_resume_reruns_a_cut_off_sync() -> None:
+    shared, client = SharedDB(), FakeClient()
+    _leftover(shared, kind="sync", question="")
+    report = coros.SyncReport("2026-11-02", "2026-11-08", already_present=4)
+    bot = SlackCoach(
+        SYDNEY, lambda conn: FakeCoach([]), shared, Clock(), lambda: NOON, lambda conn, now: report
+    )
+    assert bot.resume(client)
+    assert client.updated[0]["ts"] == "ts9" and "all already imported" in client.updated[0]["text"]
+    assert _inflight(shared) is None
+
+
+def test_history_survives_a_restart_until_idle_reset() -> None:
+    shared = SharedDB()
+    _debrief_bot(FakeCoach(["A1"]), shared, NOON).handle(_dm("Q1"), FakeClient())
+    after_restart = FakeCoach(["A2"])
+    _debrief_bot(after_restart, shared, NOON + timedelta(minutes=5)).handle(_dm("Q2"), FakeClient())
+    assert after_restart.calls[0][1] == [
+        {"role": "user", "content": "Q1"},
+        {"role": "assistant", "content": "A1"},
+    ]
+    later = FakeCoach(["A3"])
+    idle = NOON + timedelta(minutes=5, seconds=slack_bot.IDLE_RESET + 1)
+    _debrief_bot(later, shared, idle).handle(_dm("Q3"), FakeClient())
+    assert later.calls[0][1] == []
+
+
+def test_debrief_yes_still_saves_after_a_restart() -> None:
+    shared = SharedDB()
+    proposing = ProposingCoach(["Here's the entry. Save it?"], PROPOSAL)
+    _debrief_bot(proposing, shared, NOON).handle(_dm("10 mi, 1:30, 7 chews"), FakeClient())
+    client = FakeClient()
+    _debrief_bot(FakeCoach(["Nice work."]), shared, NOON).handle(_dm("yes"), client)  # restarted
+    assert shared.conn.execute("SELECT count(*) FROM fuel_log").fetchone()[0] == 1
+    assert client.posted[0]["text"].startswith("Saved to your fuel log")
+
+
+def test_duplicate_yes_still_imports_after_a_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    confirmed: list[Any] = []
+    monkeypatch.setattr(coros, "import_confirmed", lambda conn, items: confirmed.append(items) or 1)
+    shared = SharedDB()
+    _sync_bot(shared, lambda conn, now: _dup_report(tmp_path)).handle(_dm("sync"), FakeClient())
+    client = FakeClient()
+    _sync_bot(shared, lambda conn, now: _dup_report(tmp_path)).handle(_dm("yes"), client)
+    assert [i.path for i in confirmed[0]] == [tmp_path / "1.fit"]
+    assert client.posted[-1]["text"] == "Imported 1 more run(s)."
+
+
+def test_pending_round_trips_and_bad_data_is_dropped() -> None:
+    week = slack_bot.WeekProposal("2026-11-09", [{"day": 6, "kind": "long"}], focus="fueling")
+    entry = fueling.FuelEntry("2026-11-07", distance_meters=16093, carbs_grams=27.0)
+    for pending in (week, entry):
+        raw = json.loads(json.dumps(slack_bot.encode_pending(pending)))
+        assert slack_bot.decode_pending(raw) == pending
+    assert slack_bot.decode_pending({"type": "fuel", "date": "2026-11-07", "bogus": 1}) is None
+    assert slack_bot.decode_pending({"type": "fuel", "date": "Saturday"}) is None
+    assert slack_bot.decode_pending(None) is None

@@ -22,6 +22,12 @@
   (plan, ping record, fuel log), so it survives restarts.
 - COROS sync: "sync my runs" (or just "sync") pulls this week's runs in code with `coros`, no
   coach call. Possible duplicates are imported only if she replies yes.
+- Restart-proof replies: a reply in progress is recorded in `slack_state` (`INFLIGHT_KEY`) until
+  its placeholder is edited. On start, `resume` finishes it in the same placeholder (at most
+  `MAX_TRIES` attempts, so a reply that crashes the bot can't loop), or says it was lost if it's
+  older than `CATCH_UP_WINDOW`. The DM's text history and any yes/no question still waiting
+  (`pending`) are saved too (`TURNS_KEY`), so a restart within `IDLE_RESET` keeps the
+  conversation and her "yes" still saves.
 - Socket watchdog: the Slack client can retry broken sessions forever while the process looks
   healthy, so after `STUCK_AFTER` of repeating socket errors the bot exits and launchd restarts it.
 - Tokens come from the environment (`.env`); this module never reads, prints or logs them.
@@ -30,15 +36,18 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import sqlite3
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
@@ -77,6 +86,10 @@ WEEKLY_FAILED = (
 )
 
 DEBRIEF_CLOSED = "long_run_debrief_closed"  # she said no to saving: don't reopen that day
+INFLIGHT_KEY = "inflight_reply"  # the reply being written, so a restart can finish it
+TURNS_KEY = "dm_turns"  # text history, so a restart keeps the conversation
+MAX_TRIES = 2
+LOST = "Sorry, I lost this one when I restarted. Send it again?"
 CURSOR_KEY = "last_handled_ts"  # newest DM handled, so retries and catch-up never answer twice
 CATCH_UP_WINDOW = 36 * 60 * 60  # seconds: older missed DMs are stale
 CATCH_UP_EVERY = 15 * 60  # seconds between routine catch-up checks
@@ -223,6 +236,44 @@ class DuplicateRuns:
     items: tuple[coros.Pending, ...]
 
 
+Pending = fueling.FuelEntry | WeekProposal | DuplicateRuns | None
+
+
+def encode_pending(pending: Pending) -> dict[str, Any] | None:
+    """A waiting yes/no proposal as JSON, so it survives a restart."""
+    if isinstance(pending, fueling.FuelEntry):
+        return {"type": "fuel", **asdict(pending)}
+    if isinstance(pending, WeekProposal):
+        return {"type": "week", **asdict(pending)}
+    if isinstance(pending, DuplicateRuns):
+        items = [{"path": str(i.path), "keys": i.keys, "runs": i.runs} for i in pending.items]
+        return {"type": "duplicates", "items": items}
+    return None
+
+
+def decode_pending(raw: dict[str, Any] | None) -> Pending:
+    """The reverse of `encode_pending`; anything unreadable is dropped, never guessed."""
+    if not raw:
+        return None
+    data = {k: v for k, v in raw.items() if k != "type"}
+    try:
+        if raw.get("type") == "fuel":
+            entry = fueling.FuelEntry(**data)
+            return None if entry.problems() else entry
+        if raw.get("type") == "week":
+            return WeekProposal(**data)
+        if raw.get("type") == "duplicates":
+            return DuplicateRuns(
+                tuple(
+                    coros.Pending(Path(i["path"]), tuple(i["keys"]), tuple(i["runs"]))
+                    for i in data["items"]
+                )
+            )
+    except (TypeError, KeyError):
+        log.warning("dropped an unreadable saved proposal")
+    return None
+
+
 @dataclass
 class Conversation:
     turns: list[dict[str, Any]] = field(default_factory=list)
@@ -230,7 +281,8 @@ class Conversation:
     lock: threading.Lock = field(default_factory=threading.Lock)
     debrief: Debrief | None = None
     # proposed by the coach, saved only on "yes"
-    pending: fueling.FuelEntry | WeekProposal | DuplicateRuns | None = None
+    pending: Pending = None
+    channel: str = ""
 
 
 def _get(block: Any, key: str) -> Any:
@@ -298,7 +350,11 @@ class SlackCoach:
 
     def _conversation(self, channel: str) -> Conversation:
         with self._guard:
-            convo = self.conversations.setdefault(channel, Conversation())
+            convo = self.conversations.get(channel)
+            if convo is None:
+                turns, pending = self._saved_conversation(channel)
+                convo = Conversation(turns, self.clock(), pending=pending, channel=channel)
+                self.conversations[channel] = convo
         now = self.clock()
         if (convo.turns or convo.pending) and now - convo.last_seen > IDLE_RESET:
             convo.turns, convo.pending = [], None
@@ -318,7 +374,7 @@ class SlackCoach:
             client.chat_postMessage(channel=channel, text=NOT_ALLOWED)
             return
         convo = self._conversation(channel)
-        with convo.lock:
+        with convo.lock, self._saving(convo):
             if not self._claim(event.get("ts")):
                 return  # already handled (a Slack retry, or answered by catch-up)
             if SYNC.match(text):
@@ -350,10 +406,102 @@ class SlackCoach:
                 )
             self._reply(channel, convo, client, question)
 
-    def _reply(self, channel: str, convo: Conversation, client: SlackClient, question: str) -> None:
-        placeholder = client.chat_postMessage(channel=channel, text=THINKING)
-        answer = self._answer(question, convo)
-        client.chat_update(channel=channel, ts=placeholder["ts"], text=to_mrkdwn(answer))
+    def _reply(
+        self,
+        channel: str,
+        convo: Conversation,
+        client: SlackClient,
+        question: str,
+        placeholder: str | None = None,
+        tries: int = 1,
+    ) -> None:
+        if placeholder is None:
+            placeholder = client.chat_postMessage(channel=channel, text=THINKING)["ts"]
+        self._track("answer", channel, placeholder, tries, question)
+        try:
+            answer = self._answer(question, convo)
+            client.chat_update(channel=channel, ts=placeholder, text=to_mrkdwn(answer))
+        finally:
+            self._untrack()
+
+    def resume(self, client: SlackClient) -> bool:
+        """On start: finish the reply a restart cut off, in its placeholder. True if one was."""
+        conn = self.connect()
+        try:
+            raw = _state(conn, INFLIGHT_KEY)
+        finally:
+            conn.close()
+        if raw is None:
+            return False
+        job = json.loads(raw)
+        channel, placeholder, tries = job["channel"], job["placeholder"], job["tries"] + 1
+        convo = self._conversation(channel)
+        with convo.lock, self._saving(convo):
+            stale = self.now().timestamp() - job["at"] > CATCH_UP_WINDOW
+            if stale or tries > MAX_TRIES:
+                self._untrack()
+                client.chat_update(channel=channel, ts=placeholder, text=LOST)
+            elif job["kind"] == "sync":
+                self._sync(channel, convo, client, placeholder, tries)
+            else:
+                self._reply(channel, convo, client, job["question"], placeholder, tries)
+        return True
+
+    def _track(self, kind: str, channel: str, placeholder: str, tries: int, question: str) -> None:
+        job = {
+            "kind": kind,
+            "channel": channel,
+            "placeholder": placeholder,
+            "tries": tries,
+            "question": question,
+            "at": self.now().timestamp(),
+        }
+        conn = self.connect()
+        try:
+            _set_state(conn, INFLIGHT_KEY, json.dumps(job))
+        finally:
+            conn.close()
+
+    def _untrack(self) -> None:
+        conn = self.connect()
+        try:
+            with conn:
+                conn.execute("DELETE FROM slack_state WHERE key = ?", (INFLIGHT_KEY,))
+        finally:
+            conn.close()
+
+    def _saved_conversation(self, channel: str) -> tuple[list[dict[str, Any]], Pending]:
+        conn = self.connect()
+        try:
+            raw = _state(conn, TURNS_KEY)
+        finally:
+            conn.close()
+        saved = json.loads(raw) if raw else {}
+        fresh = self.now().timestamp() - saved.get("at", 0) <= IDLE_RESET
+        if saved.get("channel") != channel or not fresh:
+            return [], None
+        return list(saved["turns"]), decode_pending(saved.get("pending"))
+
+    @contextmanager
+    def _saving(self, convo: Conversation) -> Iterator[None]:
+        """Save the conversation when the block ends, however it ends."""
+        try:
+            yield
+        finally:
+            self._save_turns(convo)
+
+    def _save_turns(self, convo: Conversation) -> None:
+        saved = {
+            "channel": convo.channel,
+            "turns": convo.turns,
+            "pending": encode_pending(convo.pending),
+            "at": self.now().timestamp(),
+        }
+        conn = self.connect()
+        try:
+            _set_state(conn, TURNS_KEY, json.dumps(saved))
+        finally:
+            conn.close()
 
     def today(self, conn: sqlite3.Connection) -> str:
         return self.now().astimezone(ZoneInfo(db.athlete_timezone(conn))).date().isoformat()
@@ -397,24 +545,37 @@ class SlackCoach:
             text=f"Saved Week {saved['week']}. {note}\n\n{reports.week_card(saved, week.focus)}",
         )
 
-    def _sync(self, channel: str, convo: Conversation, client: SlackClient) -> None:
+    def _sync(
+        self,
+        channel: str,
+        convo: Conversation,
+        client: SlackClient,
+        placeholder: str | None = None,
+        tries: int = 1,
+    ) -> None:
         """Pull this week's COROS runs in code. A possible duplicate waits for her yes."""
-        placeholder = client.chat_postMessage(channel=channel, text=SYNCING)
-        conn = self.connect()
+        if placeholder is None:
+            placeholder = client.chat_postMessage(channel=channel, text=SYNCING)["ts"]
+        self._track("sync", channel, placeholder, tries, "")
         try:
-            report = self.sync(conn, self.now())
-            text = coros.report_text(conn, report)
-        except coros.CorosError as exc:
-            report, text = None, str(exc)
-        except Exception:  # network or SDK surprises: keep the bot up
-            log.exception("COROS sync failed")
-            report, text = None, "Couldn't sync from COROS just now. Try again in a few minutes."
+            conn = self.connect()
+            try:
+                report = self.sync(conn, self.now())
+                text = coros.report_text(conn, report)
+            except coros.CorosError as exc:
+                report, text = None, str(exc)
+            except Exception:  # network or SDK surprises: keep the bot up
+                log.exception("COROS sync failed")
+                report = None
+                text = "Couldn't sync from COROS just now. Try again in a few minutes."
+            finally:
+                conn.close()
+            if report is not None and report.pending:
+                convo.pending = DuplicateRuns(tuple(report.pending))
+                text += "\n\n" + coros.duplicate_question(report.pending)
+            client.chat_update(channel=channel, ts=placeholder, text=text)
         finally:
-            conn.close()
-        if report is not None and report.pending:
-            convo.pending = DuplicateRuns(tuple(report.pending))
-            text += "\n\n" + coros.duplicate_question(report.pending)
-        client.chat_update(channel=channel, ts=placeholder["ts"], text=text)
+            self._untrack()
 
     def _save_duplicates(
         self, channel: str, convo: Conversation, runs: DuplicateRuns, client: SlackClient
@@ -478,6 +639,7 @@ class SlackCoach:
                 client.chat_postMessage(channel=channel, text=ping_text(miles))
                 reports.mark_notified(conn, DEBRIEF_KIND, day)
                 convo.turns, convo.pending = [], None
+                self._save_turns(convo)
                 convo.debrief = Debrief(day, miles, self.clock() + DEBRIEF_TTL)
             return True
         finally:
@@ -679,6 +841,7 @@ class SlackCoach:
             {"role": "assistant", "content": answer},
         ]
         convo.turns = convo.turns[-2 * MAX_TURNS :]
+        self._save_turns(convo)
         return answer
 
 
@@ -715,6 +878,7 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+    logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = App(token=env["SLACK_BOT_TOKEN"])
     if setup_mode(env):
 
@@ -731,6 +895,10 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
 
         def check_in_loop() -> None:
             client = cast(SlackClient, app.client)
+            try:
+                bot.resume(client)  # a reply the last restart cut off
+            except Exception:
+                log.exception("resume failed")
             checks = (bot.maybe_schedule, bot.maybe_ping, bot.maybe_sync_nudge, bot.maybe_weekly)
             last_tick, last_catch_up = 0.0, 0.0
             while True:

@@ -23,6 +23,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   mix in the real runner's profile and plan. Eval costs are in its report, not `coach usage`.
 
 ### Fixed
+- Slack: a reply cut off by a bot restart is finished when the bot starts again (it used to
+  stay stuck on "On it..."). The conversation and a waiting "Save it?" question survive
+  restarts too, so a yes after a restart still saves.
 - Slack: no 10am long-run check-in once that day's run is in the fuel log (it asked again
   after an early debrief).
 - Coach: no longer says Strava data lives in Claude Code; offers COROS, FIT, GPX or Apple Health.
