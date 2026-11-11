@@ -21,6 +21,8 @@ class FakeClient:
     def __init__(self) -> None:
         self.posted: list[dict[str, Any]] = []
         self.updated: list[dict[str, Any]] = []
+        self.deleted: list[dict[str, Any]] = []
+        self.fail_chat_delete = False
 
     def chat_postMessage(self, **kwargs: Any) -> dict[str, Any]:  # noqa: N802
         self.posted.append(kwargs)
@@ -28,6 +30,12 @@ class FakeClient:
 
     def chat_update(self, **kwargs: Any) -> dict[str, Any]:
         self.updated.append(kwargs)
+        return {}
+
+    def chat_delete(self, **kwargs: Any) -> dict[str, Any]:
+        if self.fail_chat_delete:
+            raise RuntimeError("cant_delete_message")
+        self.deleted.append(kwargs)
         return {}
 
 
@@ -65,21 +73,28 @@ def _bot(coach: FakeCoach, clock: Clock | None = None) -> SlackCoach:
     return SlackCoach(SYDNEY, lambda conn: coach, connect, clock or Clock())
 
 
-def test_answers_sydney_with_placeholder_then_update() -> None:
+def test_answer_is_a_new_message_and_the_placeholder_goes() -> None:
+    """A new message, not an edit: Slack doesn't notify on edits."""
     coach, client = (
         FakeCoach(["**Nice** run. See [Jeukendrup](https://example.org/x)."]),
         FakeClient(),
     )
     _bot(coach).handle(_dm("How was my fueling?"), client)
-    assert client.posted == [{"channel": "D1", "text": slack_bot.THINKING}]
-    assert client.updated == [
-        {
-            "channel": "D1",
-            "ts": "ts1",
-            "text": "*Nice* run. See <https://example.org/x|Jeukendrup>.",
-        }
+    assert client.posted == [
+        {"channel": "D1", "text": slack_bot.THINKING},
+        {"channel": "D1", "text": "*Nice* run. See <https://example.org/x|Jeukendrup>."},
     ]
+    assert client.deleted == [{"channel": "D1", "ts": "ts1"}]
+    assert client.updated == []
     assert coach.calls == [("How was my fueling?", [])]
+
+
+def test_placeholder_points_to_the_answer_if_it_cant_be_deleted() -> None:
+    client = FakeClient()
+    client.fail_chat_delete = True
+    _bot(FakeCoach(["A"])).handle(_dm("Q"), client)
+    assert client.posted[-1]["text"] == "A"
+    assert client.updated == [{"channel": "D1", "ts": "ts1", "text": slack_bot.ANSWERED_BELOW}]
 
 
 def test_follow_up_gets_text_history() -> None:
@@ -132,7 +147,7 @@ def test_errors_become_a_friendly_reply_without_history(error: Exception) -> Non
     coach, client = FakeCoach([error]), FakeClient()
     bot = _bot(coach)
     bot.handle(_dm("Q"), client)
-    assert client.updated[0]["text"] == slack_bot.FAILED
+    assert client.posted[-1]["text"] == slack_bot.FAILED
     assert bot.conversations["D1"].turns == []
 
 
@@ -504,8 +519,9 @@ def test_sync_runs_in_code_without_the_coach() -> None:
 
     _sync_bot(shared, sync).handle(_dm("Sync my runs!"), client)
     assert seen == [_sun(4)]
-    assert client.posted == [{"channel": "D1", "text": slack_bot.SYNCING}]
-    text = client.updated[0]["text"]
+    assert client.posted[0] == {"channel": "D1", "text": slack_bot.SYNCING}
+    assert client.deleted == [{"channel": "D1", "ts": "ts1"}]
+    text = client.posted[1]["text"]
     assert "Sat 11/7: 10.00 mi" in text and "This week: 1 runs, 10.00 mi" in text
 
 
@@ -522,7 +538,7 @@ def test_sync_errors_become_a_reply() -> None:
         raise coros.SignInNeeded
 
     _sync_bot(SharedDB(), sync).handle(_dm("sync"), client)
-    assert client.updated[0]["text"] == coros.SIGN_IN_AGAIN
+    assert client.posted[-1]["text"] == coros.SIGN_IN_AGAIN
 
 
 def _dup_report(tmp_path: Path) -> coros.SyncReport:
@@ -538,7 +554,7 @@ def test_duplicates_import_only_on_yes(tmp_path: Path, monkeypatch: pytest.Monke
     shared, client = SharedDB(), FakeClient()
     bot = _sync_bot(shared, lambda conn, now: _dup_report(tmp_path))
     bot.handle({**_dm("sync"), "ts": "1"}, client)
-    assert "Reply *yes*" in client.updated[0]["text"]
+    assert "Reply *yes*" in client.posted[-1]["text"]
     bot.handle({**_dm("yes"), "ts": "2"}, client)
     assert len(confirmed) == 1 and client.posted[-1]["text"] == "Imported 1 more run(s)."
     bot.handle({**_dm("sync"), "ts": "3"}, client)
@@ -588,14 +604,14 @@ def test_a_reply_is_recorded_while_it_is_written_then_cleared() -> None:
     assert _inflight(shared) is None
 
 
-def test_resume_finishes_a_cut_off_reply_in_its_placeholder() -> None:
+def test_resume_finishes_a_cut_off_reply_and_removes_its_placeholder() -> None:
     shared, client, coach = SharedDB(), FakeClient(), FakeCoach(["Here's your week."])
     _leftover(shared)
     bot = _debrief_bot(coach, shared, NOON)
     assert bot.resume(client)
     assert coach.calls == [("Q", [])]
-    assert client.posted == []  # no second placeholder
-    assert client.updated == [{"channel": "D1", "ts": "ts9", "text": "Here's your week."}]
+    assert client.posted == [{"channel": "D1", "text": "Here's your week."}]  # no new placeholder
+    assert client.deleted == [{"channel": "D1", "ts": "ts9"}]
     assert _inflight(shared) is None and not bot.resume(client)
 
 
@@ -608,7 +624,8 @@ def test_resume_gives_up_after_max_tries_or_when_stale(job: dict[str, Any]) -> N
     _leftover(shared, **job)
     assert _debrief_bot(coach, shared, NOON).resume(client)
     assert coach.calls == []
-    assert client.updated == [{"channel": "D1", "ts": "ts9", "text": slack_bot.LOST}]
+    assert client.posted == [{"channel": "D1", "text": slack_bot.LOST}]
+    assert client.deleted == [{"channel": "D1", "ts": "ts9"}]
     assert _inflight(shared) is None
 
 
@@ -620,7 +637,8 @@ def test_resume_reruns_a_cut_off_sync() -> None:
         SYDNEY, lambda conn: FakeCoach([]), shared, Clock(), lambda: NOON, lambda conn, now: report
     )
     assert bot.resume(client)
-    assert client.updated[0]["ts"] == "ts9" and "all already imported" in client.updated[0]["text"]
+    assert "all already imported" in client.posted[0]["text"]
+    assert client.deleted == [{"channel": "D1", "ts": "ts9"}]
     assert _inflight(shared) is None
 
 

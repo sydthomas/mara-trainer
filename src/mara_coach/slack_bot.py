@@ -5,7 +5,8 @@
   so the runner can find it without the Slack profile page. The coach never runs in this mode.
 - Each DM keeps a short text-only history (last `MAX_TURNS` exchanges, reset after `IDLE_RESET`
   of quiet), so follow-ups work without resending tool output.
-- One message at a time per DM; a placeholder reply is posted, then edited with the answer.
+- One message at a time per DM; a placeholder reply is posted, then the answer comes as a new
+  message (Slack doesn't notify on edits) and the placeholder is deleted.
 - Long-run debrief: on days the accepted plan has a long run, the bot DMs a check-in at
   `PING_HOUR` athlete-local time (or later that day if it was off, until `LAST_PING_HOUR`), at
   most once a day (`notifications` table). The coach gathers the details and calls
@@ -23,7 +24,7 @@
 - COROS sync: "sync my runs" (or just "sync") pulls this week's runs in code with `coros`, no
   coach call. Possible duplicates are imported only if she replies yes.
 - Restart-proof replies: a reply in progress is recorded in `slack_state` (`INFLIGHT_KEY`) until
-  its placeholder is edited. On start, `resume` finishes it in the same placeholder (at most
+  it's answered. On start, `resume` finishes it and removes its stuck placeholder (at most
   `MAX_TRIES` attempts, so a reply that crashes the bot can't loop), or says it was lost if it's
   older than `CATCH_UP_WINDOW`. The DM's text history and any yes/no question still waiting
   (`pending`) are saved too (`TURNS_KEY`), so a restart within `IDLE_RESET` keeps the
@@ -44,7 +45,7 @@ import sqlite3
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -90,6 +91,7 @@ INFLIGHT_KEY = "inflight_reply"  # the reply being written, so a restart can fin
 TURNS_KEY = "dm_turns"  # text history, so a restart keeps the conversation
 MAX_TRIES = 2
 LOST = "Sorry, I lost this one when I restarted. Send it again?"
+ANSWERED_BELOW = "(answered below)"
 CURSOR_KEY = "last_handled_ts"  # newest DM handled, so retries and catch-up never answer twice
 CATCH_UP_WINDOW = 36 * 60 * 60  # seconds: older missed DMs are stale
 CATCH_UP_EVERY = 15 * 60  # seconds between routine catch-up checks
@@ -198,6 +200,7 @@ def handle_setup(event: dict[str, Any], client: SlackClient) -> None:
 class SlackClient(Protocol):
     def chat_postMessage(self, **kwargs: Any) -> Any: ...  # noqa: N802 (Slack SDK name)
     def chat_update(self, **kwargs: Any) -> Any: ...
+    def chat_delete(self, **kwargs: Any) -> Any: ...
     def conversations_open(self, **kwargs: Any) -> Any: ...
     def conversations_history(self, **kwargs: Any) -> Any: ...
     def chat_scheduleMessage(self, **kwargs: Any) -> Any: ...  # noqa: N802
@@ -206,6 +209,18 @@ class SlackClient(Protocol):
 
 class Asker(Protocol):
     def ask(self, question: str, history: list[dict[str, Any]] | None = None) -> Any: ...
+
+
+def _finish(client: SlackClient, channel: str, placeholder: str, text: str) -> None:
+    """Send the answer as a new message, so Slack notifies her (edits don't), then remove the
+    placeholder. If Slack won't delete it, point it at the answer instead."""
+    client.chat_postMessage(channel=channel, text=text)
+    try:
+        client.chat_delete(channel=channel, ts=placeholder)
+    except Exception:
+        log.warning("couldn't delete a placeholder")
+        with suppress(Exception):
+            client.chat_update(channel=channel, ts=placeholder, text=ANSWERED_BELOW)
 
 
 def to_mrkdwn(text: str) -> str:
@@ -420,12 +435,12 @@ class SlackCoach:
         self._track("answer", channel, placeholder, tries, question)
         try:
             answer = self._answer(question, convo)
-            client.chat_update(channel=channel, ts=placeholder, text=to_mrkdwn(answer))
+            _finish(client, channel, placeholder, to_mrkdwn(answer))
         finally:
             self._untrack()
 
     def resume(self, client: SlackClient) -> bool:
-        """On start: finish the reply a restart cut off, in its placeholder. True if one was."""
+        """On start: finish the reply a restart cut off and remove its placeholder. True if so."""
         conn = self.connect()
         try:
             raw = _state(conn, INFLIGHT_KEY)
@@ -440,7 +455,7 @@ class SlackCoach:
             stale = self.now().timestamp() - job["at"] > CATCH_UP_WINDOW
             if stale or tries > MAX_TRIES:
                 self._untrack()
-                client.chat_update(channel=channel, ts=placeholder, text=LOST)
+                _finish(client, channel, placeholder, LOST)
             elif job["kind"] == "sync":
                 self._sync(channel, convo, client, placeholder, tries)
             else:
@@ -573,7 +588,7 @@ class SlackCoach:
             if report is not None and report.pending:
                 convo.pending = DuplicateRuns(tuple(report.pending))
                 text += "\n\n" + coros.duplicate_question(report.pending)
-            client.chat_update(channel=channel, ts=placeholder, text=text)
+            _finish(client, channel, placeholder, text)
         finally:
             self._untrack()
 

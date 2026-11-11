@@ -23,6 +23,8 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   mix in the real runner's profile and plan. Eval costs are in its report, not `coach usage`.
 
 ### Fixed
+- Slack: answers arrive as new messages, so your phone notifies you (they used to edit the
+  "On it..." message, and Slack doesn't notify on edits).
 - Slack: a reply cut off by a bot restart is finished when the bot starts again (it used to
   stay stuck on "On it..."). The conversation and a waiting "Save it?" question survive
   restarts too, so a yes after a restart still saves.

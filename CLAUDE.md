@@ -92,7 +92,8 @@ be summarized. If no approved source covers a question, the coach says so.
   (`slack_schedule.py`, table `scheduled_messages`: debrief pings, a sync reminder, a 6pm note with
   next week's runs); awake, it cancels the sync/6pm fallbacks 5 min early and sends the live ones.
   Missed DMs are answered on wake (cursor in `slack_state`), never twice. A reply cut off by a
-  restart is finished on start in its placeholder; the DM history and a waiting yes/no question
+  restart is finished on start; answers arrive as new messages (Slack notifies on those, not on
+  edits) and the placeholder is deleted. The DM history and a waiting yes/no question
   survive restarts.
 - `deploy/macos/install.sh` / `uninstall.sh` — run the Slack bot as a LaunchAgent (hosting Option 0,
   `docs/hosting.md`); the repo must stay outside `~/Desktop`/`~/Documents` (macOS privacy blocks it)
