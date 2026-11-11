@@ -104,7 +104,10 @@ be summarized. If no approved source covers a question, the coach says so.
   and the bot saves it in code only when she replies yes. Sundays at 6pm local it syncs the
   week's runs from COROS in code, then sends one weekly check-in (last week recap + next week
   preview + one question: how the week felt, what's coming up, and the long-run debrief if it was
-  missed). Her reply (through Monday) logs a missed debrief first (yes), and is tagged so the coach writes the coming week with `propose_week` (guardrails check it, never saves); the bot saves it in code only on yes and archives the old plan. Setup: `docs/slack-setup.md`
+  missed). Her reply (through Monday) logs a missed debrief first (yes), and is tagged so the
+  coach writes the coming week with `propose_week` (guardrails check it, never saves). One yes
+  saves it in code (old plan archived) and puts its runs on her COROS calendar; "save only"
+  skips the watch; "push my week" sends the coming week anytime. Setup: `docs/slack-setup.md`
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
@@ -138,13 +141,16 @@ be summarized. If no approved source covers a question, the coach says so.
     `exports/coros/<labelId>.fit`, skipped if present; then `coach import`, so re-running is safe).
     The Slack bot syncs on its own before the Sunday 6pm check-in; she can also reply "sync my
     runs" in Slack anytime (code-side sync, below).
-  - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar
-    (Sunday, after the weekly check-in, until Slack can push it). Workouts come only
-    from `coach coros week`, sent unchanged after one yes for the week. The MCP can't move or
-    delete scheduled workouts, so check `queryTrainingSchedule` first and never create twice.
+  - Weekly push: Slack does it on her yes to the week (code-side, below); the `coros-run-planner`
+    skill does the same from Claude Code. Workouts come only from `coach coros week`
+    (`coros_workouts.coros_week`), sent unchanged after one yes for the week. The MCP can't move
+    or delete scheduled workouts, so check `queryTrainingSchedule` first, never create twice,
+    and skip (and list) any day that already has a workout.
   - Code-side sync (`mara_coach/coros.py`, `coach coros sync`, "sync my runs" and the Sunday
-    check-in in Slack): the same read-only flow as `coros-sync` without an LLM; it calls only `querySportRecords` and
-    `downloadActivityFitFiles`. Its own OAuth sign-in (`coach coros login`), tokens in the keychain.
+    check-in in Slack): the same read-only flow as `coros-sync` without an LLM, calling only
+    `querySportRecords` and `downloadActivityFitFiles`. Code-side push (`coros.push_week`, Slack
+    only, after her yes or "push my week"): `queryTrainingSchedule` then `createScheduledWorkout`.
+    Its own OAuth sign-in (`coach coros login`), tokens in the keychain.
   - Not in `mara_coach` yet: COROS tools for the coach agent itself are a separate, planned step.
 - **Strava — not used.** Strava's API Policy of 2026-06-01 bars storing Strava data or feeding it
   to AI apps outside Strava's own MCP. Don't add Strava MCPs, stravalib, OAuth, webhooks or sync

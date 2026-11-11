@@ -1,4 +1,5 @@
-"""COROS run sync in plain code: the official COROS MCP server, no LLM, no unofficial APIs.
+"""COROS sync and watch push in plain code: the official COROS MCP server, no LLM, no unofficial
+APIs.
 
 - Same flow as the `coros-sync` skill: this training week's runs (Monday through today, athlete
   timezone) from `querySportRecords`, one `downloadActivityFitFiles` call per run that isn't in
@@ -12,6 +13,11 @@
   on its own; when it can't, it says to sign in again (`SignInNeeded`) instead of opening a
   browser.
 - Only the run list and FIT files are read. Health data tools (sleep, HRV, cycles) aren't called.
+- Watch push (`push_week`): the one write. Called only after the runner's yes for that week. The
+  workouts come unchanged from `coros_workouts.coros_week` (accepted plan, which passed the
+  guardrails). `queryTrainingSchedule` is read first, and a day that already has any workout is
+  skipped and reported, never doubled: the MCP can't move or delete workouts. Then one
+  `createScheduledWorkout` per run. Safe to repeat.
 """
 
 from __future__ import annotations
@@ -33,7 +39,7 @@ from typing import Any, Protocol
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
-from mara_trainer import db, imports, reports
+from mara_trainer import coros_workouts, db, imports, reports
 
 from .tools import MI_METERS
 
@@ -68,7 +74,27 @@ class CorosApi(Protocol):
     async def fit(self, run: CorosRun) -> bytes: ...
 
 
+class WatchApi(Protocol):
+    async def schedule(self, start: str, end: str) -> dict[str, list[str]]: ...
+    async def create(self, coros_date: str, course: dict[str, Any]) -> None: ...
+
+
 # ------------------------------------------------------------------ parsing MCP results
+
+_DAY = re.compile(r"^(\d{4}-\d{2}-\d{2})$")
+
+
+def parse_schedule(text: str) -> dict[str, list[str]]:
+    """`queryTrainingSchedule` text -> workout names by date (YYYY-MM-DD). Each workout is a
+    block: its date on one line, its name on the next."""
+    lines = [line.strip() for line in text.splitlines()]
+    out: dict[str, list[str]] = {}
+    for i, line in enumerate(lines[:-1]):
+        found = _DAY.match(line)
+        if found and lines[i + 1]:
+            out.setdefault(found[1], []).append(lines[i + 1])
+    return out
+
 
 _RECORD = re.compile(r"^\s*\d+\.\s.*?(\d{4}-\d{2}-\d{2})\s*$", re.M)
 _IDS = re.compile(r"LabelId:\s*(\d+)\s*\|\s*SportType:\s*(\d+)")
@@ -182,6 +208,83 @@ def import_confirmed(conn: sqlite3.Connection, pending: Sequence[Pending]) -> in
         decoded = imports.decode_file(item.path, tz)
         count += imports.commit(conn, decoded, item.path.name, frozenset(item.keys)).imported
     return count
+
+
+@dataclass
+class PushReport:
+    week: int | None = None
+    sent: list[str] = field(default_factory=list)  # display lines
+    already: list[str] = field(default_factory=list)  # ours, from an earlier push
+    conflicts: list[str] = field(default_factory=list)  # a different workout is on that day
+    failed: list[str] = field(default_factory=list)
+    not_sent: list[str] = field(default_factory=list)  # strength, race day, past days
+
+
+def _label(workout: dict[str, Any]) -> str:
+    day = date.fromisoformat(workout["date"])
+    return f"{workout['weekday'][:3]} {day.month}/{day.day}: {workout['course']['courseName']}"
+
+
+async def push_workouts(api: WatchApi, week: dict[str, Any]) -> PushReport:
+    """Put one `coros_week` result on the COROS calendar, skipping days that have a workout."""
+    report = PushReport(week["week"])
+    for s in week["skipped"]:
+        day = date.fromisoformat(s["date"])
+        report.not_sent.append(f"{s['weekday'][:3]} {day.month}/{day.day}: {s['reason']}")
+    workouts = week["workouts"]
+    if not workouts:
+        return report
+    existing = await api.schedule(workouts[0]["coros_date"], workouts[-1]["coros_date"])
+    for workout in workouts:
+        label, there = _label(workout), existing.get(workout["date"], [])
+        if workout["course"]["courseName"] in there:
+            report.already.append(label)
+        elif there:
+            report.conflicts.append(f"{label} (already there: {', '.join(there)})")
+        else:
+            try:
+                await api.create(workout["coros_date"], workout["course"])
+            except CorosError as exc:
+                report.failed.append(f"{label}: {exc}")
+                continue
+            report.sent.append(label)
+    return report
+
+
+def watch_week(conn: sqlite3.Connection, day: str, now: datetime) -> dict[str, Any]:
+    """The `coros_week` workouts for the plan week containing `day`, as `coach coros week`
+    builds them."""
+    setup = db.load_race_setup(conn)
+    if setup is None:
+        raise CorosError("No race is set up, so there's no week to put on your watch.")
+    today = now.astimezone(ZoneInfo(db.athlete_timezone(conn))).date().isoformat()
+    week = coros_workouts.coros_week(db.load_accepted_plan(conn), setup, day, today)
+    if week is None:
+        raise CorosError(f"The week of {day} isn't in your plan.")
+    return week
+
+
+def push_text(report: PushReport) -> str:
+    """The push result for Slack."""
+    lines = []
+    if report.sent:
+        lines.append(f"On your watch calendar (Week {report.week}):")
+        lines += [f"• {line}" for line in report.sent]
+        lines.append("They sync to the watch next time it connects to the COROS app.")
+    if report.already:
+        lines.append("Already there from before:")
+        lines += [f"• {line}" for line in report.already]
+    if report.conflicts:
+        lines.append("Skipped, another workout is on that day:")
+        lines += [f"• {line}" for line in report.conflicts]
+        lines.append("Change or remove those in the COROS app; I can't move them.")
+    if report.failed:
+        lines.append("Couldn't send:")
+        lines += [f"• {line}" for line in report.failed]
+    if report.not_sent:
+        lines.append("Not sent:")
+        lines += [f"• {line}" for line in report.not_sent]
+    return "\n".join(lines) or "Nothing to put on your watch this week."
 
 
 def week_window(conn: sqlite3.Connection, now: datetime) -> tuple[date, date]:
@@ -299,6 +402,13 @@ class McpCorosApi:
         args = {"labelId": run.label_id, "sportType": run.sport_type}
         return fit_bytes((await self._call("downloadActivityFitFiles", args)).content)
 
+    async def schedule(self, start: str, end: str) -> dict[str, list[str]]:
+        args = {"startDate": start, "endDate": end}
+        return parse_schedule(_text((await self._call("queryTrainingSchedule", args)).content))
+
+    async def create(self, coros_date: str, course: dict[str, Any]) -> None:
+        await self._call("createScheduledWorkout", {"date": coros_date, "course": course})
+
 
 async def _no_browser(url: str) -> None:
     raise SignInNeeded
@@ -350,7 +460,7 @@ def _serve_one_callback() -> dict[str, str]:
 
 
 @asynccontextmanager
-async def connect(interactive: bool = False, storage: Any = None) -> AsyncIterator[CorosApi]:
+async def connect(interactive: bool = False, storage: Any = None) -> AsyncIterator[McpCorosApi]:
     """An authenticated COROS session. Only `interactive` (the login command) opens a browser."""
     import httpx2
     from mcp import Client
@@ -397,6 +507,24 @@ def sync_week(conn: sqlite3.Connection, now: datetime | None = None) -> SyncRepo
     async def go() -> SyncReport:
         async with connect() as api:
             return await sync_runs(conn, api, start, end)
+
+    try:
+        return asyncio.run(go())
+    except Exception as exc:
+        found = _cause(exc)
+        if found is None:
+            raise CorosError("Couldn't reach COROS just now. Try again in a few minutes.") from exc
+        raise found from exc
+
+
+def push_week(conn: sqlite3.Connection, day: str, now: datetime | None = None) -> PushReport:
+    """Blocking entry point: put the plan week containing `day` on the COROS calendar. Call
+    only after the runner said yes to this week."""
+    week = watch_week(conn, day, now or datetime.now(UTC))
+
+    async def go() -> PushReport:
+        async with connect() as api:
+            return await push_workouts(api, week)
 
     try:
         return asyncio.run(go())

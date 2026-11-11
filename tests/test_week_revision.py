@@ -3,13 +3,14 @@ from __future__ import annotations
 import copy
 import json
 import sqlite3
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace as NS
 from typing import Any
 
 import pytest
 
-from mara_coach import slack_bot, tools
+from mara_coach import coros, slack_bot, tools
 from mara_coach.agent import CoachReply
 from mara_trainer import db, reports
 from mara_trainer.plan_rules import validate_schedule
@@ -184,8 +185,24 @@ class WeekCoach(FakeCoach):
         return CoachReply(reply.text, "end_turn", messages=msgs)
 
 
-def _bot(coach: FakeCoach, shared: SharedDB, today: str) -> slack_bot.SlackCoach:
-    bot = slack_bot.SlackCoach(SYDNEY, coach_factory=lambda _: coach, connect=shared)
+class FakePush:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.days: list[str] = []
+        self.error = error
+
+    def __call__(self, conn: sqlite3.Connection, day: str, now: Any) -> coros.PushReport:
+        self.days.append(day)
+        if self.error:
+            raise self.error
+        return coros.PushReport(3, sent=["Mon 11/16: Easy 3 mi"])
+
+
+def _bot(
+    coach: FakeCoach, shared: SharedDB, today: str, push: FakePush | None = None
+) -> slack_bot.SlackCoach:
+    bot = slack_bot.SlackCoach(
+        SYDNEY, coach_factory=lambda _: coach, connect=shared, push=push or FakePush()
+    )
     bot.today = lambda conn: today  # type: ignore[method-assign]
     return bot
 
@@ -209,7 +226,7 @@ def test_slack_saves_the_week_only_on_yes() -> None:
     stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
     assert stored is not None and _strength(stored["sessions"])["details"] == "Leg press 3x10."
     assert bot.conversations["D1"].pending is None
-    assert any("Saved Week" in m["text"] and "push my week" in m["text"] for m in client.posted)
+    assert any(m["text"].startswith("Saved Week") for m in client.posted)
     rows = shared.conn.execute("SELECT status FROM training_plans ORDER BY id").fetchall()
     assert [r["status"] for r in rows] == ["archived", "accepted"]  # old plan kept
 
@@ -258,3 +275,73 @@ def test_saving_the_week_ends_the_check_in_reply() -> None:
     bot.handle(_dm("yes"), client)
     bot.handle(_dm("thanks"), client)
     assert coach.calls[1][0] == "thanks"  # week saved: back to plain chat
+
+
+def test_week_proposal_ends_with_the_bots_question() -> None:
+    shared, proposal, _, today = _proposal()
+    client = SlackFake()
+    bot = _bot(WeekCoach(["Here's your week.\n\n**Save this week?**"], proposal), shared, today)
+    bot.handle(_dm("all good"), client)
+    assert client.posted[-1]["text"] == "Here's your week.\n\n" + slack_bot.WEEK_QUESTION
+
+
+def test_one_yes_saves_and_puts_the_week_on_the_watch() -> None:
+    shared, proposal, start, today = _proposal()
+    client, push = SlackFake(), FakePush()
+    bot = _bot(WeekCoach(["Save this week?"], proposal), shared, today, push)
+    bot.handle(_dm("all good"), client)
+    assert push.days == []  # nothing sent before her yes
+    bot.handle(_dm("yes"), client)
+    assert push.days == [start]
+    texts = [m["text"] for m in client.posted]
+    assert texts[-3].startswith("Saved Week") and texts[-2] == slack_bot.PUSHING
+    assert texts[-1].startswith("On your watch calendar (Week 3):")
+    assert client.deleted[-1]["ts"] == f"ts{len(client.posted) - 1}"  # placeholder removed
+
+
+@pytest.mark.parametrize("text", ["save only", "Just save it", "save it only"])
+def test_save_only_skips_the_watch(text: str) -> None:
+    shared, proposal, start, today = _proposal()
+    client, push = SlackFake(), FakePush()
+    bot = _bot(WeekCoach(["Save this week?"], proposal), shared, today, push)
+    bot.handle(_dm("all good"), client)
+    bot.handle(_dm(text), client)
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None and _strength(stored["sessions"])["details"] == "Leg press 3x10."
+    assert push.days == [] and client.posted[-1]["text"].endswith(slack_bot.PUSH_LATER)
+
+
+def test_push_my_week_sends_the_coming_week_without_the_coach() -> None:
+    shared, _, _, today = _proposal()
+    client, push, coach = SlackFake(), FakePush(), FakeCoach([])
+    _bot(coach, shared, today, push).handle(_dm("Push my week to my watch"), client)
+    assert push.days == [(date.fromisoformat(today) + timedelta(days=1)).isoformat()]
+    assert coach.calls == [] and client.posted[0]["text"] == slack_bot.PUSHING
+    assert not slack_bot.PUSH.match("should I push the pace on my long run?")
+
+
+def test_push_errors_become_a_reply() -> None:
+    shared, _, _, today = _proposal()
+    client = SlackFake()
+    push = FakePush(coros.SignInNeeded())
+    _bot(FakeCoach([]), shared, today, push).handle(_dm("push my week"), client)
+    assert client.posted[-1]["text"] == coros.SIGN_IN_AGAIN
+
+
+def test_resume_reruns_a_cut_off_push() -> None:
+    shared, _, start, today = _proposal()
+    job = {
+        "kind": "push",
+        "channel": "D1",
+        "placeholder": "P1",
+        "tries": 1,
+        "question": start,
+        "at": datetime.now(UTC).timestamp(),
+    }
+    shared.conn.execute(
+        "INSERT INTO slack_state(key, value) VALUES (?, ?)",
+        (slack_bot.INFLIGHT_KEY, json.dumps(job)),
+    )
+    client, push = SlackFake(), FakePush()
+    assert _bot(FakeCoach([]), shared, today, push).resume(client)
+    assert push.days == [start] and client.deleted == [{"channel": "D1", "ts": "P1"}]

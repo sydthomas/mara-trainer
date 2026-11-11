@@ -10,6 +10,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   reminder and the "push in Claude Code" nudge are gone). It asks how the week felt, and for the
   long-run debrief if Saturday's was missed; her reply through Monday logs that debrief (yes),
   then always gets a proposed week to say yes to.
+- Slack: one yes saves the week and puts its runs on the COROS watch calendar ("save only" skips
+  the watch; "push my week" sends the coming week anytime). Workouts come unchanged from the
+  accepted plan; a day that already has a workout is skipped and listed, never doubled.
 
 ### Added
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
