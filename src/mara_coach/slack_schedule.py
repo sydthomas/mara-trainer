@@ -4,11 +4,10 @@ While the bot is awake it keeps the next `HORIZON_DAYS` of fallbacks queued with
 `chat.scheduleMessage` (recorded in `scheduled_messages`):
 - the long-run debrief ping at `PING_HOUR` on plan long-run days, until that day's run is in the
   fuel log (debriefed early: the queued ping is deleted),
-- a generic sync reminder at `SYNC_HOUR` on plan Sundays,
 - a short weekly note at `WEEKLY_HOUR` on Sundays: next week's runs from the plan, and that the
-  full recap follows when the laptop wakes.
-The sync and weekly fallbacks are "live-replaceable": if the bot is awake `LEAD` before their
-post time, it cancels them and sends the live version (real counts, the coach's recap).
+  bot syncs her runs and sends the full recap when the laptop wakes.
+The weekly fallback is "live-replaceable": if the bot is awake `LEAD` before its post time, it
+cancels it and sends the live version (runs synced from COROS, the coach's recap).
 Plan changes are reconciled: stale queued messages are deleted and re-queued with new text.
 Rows are only touched while their post time is more than `LEAD` away, so nothing races Slack.
 """
@@ -27,20 +26,14 @@ from mara_trainer import db, reports
 log = logging.getLogger(__name__)
 
 DEBRIEF_KIND = "long_run_debrief"
-SYNC_KIND = "sync_nudge"
 WEEKLY_KIND = "weekly_checkin"
 PING_HOUR = 10  # athlete-local, Sydney's choice
-SYNC_HOUR = 17  # Sunday, athlete-local: an hour before the weekly check-in
 WEEKLY_HOUR = 18  # Sunday, athlete-local, Sydney's choice
 HORIZON_DAYS = 7
 LEAD = timedelta(minutes=5)  # cancel live-replaceable fallbacks this long before they post
-LIVE_REPLACEABLE = (SYNC_KIND, WEEKLY_KIND)
+LIVE_REPLACEABLE = (WEEKLY_KIND,)
 MI_METERS = 1609.344
 RUN_KINDS = ("easy", "workout", "long")
-SYNC_FALLBACK = (
-    "Check-in at 6pm. If you haven't synced this week's runs, reply \"sync my runs\" here "
-    "first so the recap has your data."
-)
 
 
 def ping_text(miles: float) -> str:
@@ -53,7 +46,8 @@ def ping_text(miles: float) -> str:
 
 def weekly_fallback_text(next_week: dict[str, Any] | None) -> str:
     lines = [
-        "Sunday check-in. My laptop is asleep, so your full recap comes when it wakes (until 10pm)."
+        "Sunday check-in. My laptop is asleep: when it wakes (until 10pm) I'll sync your runs "
+        "and send the full recap. Reply anytime."
     ]
     if next_week:
         runs = [s for s in next_week["sessions"] if s["kind"] in RUN_KINDS]
@@ -105,8 +99,6 @@ def wanted(conn: sqlite3.Connection, now: datetime) -> dict[tuple[str, str], Wan
         if day.weekday() == 6:
             this_week = reports.plan_week(plan, iso)
             next_week = reports.plan_week(plan, (day + timedelta(days=1)).isoformat())
-            if this_week:
-                items.append(Wanted(SYNC_KIND, iso, _at(day, SYNC_HOUR, tz), SYNC_FALLBACK))
             if this_week or next_week:
                 text = weekly_fallback_text(next_week)
                 items.append(Wanted(WEEKLY_KIND, iso, _at(day, WEEKLY_HOUR, tz), text))

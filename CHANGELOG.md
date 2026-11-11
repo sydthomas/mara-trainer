@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Changed
+- Slack: Sunday is one conversation. The 6pm check-in syncs the week's COROS runs first (the 5pm
+  reminder and the "push in Claude Code" nudge are gone). It asks how the week felt, and for the
+  long-run debrief if Saturday's was missed; her reply through Monday logs that debrief (yes),
+  then always gets a proposed week to say yes to.
+
 ### Added
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
   API cost), asks before importing possible duplicates, and replies with the week's total. Also

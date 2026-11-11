@@ -244,3 +244,17 @@ def test_week_is_rechecked_when_saved() -> None:
     stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
     assert stored is not None and _strength(stored["sessions"])["details"] != "Leg press 3x10."
     assert "Couldn't save" in client.posted[-1]["text"]
+
+
+def test_saving_the_week_ends_the_check_in_reply() -> None:
+    shared, proposal, start, today = _proposal()
+    shared.conn.execute(
+        "INSERT INTO slack_state(key, value) VALUES (?, ?)", (slack_bot.WEEKLY_KEY, start)
+    )
+    coach = WeekCoach(["Save this week?", "Sure"], proposal)
+    bot, client = _bot(coach, shared, today), SlackFake()
+    bot.handle(_dm("nothing special"), client)
+    assert coach.calls[0][0] == slack_bot.weekly_reply(start, "nothing special")
+    bot.handle(_dm("yes"), client)
+    bot.handle(_dm("thanks"), client)
+    assert coach.calls[1][0] == "thanks"  # week saved: back to plain chat

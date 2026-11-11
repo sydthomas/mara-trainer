@@ -6,7 +6,7 @@ check-ins and `coach usage` cost).
 
 ## The problem
 The Slack bot (`coach slack run`) only runs while the laptop is awake. When it sleeps, the 10am
-debrief, the 5pm sync nudge and the 6pm weekly check-in don't send, and DMs go unanswered.
+debrief and the 6pm weekly check-in don't send, and DMs go unanswered.
 
 ## What the bot needs
 - **No public URL.** Socket Mode is an outbound WebSocket, so there's no TLS, domain or inbound
@@ -22,7 +22,7 @@ debrief, the 5pm sync nudge and the 6pm weekly check-in don't send, and DMs go u
 
 | Option | Monthly | Data lives | Fits because | Watch out |
 |---|---|---|---|---|
-| **0. Laptop, made reliable** | $0 | laptop | launchd keeps the bot running and restarts it; `pmset` wakes the Mac before the Sunday 5pm/6pm and Saturday 10am windows | lid closed or travel still stops it |
+| **0. Laptop, made reliable** | $0 | laptop | launchd keeps the bot running and restarts it; `pmset` wakes the Mac before the Sunday 6pm and Saturday 10am windows | lid closed or travel still stops it |
 | **1. Always-on device at home** (old Mac mini, small Linux box) | power only, one-time hardware | home | same DB for bot and Claude Code over the local network | home internet and power; you maintain it |
 | **2a. Fly.io** shared-cpu-1x 256 MB + 1 GB volume | about $2.19 + $0.15/GB | Fly (US region) | cheapest always-on; volume for SQLite | prices rose 1 Oct 2026; volume billed even when stopped |
 | **2b. DigitalOcean** Basic Droplet 512 MB | $4 (+20% weekly backups) | DO | plain Linux box, simple | 512 MB is enough for this bot, not for more |
@@ -51,9 +51,10 @@ Coach API cost is the same everywhere (see `docs/model-tiers.md`).
 
 ## Asleep-proof Slack (2026-10-26)
 Scheduling moved to the platform that's always on. The bot queues fixed-time messages on Slack's
-servers (`chat.scheduleMessage`) a week ahead, so the 10am debrief ping, the 5pm sync reminder
-and a 6pm note with next week's runs arrive even when the laptop sleeps. When it's awake, live
-versions replace the 5pm and 6pm fallbacks (real counts, the coach's recap). DMs sent while it
+servers (`chat.scheduleMessage`) a week ahead, so the 10am debrief ping and a 6pm note with
+next week's runs arrive even when the laptop sleeps. When it's awake, the live check-in replaces
+the 6pm fallback (runs synced from COROS, the coach's recap). The 5pm sync reminder was dropped
+on 2026-11-10: the check-in syncs first. DMs sent while it
 slept are answered when it wakes. Only answers and the recap still need the laptop awake.
 
 ## Recommendation
