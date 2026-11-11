@@ -67,7 +67,8 @@ uv run coach slack run
 ```
 
 In Slack, open **Mara Coach** under Apps and send it a message. It posts "On it..." and then
-edits that message with the answer (usually under a minute). Ctrl-C stops the bot.
+sends the answer as a new message, so your phone notifies you, and removes the "On it..." (usually
+under a minute). Ctrl-C stops the bot.
 
 ## Long-run check-in
 
@@ -102,7 +103,7 @@ a "sync" sent while it sleeps runs when it wakes.
 ## Notes
 
 - Each answer costs about 10 to 15 cents in API usage, the same as `coach ask`.
-- The bot remembers the last 10 exchanges in a DM and forgets after 6 hours of quiet, or when it
-  restarts.
+- The bot remembers the last 10 exchanges in a DM and forgets after 6 hours of quiet. A restart
+  doesn't wipe it, and a reply cut off by a restart is finished when the bot starts again.
 - Other people in the workspace who message it get "Sorry, this coach is private for now."
 - Revoke a leaked token from the app's settings page and put the new one in `.env`.
