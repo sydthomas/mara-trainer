@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+import math
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from mara_trainer.cli import app
 
 from .fit_builder import build_fit, steady_records
 
-# Synthetic inputs only. 2.6 m/s = 10:19/mi (bin 10:00-10:30); 3.0 m/s = 8:56/mi (bin 8:30-9:00).
+# Synthetic inputs only. 2.6 m/s = 10:19/mi (auto band 10:05-10:35); 3.0 m/s = 8:56/mi (8:40-9:10).
 TZ = "America/Los_Angeles"
 EASY = 2.6
 FAST = 3.0
@@ -54,8 +55,10 @@ def run_report(folder: Path, **kwargs: object) -> dict:  # type: ignore[type-arg
 def test_steady_run_in_band(tmp_path: Path) -> None:
     write_run(tmp_path, "a.fit", RUN_START, [(1800, EASY, 140)])
     out = run_report(tmp_path, weeks=2)
-    assert out["band"]["chosen_by"] == "most_used_pace_bin"
-    assert (out["band"]["pace_min"], out["band"]["pace_max"]) == ("10:00/mi", "10:30/mi")
+    assert out["band"]["chosen_by"] == "most_used_pace"
+    # Centred on the pace she ran (10:19 -> 10:20), not on a fixed 10:00/10:30 grid.
+    assert (out["band"]["pace_min"], out["band"]["pace_max"]) == ("10:05/mi", "10:35/mi")
+    assert out["band"]["steady_seconds_in_band"] == 1200
     (row,) = out["runs"]
     assert row["status"] == "used"
     assert row["date"] == "2026-03-03" and row["week_start"] == "2026-03-02"
@@ -127,17 +130,17 @@ def test_stretch_needs_five_continuous_minutes(tmp_path: Path) -> None:
     assert out["runs"][0]["seconds_in_band"] == 0 and out["runs"][0]["mean_pace"] is None
 
 
-def test_band_auto_selection_picks_most_used_bin(tmp_path: Path) -> None:
+def test_band_auto_selection_picks_most_used_pace(tmp_path: Path) -> None:
     thursday = datetime(2026, 3, 5, 15, 0, tzinfo=UTC)
     write_run(tmp_path, "a.fit", RUN_START, [(600, EASY, 130), (600, FAST, 165), (900, EASY, 142)])
     write_run(tmp_path, "b.fit", thursday, [(600, EASY, 130), (900, FAST, 160)])
     out = run_report(tmp_path)
-    # After the warm-ups: about 1500 s in the fast bin (over two runs), about 900 s in the easy one.
-    assert out["band"]["pace_min"] == "8:30/mi" and out["band"]["pace_max"] == "9:00/mi"
+    # After the warm-ups: about 1500 s near the fast pace (over two runs), about 900 s near easy.
+    assert out["band"]["pace_min"] == "8:40/mi" and out["band"]["pace_max"] == "9:10/mi"
     write_run(tmp_path, "c.fit", datetime(2026, 3, 6, 15, 0, tzinfo=UTC), [(2400, EASY, 141)])
     out = run_report(tmp_path)
-    assert out["band"]["pace_min"] == "10:00/mi"
-    assert out["band"]["steady_seconds_in_bin"] > 2500
+    assert out["band"]["pace_min"] == "10:05/mi"
+    assert out["band"]["steady_seconds_in_band"] > 2500
     statuses = {r["file"]: r["status"] for r in out["runs"]}
     assert statuses == {"a.fit": "used", "b.fit": "no_time_in_band", "c.fit": "used"}
     # Override: the same files measured at the faster band, in km.
@@ -146,6 +149,85 @@ def test_band_auto_selection_picks_most_used_bin(tmp_path: Path) -> None:
     statuses = {r["file"]: r["status"] for r in out["runs"]}
     assert statuses == {"a.fit": "used", "b.fit": "used", "c.fit": "no_time_in_band"}
     assert out["runs"][1]["mean_hr"] == 160.0
+
+
+def paced_run(folder: Path, name: str, paces: list[float], hr: int = 140) -> None:
+    """One record per second at the given paces (seconds per mile), starting at RUN_START."""
+    records: list[dict[str, object]] = []
+    distance = 0.0
+    for i, pace in enumerate(paces):
+        speed = hr_pace.MI / pace
+        distance += speed
+        when = RUN_START + timedelta(seconds=i + 1)
+        records.append({"time": when, "hr": hr, "speed": speed, "distance": distance})
+    session: dict[str, object] = {"start": RUN_START, "meters": distance, "seconds": len(paces)}
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / name).write_bytes(build_fit([session], records))
+
+
+@pytest.mark.parametrize("usual_pace", [600, 630, 607])
+def test_auto_band_is_centred_on_a_pace_that_wobbles(tmp_path: Path, usual_pace: int) -> None:
+    # A slow +/-4 s/mile wobble around the usual pace, also when that pace is a round 10:00 or
+    # 10:30: the whole run after the warm-up is one steady stretch.
+    paced_run(tmp_path, "a.fit", [usual_pace + 4 * math.sin(i / 120) for i in range(3600)])
+    out = run_report(tmp_path)
+    centre = round(usual_pace / 5) * 5
+    assert out["band"]["pace_min_seconds_per_km"] == pytest.approx(
+        (centre - 15) / 1.609344, abs=0.1
+    )
+    assert out["band"]["pace_max_seconds_per_km"] == pytest.approx(
+        (centre + 15) / 1.609344, abs=0.1
+    )
+    (row,) = out["runs"]
+    assert (row["status"], row["seconds_in_band"], row["mean_hr"]) == ("used", 3000, 140.0)
+
+
+def test_short_excursion_does_not_end_a_stretch(tmp_path: Path) -> None:
+    # After the warm-up: 4 min at 10:15, N seconds at 11:40, 4 min at 10:15. A 10 s slow patch
+    # holds the 30 s mean pace outside 10:00-10:30 for 29 s (from its 6th second on).
+    def seconds_in_band(folder: Path, outside: int) -> int:
+        paced_run(folder, "a.fit", [615.0] * 840 + [700.0] * outside + [615.0] * 240)
+        out = run_report(folder, pace_min_seconds=600, pace_max_seconds=630)
+        return int(out["runs"][0]["seconds_in_band"])
+
+    # One stretch: 490 s after the warm-up minus the 29 s outside, which are not counted.
+    assert seconds_in_band(tmp_path / "short", 10) == 461
+    assert seconds_in_band(tmp_path / "long", 40) == 0  # two 4-minute pieces, neither counts
+
+
+def test_smoothing_window_is_thirty_seconds(tmp_path: Path) -> None:
+    # 5 min easy after the warm-up, then a step to the faster speed. With a 30 s trailing mean
+    # the pace leaves 10:00-10:30 on the 7th faster second and enters 8:30-9:00 on the 29th.
+    write_run(tmp_path, "a.fit", RUN_START, [(900, EASY, 140), (600, FAST, 160)])
+    easy = run_report(tmp_path, pace_min_seconds=600, pace_max_seconds=630)["runs"][0]
+    assert easy["seconds_in_band"] == 306
+    assert easy["mean_hr"] == round((300 * 140 + 6 * 160) / 306, 1)
+    fast = run_report(tmp_path, pace_min_seconds=510, pace_max_seconds=540)["runs"][0]
+    assert (fast["seconds_in_band"], fast["mean_hr"]) == (572, 160.0)
+
+
+def test_alternating_speeds_are_smoothed(tmp_path: Path) -> None:
+    # Per-second speed flips between 2.4 and 2.8 m/s (9:35 and 11:11 per mile, both far outside
+    # the band); the 30 s mean is a constant 2.6 m/s = 10:19/mi.
+    records = steady_records(RUN_START, 1800, EASY, 140)
+    for i, r in enumerate(records):
+        r["speed"] = 2.4 if i % 2 else 2.8
+    session: dict[str, object] = {"start": RUN_START, "meters": 4680, "seconds": 1800}
+    (tmp_path / "a.fit").write_bytes(build_fit([session], records))
+    row = run_report(tmp_path, pace_min_seconds=618, pace_max_seconds=620)["runs"][0]
+    assert (row["status"], row["seconds_in_band"], row["mean_pace"]) == ("used", 1200, "10:19/mi")
+
+
+def test_standing_still_with_records_ends_a_stretch(tmp_path: Path) -> None:
+    # After the warm-up: 4 min easy, 60 s at speed 0 (the watch keeps recording), 4 min easy.
+    write_run(tmp_path, "a.fit", RUN_START, [(840, EASY, 140), (60, 0.0, 120), (240, EASY, 140)])
+    out = run_report(tmp_path, pace_min_seconds=600, pace_max_seconds=630)
+    assert out["runs"][0]["status"] == "no_time_in_band"
+    assert out["runs"][0]["seconds_in_band"] == 0
+    # A 20 s stop is shorter than the excursion allowance but still ends the stretch.
+    write_run(tmp_path, "a.fit", RUN_START, [(840, EASY, 140), (20, 0.0, 120), (240, EASY, 140)])
+    out = run_report(tmp_path, pace_min_seconds=600, pace_max_seconds=630)
+    assert out["runs"][0]["seconds_in_band"] == 0
 
 
 def test_week_bucketing_across_timezone_boundary(tmp_path: Path) -> None:

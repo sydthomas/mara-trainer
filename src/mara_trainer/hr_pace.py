@@ -11,13 +11,16 @@ of a run are compared with each other. There is no fitness score, no decoupling 
 advice here, and a caller should not read one into the trend.
 
 - `WARMUP_SECONDS`: the first 10 minutes of each run are skipped.
-- `MIN_STRETCH_SECONDS`: a stretch counts when pace stays inside the band for 5 continuous minutes.
+- `MIN_STRETCH_SECONDS`: a stretch counts when it holds 5 minutes inside the band.
+- `MAX_EXCURSION_SECONDS`: pace may leave the band for up to 30 s in a row (one smoothing
+  window) without ending the stretch; those seconds are not counted in any mean.
 - `SMOOTHING_SECONDS`: pace is a trailing 30-second mean of recorded speed, because raw
   per-second GPS speed leaves a 30 s/mile band every few seconds even on an even run.
 - `MAX_GAP_SECONDS` / `MIN_SPEED`: a pause (no record for more than 10 s) or standing still ends
   a stretch.
-- `BIN_SECONDS_PER_MILE`: the default band is the runner's own most-used pace, the 30-second-per-
-  mile bin holding the most stretch time across the window, so no pace is invented.
+- `BAND_SECONDS_PER_MILE` / `PACE_STEP_SECONDS_PER_MILE`: the default band is 30 s/mile wide and
+  centred (to the nearest 5 s/mile) on the runner's own most-used pace after the warm-ups, so no
+  pace is invented and the usual pace does not sit on a band edge.
 - `ROLLING_WEEKS`: the rolling value is the mean of the weekly means that exist in 4 weeks.
 
 Missing is not zero: a run with no heart-rate data or no time in band is counted in `coverage`
@@ -27,7 +30,7 @@ and left out of every mean; a week with no usable run has null means.
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -43,7 +46,9 @@ MIN_STRETCH_SECONDS = 300
 SMOOTHING_SECONDS = 30
 MAX_GAP_SECONDS = 10
 MIN_SPEED = 0.5  # m/s; slower than this is standing or walking to a stop
-BIN_SECONDS_PER_MILE = 30
+MAX_EXCURSION_SECONDS = 30
+BAND_SECONDS_PER_MILE = 30
+PACE_STEP_SECONDS_PER_MILE = 5
 ROLLING_WEEKS = 4
 MAX_WEEKS = 104
 CAVEATS = [
@@ -72,8 +77,7 @@ class Band:
 
     lo: float
     hi: float
-    chosen_by: str  # "most_used_pace_bin" | "arguments"
-    steady_seconds: float | None = None  # stretch time that won the bin (auto-selection only)
+    chosen_by: str  # "most_used_pace" | "arguments"
 
 
 @dataclass(frozen=True)
@@ -194,58 +198,62 @@ def _trace(start: datetime, records: Sequence[tuple[datetime, Mapping[str, Any]]
 # ------------------------------------------------------------------ stretches and band
 
 
-def _stretches[K](
-    samples: list[Sample], key: Callable[[float], K | None]
-) -> Iterator[tuple[K, Totals]]:
-    """Maximal runs of consecutive samples sharing one non-null key, at least 5 minutes long."""
-    current: K | None = None
-    seconds = meters = hr_weighted = hr_seconds = 0.0
-    for dt, speed, hr, new_segment in samples:
-        k = key(speed)
-        if new_segment or k != current:
-            if current is not None and seconds >= MIN_STRETCH_SECONDS:
-                yield current, Totals(seconds, meters, hr_weighted, hr_seconds)
-            current = k
-            seconds = meters = hr_weighted = hr_seconds = 0.0
-        if k is None:
+def most_used_band(runs: list[RunTrace]) -> Band | None:
+    """A 30 s/mile band centred on the pace the runner used most after the warm-ups.
+
+    Running time is counted per 5 s/mile of smoothed pace; the 30 s/mile window holding the most
+    time wins (ties go to the faster one) and the band is then centred on the mean pace inside
+    it, rounded to 5 s/mile. Centring keeps the usual pace away from the band's edges, which a
+    fixed grid (10:00, 10:30 ...) cannot do for a runner who sits on one of its lines.
+    """
+    seconds_at: dict[int, float] = defaultdict(float)
+    pace_seconds_at: dict[int, float] = defaultdict(float)  # sum of pace x seconds
+    for run in runs:
+        for dt, speed, _, _ in run.samples:
+            pace = MI / speed
+            step = int(pace // PACE_STEP_SECONDS_PER_MILE)
+            seconds_at[step] += dt
+            pace_seconds_at[step] += dt * pace
+    if not seconds_at:
+        return None
+    width = BAND_SECONDS_PER_MILE // PACE_STEP_SECONDS_PER_MILE
+
+    def seconds_in_window(first: int) -> float:
+        return sum(seconds_at.get(step, 0.0) for step in range(first, first + width))
+
+    firsts = {step - i for step in seconds_at for i in range(width)}
+    best = min(firsts, key=lambda first: (-seconds_in_window(first), first))
+    steps = [step for step in range(best, best + width) if step in seconds_at]
+    mean_pace = sum(pace_seconds_at[step] for step in steps) / seconds_in_window(best)
+    centre = round(mean_pace / PACE_STEP_SECONDS_PER_MILE) * PACE_STEP_SECONDS_PER_MILE
+    half = BAND_SECONDS_PER_MILE / 2
+    return Band((centre - half) / MI, (centre + half) / MI, "most_used_pace")
+
+
+def time_in_band(run: RunTrace, band: Band) -> Totals:
+    """Totals over the run's steady stretches: at least 5 minutes inside the band, where a brief
+    excursion (up to `MAX_EXCURSION_SECONDS` in a row) does not end the stretch. Seconds outside
+    the band are never counted; a pause or a stop always ends the stretch."""
+    total = Totals()
+    seconds = meters = hr_weighted = hr_seconds = outside = 0.0
+    for dt, speed, hr, new_segment in run.samples:
+        inside = band.lo <= 1 / speed < band.hi
+        if not inside and not new_segment:
+            outside += dt
+        if new_segment or outside > MAX_EXCURSION_SECONDS:
+            if seconds >= MIN_STRETCH_SECONDS:
+                total = total.plus(Totals(seconds, meters, hr_weighted, hr_seconds))
+            seconds = meters = hr_weighted = hr_seconds = outside = 0.0
+        if not inside:
             continue
+        outside = 0.0
         seconds += dt
         meters += dt * speed
         if hr is not None:
             hr_weighted += dt * hr
             hr_seconds += dt
-    if current is not None and seconds >= MIN_STRETCH_SECONDS:
-        yield current, Totals(seconds, meters, hr_weighted, hr_seconds)
-
-
-def _pace_bin(speed: float) -> int:
-    return int((MI / speed) // BIN_SECONDS_PER_MILE)
-
-
-def most_used_band(runs: list[RunTrace]) -> Band | None:
-    """The 30 s/mile bin with the most stretch time across `runs`; ties go to the faster bin."""
-    time_in_bin: dict[int, float] = defaultdict(float)
-    for run in runs:
-        for bin_index, totals in _stretches(run.samples, _pace_bin):
-            time_in_bin[bin_index] += totals.seconds
-    if not time_in_bin:
-        return None
-    best = min(time_in_bin, key=lambda b: (-time_in_bin[b], b))
-    return Band(
-        best * BIN_SECONDS_PER_MILE / MI,
-        (best + 1) * BIN_SECONDS_PER_MILE / MI,
-        "most_used_pace_bin",
-        time_in_bin[best],
-    )
-
-
-def time_in_band(run: RunTrace, band: Band) -> Totals:
-    def key(speed: float) -> bool | None:
-        return True if band.lo <= 1 / speed < band.hi else None
-
-    total = Totals()
-    for _, totals in _stretches(run.samples, key):
-        total = total.plus(totals)
+    if seconds >= MIN_STRETCH_SECONDS:
+        total = total.plus(Totals(seconds, meters, hr_weighted, hr_seconds))
     return total
 
 
@@ -348,8 +356,10 @@ def report(
     run_rows: list[dict[str, Any]] = []
     by_week: dict[str, Totals] = {}
     used_by_week: dict[str, int] = defaultdict(int)
+    all_totals: list[Totals] = []  # every run's stretch time, with or without heart rate
     for name, local_date, trace in runs:
         totals = time_in_band(trace, band) if band is not None else Totals()
+        all_totals.append(totals)
         if not trace.has_hr:
             status = "no_hr"
         elif totals.seconds <= 0:
@@ -424,7 +434,9 @@ def report(
             "min_stretch_seconds": MIN_STRETCH_SECONDS,
             "speed_smoothing_seconds": SMOOTHING_SECONDS,
             "max_record_gap_seconds": MAX_GAP_SECONDS,
-            "band_bin_seconds_per_mile": BIN_SECONDS_PER_MILE,
+            "max_excursion_seconds": MAX_EXCURSION_SECONDS,
+            "band_width_seconds_per_mile": BAND_SECONDS_PER_MILE,
+            "band_centre_step_seconds_per_mile": PACE_STEP_SECONDS_PER_MILE,
             "rolling_weeks": ROLLING_WEEKS,
             "rolling_method": "mean_of_weekly_means_with_data",
         },
@@ -433,9 +445,7 @@ def report(
             "unit": unit,
             **_pace_fields(band.lo if band else None, unit, "pace_min"),
             **_pace_fields(band.hi if band else None, unit, "pace_max"),
-            "steady_seconds_in_bin": (
-                round(band.steady_seconds) if band and band.steady_seconds is not None else None
-            ),
+            "steady_seconds_in_band": round(sum(t.seconds for t in all_totals)) if band else None,
         },
         "runs": run_rows,
         "weeks": week_rows,

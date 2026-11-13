@@ -60,7 +60,8 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach hr-pace [--dir exports/coros] [--weeks 12] [--pace-min M:SS --pace-max M:SS] [--unit mi|km] [--today YYYY-MM-DD]`
   — heart rate at one easy pace band from the FIT files' per-second records (`hr_pace.py`; nothing
   stored): per run, per Monday-Sunday week, 4-week rolling mean, coverage, caveats. Default band =
-  the runner's most-used 30 s/mi pace bin. Descriptive defaults, not coaching rules; no fitness score
+  30 s/mi centred on the runner's most-used pace; a stretch survives up to 30 s outside the band.
+  Descriptive defaults, not coaching rules; no fitness score
 - `uv run coach coros week [--date YYYY-MM-DD] [--today YYYY-MM-DD]` — one plan week (default: the
   week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
   targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
