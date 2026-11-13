@@ -21,6 +21,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - `coach dashboard`: a local progress page in one offline HTML file (weekly distance against the
   plan, long-run build-up, carbs per hour from the fueling log, milestones). The numbers stay on
   the laptop; a panel with nothing to show says "No data yet" instead of zeros. (#47)
+- `coach hr-pace`: heart rate at one easy pace as a trend, read from the FIT files (per run, per
+  week, 4-week rolling mean, with coverage counts and caveats). A description, not a fitness
+  score; not yet in Slack or the coach. (#46)
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
   API cost), asks before importing possible duplicates, and replies with the week's total. Also
   `coach coros login` (one-time sign-in, saved in the macOS keychain) and `coach coros sync`.

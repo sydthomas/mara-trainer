@@ -61,6 +61,11 @@ be summarized. If no approved source covers a question, the coach says so.
   milestones, weekly distance vs plan, long-run build-up, carbs per hour; a panel with no data says so;
   prints `{path, panels, weeks, generated_for}`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
+- `uv run coach hr-pace [--dir exports/coros] [--weeks 12] [--pace-min M:SS --pace-max M:SS] [--unit mi|km] [--today YYYY-MM-DD]`
+  — heart rate at one easy pace band from the FIT files' per-second records (`hr_pace.py`; nothing
+  stored): per run, per Monday-Sunday week, 4-week rolling mean, coverage, caveats. Default band =
+  30 s/mi centred on the runner's most-used pace; a stretch survives up to 30 s outside the band.
+  Descriptive defaults, not coaching rules; no fitness score
 - `uv run coach coros week [--date YYYY-MM-DD] [--today YYYY-MM-DD]` — one plan week (default: the
   week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
   targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
@@ -225,6 +230,7 @@ be summarized. If no approved source covers a question, the coach says so.
   `fueling.py` (fueling log), `body.py` (body check / niggle log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log` and `niggle_log`)
   `fueling.py` (fueling log), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  `fueling.py` (fueling log), `hr_pace.py` (heart rate at a fixed pace, from FIT records), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input

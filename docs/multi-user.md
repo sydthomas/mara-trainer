@@ -19,6 +19,7 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
 | One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
 | One dashboard file | `dashboard.py`: reads the single athlete row (timezone, units), writes `data/dashboard.html` | Build per athlete behind sign-in; never a shared file |
+| One folder of FIT files, one timezone | `hr_pace.py` / `coach hr-pace`: reads every `.fit` in `exports/coros/` as one runner's, weeks from the single `athlete` row's timezone | Pass the athlete's own files and timezone (the function already takes both as arguments) |
 | Local files | `exports/`, `plans/`, `data/eval-runs/` | Object storage keyed by athlete, or rows in the DB |
 | Approvals by name | `sources.approved_by`, knowledge approvals, "only Sydney approves" | A coach/admin role. Sources and knowledge stay shared; runners never approve them |
 | Cost by channel only | `api_usage` | Add `athlete_id` for cost per user and per-user limits |
