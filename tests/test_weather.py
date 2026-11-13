@@ -1,10 +1,14 @@
 """Weather: Open-Meteo forecast for a run window, plus the optional NWS WBGT lookup. Never hits
-the network (fake fetch only); coordinates, contact and values are synthetic."""
+the outside network (fake fetch, or a server on this machine for the real NWS transport);
+coordinates, contact and values are synthetic."""
 
 from __future__ import annotations
 
+import http.server
 import json
+import threading
 import urllib.error
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -716,3 +720,62 @@ def test_cli_without_a_contact_makes_no_nws_request(
     r = cli_weather(monkeypatch, nws)
     assert json.loads(r.output)["nws"] == {"ok": False, "reason": "no contact set"}
     assert nws.calls == []
+
+
+# --- the real NWS transport, against a server on this machine (no outside network) ---
+
+Seen = list[tuple[str, str | None]]
+
+
+@pytest.fixture
+def local_server() -> Iterator[tuple[str, Seen]]:
+    """A loopback HTTP server: `/moved` answers 301 to `/target`, anything else 200.
+
+    Yields its base URL and the (path, User-Agent) of every request it received.
+    """
+    seen: Seen = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen.append((self.path, self.headers.get("User-Agent")))
+            if self.path == "/moved":
+                self.send_response(301)
+                self.send_header("Location", "/target")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            body = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", seen
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_nws_http_get_sends_the_given_user_agent(local_server: tuple[str, Seen]) -> None:
+    base, seen = local_server
+    user_agent = f"(mara-trainer, {CONTACT})"
+    body = weather.nws_http_get(f"{base}/points", 5, {"User-Agent": user_agent})
+    assert body == b'{"ok": true}'
+    assert seen == [("/points", user_agent)]
+
+
+def test_nws_http_get_does_not_follow_redirects(local_server: tuple[str, Seen]) -> None:
+    base, seen = local_server
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        weather.nws_http_get(f"{base}/moved", 5, {"User-Agent": f"(mara-trainer, {CONTACT})"})
+    assert excinfo.value.code == 301
+    # The contact header went to the URL asked for and to no other.
+    assert [path for path, _ in seen] == ["/moved"]
