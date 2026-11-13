@@ -70,6 +70,9 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
+- `uv run coach body log --status green|yellow|red [--date YYYY-MM-DD] [--context before_run|after_run|other] [--location ...] [--swelling/--no-swelling] [--pain 0-10] [--notes ...]`
+  — body check / niggle log: her own status, stored as given (no classification or advice in code)
+- `uv run coach body show [--last N] [--since YYYY-MM-DD]` / `coach body delete ID`
 - `uv run coach source import [sources/seed.json] [--update]` — add seed sources as `proposed`; `--update` refreshes metadata of existing ones (approval kept)
 - `uv run coach source add --slug ... --title ... --author ... --kind ... --topics a,b --license ... --trust-reason ... [--url https://...]`
 - `uv run coach source list [--status proposed|approved|retired] [--topic fueling] [--women-tested]`
@@ -215,8 +218,8 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Layout
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
-  `fueling.py` (fueling log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
-  (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
+  `fueling.py` (fueling log), `body.py` (body check / niggle log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log` and `niggle_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent); agent and Slack land here
