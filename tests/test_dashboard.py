@@ -5,17 +5,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 from typer.testing import CliRunner
 
-from mara_trainer import dashboard, db, fueling
+from mara_trainer import body, dashboard, db, fueling, hr_pace
 from mara_trainer.cli import app
 from mara_trainer.plan_rules import RaceSetup, build_schedule_brief, validate_schedule
 
 from .plan_factory import build_valid_plan
+from .test_hr_pace import write_run
 
 TODAY = "2026-03-15"  # a Sunday; its Monday-Sunday week starts 2026-03-09
 PLAN_ANCHOR = "2026-02-23"  # a Monday, so plan week 1 starts there
@@ -70,6 +72,8 @@ def test_empty_db_every_panel_says_no_data(conn: sqlite3.Connection) -> None:
         "weekly_distance",
         "long_run",
         "fueling",
+        "hr_at_pace",
+        "body_log",
     ]
     assert all(p["status"] == "no_data" for p in data["panels"])
     assert all(t["value"] is None for t in panel(data, "milestones")["tiles"])
@@ -182,7 +186,10 @@ def test_cli_writes_the_file(tmp_db: Path, tmp_path: Path) -> None:
     runner = CliRunner()
     assert runner.invoke(app, ["init-db", "--timezone", "America/Los_Angeles"]).exit_code == 0
     out = tmp_path / "nested" / "dashboard.html"
-    r = runner.invoke(app, ["dashboard", "--out", str(out), "--weeks", "3", "--today", TODAY])
+    fits = str(tmp_path / "fits")  # never the real exports folder
+    r = runner.invoke(
+        app, ["dashboard", "--out", str(out), "--weeks", "3", "--today", TODAY, "--fit-dir", fits]
+    )
     assert r.exit_code == 0, r.output
     got = json.loads(r.output)
     assert got["path"] == str(out) and got["weeks"] == 3 and got["generated_for"] == TODAY
@@ -191,6 +198,129 @@ def test_cli_writes_the_file(tmp_db: Path, tmp_path: Path) -> None:
         "weekly_distance",
         "long_run",
         "fueling",
+        "hr_at_pace",
+        "body_log",
     ]
     assert out.read_text(encoding="utf-8").startswith("<!doctype html>")
-    assert runner.invoke(app, ["dashboard", "--out", str(out), "--weeks", "0"]).exit_code == 1
+    bad = ["dashboard", "--out", str(out), "--weeks", "0", "--fit-dir", fits]
+    assert runner.invoke(app, bad).exit_code == 1
+
+
+# ---------------------------------------------------------------- heart rate at pace
+
+
+def tuesday_run(folder: Path, weeks_ago: int, hr: int | None) -> None:
+    """A synthetic 20-minute steady run at 2.6 m/s on the Tuesday `weeks_ago` weeks before TODAY's
+    week (07:00 Los Angeles)."""
+    start = datetime(2026, 3, 10, 14, 0, tzinfo=UTC) - timedelta(days=7 * weeks_ago)
+    write_run(folder, f"run-{weeks_ago}.fit", start, [(1200, 2.6, hr)])
+
+
+def test_hr_panel_no_folder_or_no_files(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    for folder in (None, tmp_path / "missing", tmp_path):
+        hr = panel(dashboard.build_data(conn, TODAY, 4, folder), "hr_at_pace")
+        assert hr["status"] == "no_data" and hr["band"] is None and hr["trend"] is None
+        assert all(r["value"] is None for r in hr["rows"])  # missing, never zero
+    page = dashboard.render_html(dashboard.build_data(conn, TODAY, 4, tmp_path))
+    section = page.split('id="hr_at_pace"')[1].split("</section>")[0]
+    assert "No data yet" in section and "<svg" not in section
+    assert hr_pace.TREND_CAVEAT in section
+
+
+def test_hr_panel_runs_but_none_usable(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    tuesday_run(tmp_path, 0, None)  # no heart rate recorded
+    hr = panel(dashboard.build_data(conn, TODAY, 4, tmp_path), "hr_at_pace")
+    assert hr["status"] == "no_data"
+    assert hr["note"].startswith("0 of 1 runs")
+    assert "No data yet" in dashboard.render_html(dashboard.build_data(conn, TODAY, 4, tmp_path))
+
+
+def test_hr_panel_weekly_means_band_and_gaps(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    tuesday_run(tmp_path, 0, 150)
+    tuesday_run(tmp_path, 1, 152)
+    tuesday_run(tmp_path, 3, 156)  # the week in between has no run
+    data = dashboard.build_data(conn, TODAY, 4, tmp_path)
+    hr = panel(data, "hr_at_pace")
+    report = hr_pace.report(tmp_path, "America/Los_Angeles", TODAY, 4)
+    assert hr["status"] == "ok" and hr["band"] == "10:05-10:35/mi"
+    assert [r["date"] for r in hr["rows"]] == [
+        "2026-02-16",
+        "2026-02-23",
+        "2026-03-02",
+        "2026-03-09",
+    ]
+    assert [r["value"] for r in hr["rows"]] == [w["mean_hr"] for w in report["weeks"]]
+    assert [r["value"] for r in hr["rows"]] == [156.0, None, 152.0, 150.0]
+    assert hr["trend"] is None  # four weeks cannot hold two periods
+    assert hr["note"].startswith("3 of 3 runs")
+    section = dashboard.render_html(data).split('id="hr_at_pace"')[1].split("</section>")[0]
+    assert "10:05-10:35/mi" in section and hr_pace.TREND_CAVEAT in section
+    assert section.count('class="dot"') == 3  # one mark per week with data
+    assert section.count('class="line"') == 1  # only the two neighbouring weeks are joined
+    assert "<td>2026-02-23</td><td>\N{EN DASH}</td><td>0</td>" in section
+    assert "<td>2026-03-09</td><td>150 bpm</td><td>1</td>" in section
+    assert "No data yet" not in section and "over the last 4 weeks" not in section
+
+
+def test_hr_panel_shows_the_trend_sentence_with_enough_weeks(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    for weeks_ago, bpm in ((0, 150), (1, 150), (3, 150), (4, 156), (5, 156), (7, 156)):
+        tuesday_run(tmp_path, weeks_ago, bpm)
+    data = dashboard.build_data(conn, TODAY, 8, tmp_path)
+    expected = (
+        "HR at your usual pace (10:05-10:35/mi): 150 bpm over the last 4 weeks, 156 the 4 before"
+    )
+    assert panel(data, "hr_at_pace")["trend"] == expected
+    assert f"{expected}." in dashboard.render_html(data)
+
+
+# ---------------------------------------------------------------- body log
+
+
+def test_body_panel_empty(conn: sqlite3.Connection) -> None:
+    data = dashboard.build_data(conn, TODAY, 4)
+    log = panel(data, "body_log")
+    assert log["status"] == "no_data" and log["rows"] == []
+    section = dashboard.render_html(data).split('id="body_log"')[1].split("</section>")[0]
+    assert "No data yet" in section and "<svg" not in section
+
+
+def test_body_panel_one_mark_per_entry(conn: sqlite3.Connection) -> None:
+    entries = [
+        ("2026-02-10", "red", "old entry"),  # before the 4-week window
+        ("2026-02-17", "green", None),
+        ("2026-03-03", "yellow", "left <calf> & ankle"),
+        ("2026-03-03", "yellow", "right hip"),  # same day, same status: still its own mark
+        ("2026-03-12", "red", "shin"),
+        ("2026-03-20", "green", "after today"),
+    ]
+    for day, status, where in entries:
+        body.add_entry(conn, body.BodyEntry(date=day, status=status, location=where))
+    data = dashboard.build_data(conn, TODAY, 4)
+    log = panel(data, "body_log")
+    assert log["status"] == "ok" and log["start"] == "2026-02-16" and log["end"] == TODAY
+    assert [(r["date"], r["status"], r["location"]) for r in log["rows"]] == entries[1:5]
+    section = dashboard.render_html(data).split('id="body_log"')[1].split("</section>")[0]
+    chart = section.split('<div class="chart">')[1].split("</div>")[0]
+    # Shape differs by status (circle, triangle, square), so colour is never the only cue.
+    assert chart.count('<circle class="st-green"') == 1
+    assert chart.count('<path class="st-yellow"') == 2
+    assert chart.count('<rect class="st-red"') == 1
+    for label in ("Green", "Yellow", "Red"):
+        assert f">{label}</text>" in chart and f"{label}</span>" in section
+    assert "<calf>" not in section
+    assert "<title>Mar 3: yellow, left &lt;calf&gt; &amp; ankle</title>" in chart
+    assert "<td>2026-03-03</td><td>Yellow</td><td>left &lt;calf&gt; &amp; ankle</td>" in section
+    assert "<td>2026-02-17</td><td>Green</td><td>\N{EN DASH}</td>" in section  # no location given
+    assert "old entry" not in section and "after today" not in section
+
+
+def test_new_panels_carry_no_advice(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    tuesday_run(tmp_path, 0, 150)
+    body.add_entry(conn, body.BodyEntry(date="2026-03-12", status="red", pain=7))
+    page = dashboard.render_html(dashboard.build_data(conn, TODAY, 4, tmp_path)).lower()
+    tail = page.split('id="hr_at_pace"')[1]
+    for word in ("fitter", "fatigue", "should", "rest day", "see a ", "improv"):
+        assert word not in tail
+    assert "<script" not in page and "http" not in page

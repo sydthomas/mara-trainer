@@ -19,7 +19,9 @@
   as a check-in answer, so the coach writes the week with `propose_week`. One "yes" saves it in
   code and puts its runs on her COROS calendar (`coros.push_week`: workouts from the accepted
   plan only, days that already have a workout skipped and listed); "save only" skips the watch.
-  "push my week" sends the coming week anytime, the same way.
+  "push my week" sends the coming week anytime, the same way. The live check-in may end with
+  one code-built line: heart rate at her usual pace, last 4 weeks vs the 4 before, read from the
+  synced FIT files (`hr_pace_line`); without enough weeks of data there is no line.
 - Asleep-proof: fixed-time messages are also queued on Slack's servers (`slack_schedule`), so
   they arrive while the laptop sleeps; the live versions replace them when the bot is awake.
   On start, after a sleep, and every `CATCH_UP_EVERY`, the bot answers DMs it missed (last
@@ -64,7 +66,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
-from mara_trainer import db, fueling, reports
+from mara_trainer import db, fueling, hr_pace, reports
 from mara_trainer.dates import date_in_timezone, parse_instant
 
 from . import coros, slack_schedule, tools, weather
@@ -197,6 +199,43 @@ def _missed_line(missed: Debrief | None) -> str:
         "same question, also ask how it went (distance and time, effort 1-10, what I ate before "
         "and how long before, what I took during, stomach and energy)."
     )
+
+
+HR_PACE_DIR = coros.EXPORTS  # the FIT files the sync downloads
+HR_PACE_WAIT = 2.0  # seconds the check-in waits for the line once the coach's answer is ready
+
+
+def hr_pace_line(directory: Path, timezone: str, today: str) -> str:
+    """Heart rate at the usual pace as one fixed sentence plus its caveat, or "" when there are
+    not enough weeks with data (the common case), no FIT files, or anything goes wrong. Built in
+    code from `hr_pace` only: no coach call, no network, no interpretation."""
+    try:
+        if not directory.is_dir() or not any(directory.glob("*.[fF][iI][tT]")):
+            return ""
+        line = hr_pace.trend_line(hr_pace.report(directory, timezone, today)["trend"])
+    except Exception:  # an optional line must never cost her the check-in
+        log.exception("HR-at-pace line failed")
+        return ""
+    return f"{line}. {hr_pace.TREND_CAVEAT}" if line else ""
+
+
+def start_hr_pace_line(
+    directory: Path, timezone: str, today: str, wait: float | None = None
+) -> Callable[[], str]:
+    """Start reading the FIT files in the background (while the coach writes the recap) and
+    return a function that gives the line. It waits at most `wait` seconds (`HR_PACE_WAIT`) and
+    gives "" if the files aren't read by then, so the check-in is never held up."""
+    result: list[str] = []
+    worker = threading.Thread(
+        target=lambda: result.append(hr_pace_line(directory, timezone, today)), daemon=True
+    )
+    worker.start()
+
+    def line() -> str:
+        worker.join(HR_PACE_WAIT if wait is None else wait)
+        return result[0] if result else ""
+
+    return line
 
 
 SYNC = re.compile(r"^\s*(please\s+)?sync(\s+my)?(\s+runs)?(\s+from\s+coros)?\b[\s.!]*$", re.I)
@@ -826,6 +865,7 @@ class SlackCoach:
         finally:
             conn.close()
         synced, note = self._weekly_sync()
+        hr_line = start_hr_pace_line(HR_PACE_DIR, str(local.tzinfo), sunday.isoformat())
         missed = self._missed_debrief((sunday - timedelta(days=6)).isoformat())
         channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
         convo = self._conversation(channel)
@@ -833,6 +873,8 @@ class SlackCoach:
             convo.turns, convo.pending = [], None
             answer = self._answer(weekly_prompt(sunday.isoformat(), synced, missed), convo)
             text = WEEKLY_FAILED if answer == FAILED else to_mrkdwn(answer)
+            if answer != FAILED and (trend := hr_line()):
+                text += "\n\n" + trend
             if answer != FAILED:
                 text += self._weekly_weather(coming)
             if note:

@@ -15,6 +15,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   accepted plan; a day that already has a workout is skipped and listed, never doubled.
 
 ### Added
+- HR at pace and the body check log are now visible. `coach hr-pace` takes `--band-width` and
+  prints a `trend` summary (last 4 weeks' mean heart rate in the band vs the 4 before; it says
+  `enough_data: false` unless 3 of 4 weeks in each period have data). With enough data the live
+  Sunday check-in in Slack ends with that one line and a fixed caveat (a trend from watch data,
+  not a fitness score); otherwise there is no line. `coach dashboard` gains two panels: weekly
+  heart rate at the usual pace and a timeline of body checks by date and status. No advice or
+  interpretation anywhere. (#50)
 - Body check / niggle log: `coach body log --status green|yellow|red` (optional context,
   location, swelling, pain 0-10, notes), `coach body show` and `coach body delete`. It stores the
   runner's own status as given; nothing in code rates an entry or says whether to run (#43).
