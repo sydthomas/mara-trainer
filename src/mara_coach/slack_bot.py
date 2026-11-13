@@ -45,10 +45,15 @@
 - Weather: the live Sunday check-in ends with one conditions line per coming run (default
   location, `DEFAULT_MORNING_HOUR`), built in code from `weather.forecast` at send time; a failed
   lookup just leaves the block out, and the week costs one Open-Meteo request (plus two NWS
-  requests at most), not one per run. "weather" / "weather at NAME" answers for the next plan run
-  with no coach call (today's, unless a run is already imported for today), restart-proof like
-  the other code-handled phrases. Conditions only, never advice; nothing is stored, and queued
-  fallbacks never carry it.
+  requests at most), not one per run. "weather" / "weather at|in|near PLACE" answers for the
+  next plan run with no coach call (today's, unless a run is already imported for today),
+  restart-proof like the other code-handled phrases. PLACE is a named place if it is exactly
+  one, otherwise it is looked up by name (`weather.forecast(near=...)`: one geocoding request
+  carrying only the typed name) and the reply shows the matched place's label. Only a message
+  that is the whole phrase counts (`weather_place`); anything else goes to the coach. "near
+  me" / "in here" mean the default location, and a tail that reads as a time or a generic spot
+  ("in the morning", "at 6am tomorrow", "at the track") goes to the coach with no lookup.
+  Conditions only, never advice; nothing is stored, and queued fallbacks never carry it.
 - Restart-proof replies: a reply in progress is recorded in `slack_state` (`INFLIGHT_KEY`) until
   it's answered. On start, `resume` finishes it and removes its stuck placeholder (at most
   `MAX_TRIES` attempts, so a reply that crashes the bot can't loop), or says it was lost if it's
@@ -352,9 +357,69 @@ DEFAULT_MORNING_HOUR = 7  # athlete-local; the plan has no start times, so forec
 WEATHER_KINDS = ("easy", "workout", "long", "race")
 WEATHER = re.compile(
     r"^\s*(what(['’]?s|\s+is)\s+the\s+)?weather(\s+for\s+my(\s+next)?\s+run)?"
-    r"(\s+(at|in)\s+(?P<place>[\w-]+))?\s*[.!?]*$",
+    r"(\s+(at|in|near)\s+(?P<place>\w[\w ,.'’&;-]*?))?\s*[.!?]*$",
     re.I,
 )
+MAX_PLACE_WORDS = 6  # longer than this reads as a question for the coach, not a place name
+# After at/in/near, some short tails are not place names. These mean the default location:
+HERE = frozenset({"me", "here", "my location"})
+# ... and these make the message a question for the coach (nothing is looked up): a tail that
+# opens with one of NOT_A_NAME_OPENERS, has a time word or a clock time anywhere, is only a
+# time of day, or is "the" plus a generic spot. "The Strand" or "Sunrise, Region" stay places.
+NOT_A_NAME_OPENERS = frozenset({"my", "our", "a", "an", "this", "that", "next", "about"})
+TIME_WORDS = frozenset(
+    [
+        "morning",
+        "afternoon",
+        "evening",
+        "night",
+        "tonight",
+        "today",
+        "tomorrow",
+        "now",
+        "later",
+        "week",
+        "weekend",
+        "hour",
+        "hours",
+        "minute",
+        "minutes",
+        "am",
+        "pm",
+        "a.m",
+        "p.m",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ]
+)
+TIME_OF_DAY = frozenset({"noon", "midday", "midnight", "sunrise", "sunset", "dawn", "dusk"})
+GENERIC_SPOTS = frozenset(
+    [
+        "track",
+        "gym",
+        "park",
+        "beach",
+        "trail",
+        "trails",
+        "race",
+        "start",
+        "finish",
+        "course",
+        "office",
+        "lake",
+        "river",
+        "hill",
+        "hills",
+        "treadmill",
+        "road",
+    ]
+)
+CLOCK_TIME = re.compile(r"\d{1,2}(:\d{2})?([ap]\.?m\.?)?", re.I)  # 6, 6am, 6:30pm; not a postcode
 WEATHER_HEADER = "*Forecast for this week's runs* (conditions at a morning start):"
 NO_RUN_SOON = f"No run on your plan in the next {weather.FORECAST_DAYS} days, so no forecast."
 WEATHER_FAILED = "Couldn't get the forecast just now."
@@ -368,6 +433,48 @@ def _live_forecast(*, nws: bool = True, **window: Any) -> dict[str, Any]:
     if nws:
         names.append(weather.NWS_CONTACT_ENV)
     return weather.forecast(env={n: os.environ[n] for n in names if n in os.environ}, **window)
+
+
+def weather_place(text: str) -> str | None:
+    """The place asked for when the whole message is a weather phrase ("" = the default
+    location), or None when it isn't one and should go to the coach."""
+    match = WEATHER.match(text)
+    if match is None:
+        return None
+    place = match.group("place") or ""
+    for entity, char in (("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):  # as Slack sends them
+        place = place.replace(entity, char)
+    place = " ".join(place.split())
+    if (
+        len(place) > weather.MAX_PLACE_TEXT
+        or len(place.split()) > MAX_PLACE_WORDS
+        or weather.COORDINATES_TEXT.fullmatch(place)
+        or any(char in place for char in "<>;")
+    ):
+        return None
+    if place.casefold() in HERE:
+        return ""
+    if place and _not_a_place_name(place):
+        return None
+    return place
+
+
+def _not_a_place_name(place: str) -> bool:
+    """True for a tail that reads as a time or a generic spot ("the morning", "6am tomorrow",
+    "my office", "the track"), so it is never sent to the place lookup."""
+    words = [word.strip(".,'’").casefold() for word in place.split()]
+    rest = words[1:] if words[0] == "the" else words
+    return (
+        words[0] in NOT_A_NAME_OPENERS
+        or any(word in TIME_WORDS or CLOCK_TIME.fullmatch(word) for word in words)
+        or (len(rest) == 1 and rest[0] in TIME_OF_DAY | GENERIC_SPOTS and words[0] == "the")
+        or (len(words) == 1 and words[0] in TIME_OF_DAY)
+    )
+
+
+def _mrkdwn(text: str) -> str:
+    """Text from outside (a looked-up place label) made safe to show: Slack's three escapes."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def hour_label(hour: int) -> str:
@@ -648,9 +755,9 @@ class SlackCoach:
             if PUSH.match(text):
                 self._push(channel, client, self._tomorrow())
                 return
-            asked_weather = WEATHER.match(text)
-            if asked_weather:
-                self._weather(channel, client, asked_weather.group("place") or "")
+            asked_weather = weather_place(text)
+            if asked_weather is not None:
+                self._weather(channel, client, asked_weather)
                 return
             if GREEN.match(text) and self._log_green(channel, client, event.get("ts")):
                 return
@@ -1211,9 +1318,9 @@ class SlackCoach:
         placeholder: str | None = None,
         tries: int = 1,
     ) -> None:
-        """Her "weather" / "weather at NAME" (`place` "" = the default location): conditions for
-        the next plan run, answered in code with no coach call. Tracked like a sync, so a
-        restart mid-lookup finishes it."""
+        """Her "weather" / "weather at PLACE" (`place` "" = the default location; otherwise a
+        named place or one looked up by name): conditions for the next plan run, answered in
+        code with no coach call. Tracked like a sync, so a restart mid-lookup finishes it."""
         if placeholder is None:
             placeholder = client.chat_postMessage(channel=channel, text=CHECKING_WEATHER)["ts"]
         self._track("weather", channel, placeholder, tries, place)
@@ -1253,13 +1360,19 @@ class SlackCoach:
         if day == local.date() and local.hour > hour:  # today's morning has passed: from now
             hour = local.hour
             when = hour_label(hour)
-        result = self.forecast(
-            timezone=timezone, date=day.isoformat(), hour=hour, hours=1, place=place, now=self.now()
+        result = self.forecast(  # near: a named place if it is exactly one, else looked up
+            timezone=timezone, date=day.isoformat(), hour=hour, hours=1, near=place, now=self.now()
         )
         if not result.get("ok"):
-            return f"Couldn't get the forecast: {result.get('reason', 'no reason given')}."
+            reason = _mrkdwn(str(result.get("reason", "no reason given")))
+            if result.get("place_source") == weather.SOURCE_LOOKUP:
+                known = ", ".join(result.get("known_places") or []) or "none set"
+                return f"Couldn't look up that place: {reason}. Named places: {known}."
+            return f"Couldn't get the forecast: {reason}."
         miles = round(session["distance_meters"] / tools.MI_METERS, 1)
-        where = "" if result["place"] == weather.DEFAULT_PLACE else f" at {result['place']}"
+        where = (
+            "" if result["place"] == weather.DEFAULT_PLACE else f" at {_mrkdwn(result['place'])}"
+        )
         return (
             f"*{reports.WEEKDAYS[session['day']][:3]} {day.isoformat()[5:]}: {miles:g} mi "
             f"{session['kind']}, {when}{where}*\n"
