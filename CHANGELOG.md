@@ -26,6 +26,8 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   and 17 new sources covering coaching, injury, stretching, foam rolling and shoe rotation.
 - Coach: adapts the current week any day. For illness or a warning sign it can shorten or rest
   sessions, never add. Saved weeks post a plain-text week card to copy into notes.
+- Sources: 12 new proposals in the seed (not approved) on run-distance spikes and injury, bone
+  stress, pain monitoring, cycle and HRV, overtraining, cold water, durability and race weather (#45).
 
 ### Changed
 - `coach eval live` runs as a fictional runner in a throwaway database, so eval answers no longer
