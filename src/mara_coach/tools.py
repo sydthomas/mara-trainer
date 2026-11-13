@@ -6,7 +6,8 @@ Rules:
 - No mileage or pace math here. Every number comes from `mara_trainer` (or the DB) unchanged.
 - Read-only. `validate_plan` checks a draft but never accepts it; Sydney accepts via the CLI.
   `propose_fuel_entry` checks a debrief entry but never saves it; the Slack channel saves it in
-  code after she replies yes. `propose_week` works the same way for one week.
+  code after she replies yes. `propose_week` works the same way for one week, and
+  `propose_body_entry` for one body check / niggle.
 - No Strava data. The DB has no Strava source, and no tool may fetch or receive it.
 - Sources: only `approved` rows are visible to the coach.
 """
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mara_trainer import db, fueling, reports
+from mara_trainer import body, db, fueling, reports
 from mara_trainer.plan_rules import SESSION_KINDS
 
 from . import knowledge, profile, sources
@@ -167,6 +168,62 @@ def propose_fuel_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
         "carbs_per_hour": cph,
         "message": "Not saved yet. Read this back in one or two lines and ask 'Save it?'. "
         "The app saves it when she says yes.",
+    }
+
+
+def body_log(conn: sqlite3.Connection, last: int = 10, since: str | None = None) -> dict[str, Any]:
+    try:
+        return body.list_entries(conn, last, since)
+    except body.BodyError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+_BODY_TYPES: dict[str, tuple[type, str]] = {
+    "date": (str, "a YYYY-MM-DD string"),
+    "status": (str, "one of " + ", ".join(body.STATUSES)),
+    "context": (str, "one of " + ", ".join(body.CONTEXTS)),
+    "location": (str, "text"),
+    "swelling": (bool, "true or false"),
+    "pain": (int, "a whole number 0-10"),
+    "notes": (str, "text"),
+}
+
+
+def build_body_entry(args: dict[str, Any]) -> body.BodyEntry:
+    """Body check fields -> a BodyEntry, with every type checked first, so a wrong type is a
+    clear ToolError (never a TypeError later in validation). Missing fields stay null."""
+    problems = [f"unexpected argument {k}" for k in sorted(set(args) - set(_BODY_TYPES))]
+    problems += [f"missing {k}" for k in ("date", "status") if args.get(k) is None]
+    values: dict[str, Any] = {}
+    for key, (kind, label) in _BODY_TYPES.items():
+        value = args.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, kind) or (kind is int and isinstance(value, bool)):
+            problems.append(f"{key} must be {label}, got {value!r}")
+        else:
+            values[key] = value
+    if problems:
+        raise ToolError("; ".join(problems))
+    return body.BodyEntry(**values)
+
+
+def propose_body_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
+    """Validate one body check / niggle exactly as the runner reported it. Never saves: the
+    channel saves it in code only after the runner says yes. Nothing here rates the entry."""
+    try:
+        entry = build_body_entry(args)
+    except ToolError as exc:
+        return {"ok": False, "saved": False, "problems": [str(exc)]}
+    problems = entry.problems()
+    if problems:
+        return {"ok": False, "saved": False, "problems": problems}
+    return {
+        "ok": True,
+        "saved": False,
+        "entry": {k: v for k, v in entry.__dict__.items() if v is not None},
+        "message": "Not saved yet. The app shows her this entry and asks her to confirm; it "
+        "saves when she says yes. Don't say it's logged, and don't rate it.",
     }
 
 
@@ -384,6 +441,42 @@ TOOLS: tuple[Tool, ...] = (
             required=["date"],
         ),
         propose_fuel_entry,
+    ),
+    Tool(
+        "body_log",
+        "The runner's body checks and niggles, newest first, exactly as she reported them: "
+        "status (green, yellow, red), where it is, swelling, pain 0-10, notes. Null = not "
+        "given. Her own report, not a rating: never use it to clear her to run or to diagnose.",
+        _schema(
+            {
+                "last": {"type": "integer", "minimum": 1, "maximum": body.MAX_LAST},
+                "since": {**_DATE, "description": "Only entries on/after this date"},
+            }
+        ),
+        body_log,
+    ),
+    Tool(
+        "propose_body_entry",
+        "Body checks and niggles: check one entry in the runner's own words and status. It "
+        "does NOT save; the app shows it to her and saves it in code after she replies yes. "
+        "Leave out anything she didn't say. Never change her status or pain number.",
+        _schema(
+            {
+                "date": {**_DATE, "description": "The day it's about (athlete-local)"},
+                "status": {"type": "string", "enum": list(body.STATUSES)},
+                "context": {"type": "string", "enum": list(body.CONTEXTS)},
+                "location": {
+                    "type": "string",
+                    "maxLength": body.LOCATION_MAX,
+                    "description": "Where it is, in her words",
+                },
+                "swelling": {"type": "boolean", "description": "Only if she said yes or no"},
+                "pain": {"type": "integer", "minimum": 0, "maximum": 10},
+                "notes": {"type": "string", "maxLength": body.NOTES_MAX},
+            },
+            required=["date", "status"],
+        ),
+        propose_body_entry,
     ),
     Tool(
         "propose_week",

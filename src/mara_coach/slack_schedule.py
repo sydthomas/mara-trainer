@@ -4,6 +4,8 @@ While the bot is awake it keeps the next `HORIZON_DAYS` of fallbacks queued with
 `chat.scheduleMessage` (recorded in `scheduled_messages`):
 - the long-run debrief ping at `PING_HOUR` on plan long-run days, until that day's run is in the
   fuel log (debriefed early: the queued ping is deleted),
+- the morning body check at `BODY_HOUR` on plan long-run and workout days (`BODY_SESSION_KINDS`),
+  until the body log has an entry for that day,
 - a short weekly note at `WEEKLY_HOUR` on Sundays: next week's runs from the plan, and that the
   bot syncs her runs and sends the full recap when the laptop wakes.
 The weekly fallback is "live-replaceable": if the bot is awake `LEAD` before its post time, it
@@ -27,6 +29,9 @@ log = logging.getLogger(__name__)
 
 DEBRIEF_KIND = "long_run_debrief"
 WEEKLY_KIND = "weekly_checkin"
+BODY_KIND = "body_check"
+BODY_HOUR = 7  # athlete-local: before the run on long-run and workout days
+BODY_SESSION_KINDS = ("long", "workout")
 PING_HOUR = 10  # athlete-local, Sydney's choice
 WEEKLY_HOUR = 18  # Sunday, athlete-local, Sydney's choice
 HORIZON_DAYS = 7
@@ -41,6 +46,13 @@ def ping_text(miles: float) -> str:
         f"Long run day: {miles:g} mi on the plan. How'd it go? When you have a minute, tell me "
         "the distance and time, effort (1-10), what you ate before and how long before, what "
         "you took during, and how your stomach and energy held up."
+    )
+
+
+def body_ping_text() -> str:
+    return (
+        "Body check before today's run: reply *green*, *yellow* or *red*. "
+        'You can log a niggle any time: just say "log a niggle".'
     )
 
 
@@ -96,6 +108,8 @@ def wanted(conn: sqlite3.Connection, now: datetime) -> dict[tuple[str, str], Wan
         if session and session["kind"] == "long" and not logged(conn, iso):
             miles = round(session["distance_meters"] / MI_METERS, 1)
             items.append(Wanted(DEBRIEF_KIND, iso, _at(day, PING_HOUR, tz), ping_text(miles)))
+        if session and session["kind"] in BODY_SESSION_KINDS and not body_logged(conn, iso):
+            items.append(Wanted(BODY_KIND, iso, _at(day, BODY_HOUR, tz), body_ping_text()))
         if day.weekday() == 6:
             this_week = reports.plan_week(plan, iso)
             next_week = reports.plan_week(plan, (day + timedelta(days=1)).isoformat())
@@ -194,6 +208,11 @@ def cancel_for_live(conn: sqlite3.Connection, client: ScheduleClient, now: datet
 def logged(conn: sqlite3.Connection, day: str) -> bool:
     """True if the fuel log has an entry for this day: the debrief is done, don't ask again."""
     return conn.execute("SELECT 1 FROM fuel_log WHERE date = ?", (day,)).fetchone() is not None
+
+
+def body_logged(conn: sqlite3.Connection, day: str) -> bool:
+    """True if the body log has an entry for this day: she already checked in, don't ask."""
+    return conn.execute("SELECT 1 FROM niggle_log WHERE date = ?", (day,)).fetchone() is not None
 
 
 def queued(conn: sqlite3.Connection, kind: str, day: str) -> bool:

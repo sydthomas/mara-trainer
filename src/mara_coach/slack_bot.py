@@ -12,6 +12,18 @@
   most once a day (`notifications` table). The coach gathers the details and calls
   `propose_fuel_entry`, which only validates. The entry is saved here, in code, only when the
   runner replies yes; "no" drops it. The AI never writes the log itself.
+- Body check: on days the accepted plan has a long run or a quality workout, the bot DMs a
+  green / yellow / red check at `BODY_HOUR` athlete-local (queued ahead on Slack; live until
+  `BODY_LAST_HOUR` if it wasn't), once a day. A bare "green" is logged in code, no coach call,
+  on any day, under the day she sent it (a reply answered late by catch-up is not today's).
+  Yellow, red or a described niggle goes to the coach, which asks once for where,
+  swelling and pain 0-10 and calls `propose_body_entry` (validates only); the bot shows the
+  entry and saves it only on her yes. The saved-entry replies are fixed text: nothing here or
+  in the coach rates an entry or clears her to run. Yellow/red entries of the week go into
+  the Sunday check-in.
+- One yes, one thing: if the coach proposes more than one thing in a turn (body entry, week,
+  fueling entry), only the first of those is kept to confirm and the reply says which one
+  wasn't (`ONE_AT_A_TIME`).
 - Sunday is one conversation: at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`),
   when the week ending or the next one is in the plan, the bot first syncs the week's runs from
   COROS in code (no separate reminder), then the coach writes a recap of the week and a preview
@@ -57,15 +69,19 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
-from mara_trainer import db, fueling, reports
+from mara_trainer import body, db, fueling, reports
 
 from . import coros, slack_schedule, tools
 from .agent import Coach, CoachError
 from .slack_schedule import (
+    BODY_HOUR,
+    BODY_KIND,
+    BODY_SESSION_KINDS,
     DEBRIEF_KIND,
     PING_HOUR,
     WEEKLY_HOUR,
     WEEKLY_KIND,
+    body_ping_text,
     ping_text,
 )
 
@@ -160,7 +176,86 @@ SYNC_LEFT = '_{n} run(s) didn\'t download from COROS yet. Reply "sync my runs" l
 SYNC_FAILED = "Couldn't sync from COROS just now, so the recap may be missing runs."
 
 
-def weekly_prompt(sunday: str, synced: str, missed: Debrief | None = None) -> str:
+BODY_LAST_HOUR = 10  # a before-run check: don't send it live after this
+GREEN = re.compile(r"^\s*(all\s+)?(green|:large_green_circle:|\U0001F7E2)[\s.!]*$", re.I)
+YELLOW_RED = re.compile(
+    r"^\s*(yellow|red|:large_yellow_circle:|:red_circle:|\U0001F7E1|\U0001F534)[\s.!]*$", re.I
+)
+_CIRCLES = {
+    ":large_yellow_circle:": "yellow",
+    "\U0001f7e1": "yellow",
+    ":red_circle:": "red",
+    "\U0001f534": "red",
+}
+GREEN_SAVED = "Logged green for today ({day})."
+GREEN_SAVED_EARLIER = "Logged green for {day}, the day you sent it."
+ONE_AT_A_TIME = (
+    "_One thing at a time: your yes or no here is only for the {kept}. The {dropped} isn't "
+    "saved. Ask me for it again after this and I'll bring it back._"
+)
+BODY_QUESTION = "Reply *yes* to log it, or *no*."
+BODY_SAVED = "Saved to your body log (entry {id})."
+YELLOW_SAVED = (
+    BODY_SAVED + " It'll come up at Sunday's check-in, where the plan can change. If the pain "
+    "persists, gets worse or comes with swelling, see a qualified professional (a doctor or "
+    "physio)."
+)
+RED_SAVED = (
+    BODY_SAVED + " Please see a qualified professional (a doctor or physio) before you run on "
+    "it. Want the rest of this week lowered? Reply *lower my week* and I'll write it for you "
+    "to approve."
+)
+_CONTEXT_WORDS = {"before_run": "before a run", "after_run": "after a run", "other": "other"}
+
+
+def body_line(entry: dict[str, Any]) -> str:
+    """One body-log entry as she reported it. Unset fields are left out, never filled in."""
+    parts = [f"{entry['date']}: {entry['status']}"]
+    if entry.get("location"):
+        parts.append(str(entry["location"]))
+    if entry.get("swelling") is not None:
+        parts.append("swelling: " + ("yes" if entry["swelling"] else "no"))
+    if entry.get("pain") is not None:
+        parts.append(f"pain {entry['pain']} out of 10")
+    if entry.get("context"):
+        parts.append(_CONTEXT_WORDS[entry["context"]])
+    if entry.get("notes"):
+        parts.append(str(entry["notes"]))
+    return ", ".join(parts)
+
+
+def ask_to_log_body(answer: str, entry: body.BodyEntry) -> str:
+    """The coach's reply, then the entry and the bot's own yes / no question."""
+    return f"{answer.rstrip()}\n\n*Body log entry* {body_line(asdict(entry))}\n{BODY_QUESTION}"
+
+
+def body_reply(status: str, day: str, text: str) -> str:
+    """Her bare yellow / red, tagged so the coach gathers the details and proposes the entry."""
+    return (
+        f"(Body check for {day}: I'm reporting {status}. Ask me in one message for whatever is "
+        "missing of: where it is, any swelling, pain 0-10. Then call propose_body_entry.)"
+        f"\n\n{text}"
+    )
+
+
+def niggle_note(items: list[dict[str, Any]]) -> str:
+    """Yellow / red entries from the body log for the Sunday check-in; nothing if none."""
+    if not items:
+        return ""
+    lines = "\n".join("- " + body_line(i) for i in items)
+    return (
+        "\n(My body log this week, as I reported it:\n" + lines + "\nRaise each one: ask how "
+        "it is now, and take it into account when you write the coming week. Don't diagnose, "
+        "and never treat a pain number as a reason it's fine to run.)"
+    )
+
+
+def weekly_prompt(
+    sunday: str,
+    synced: str,
+    missed: Debrief | None = None,
+    niggles: list[dict[str, Any]] | None = None,
+) -> str:
     day = date.fromisoformat(sunday)
     monday = (day - timedelta(days=6)).isoformat()
     next_monday = (day + timedelta(days=1)).isoformat()
@@ -177,7 +272,8 @@ long-run fueling practice). Take that focus only from approved read_knowledge se
 if none covers something.
 3. End with one question in two parts: how did last week feel (energy, legs, sleep, anything \
 off)? And anything coming up this week (travel, soreness, busy days)? Say you'll write the \
-week's exact sessions from her answer. Don't mention syncing.{_missed_line(missed)}
+week's exact sessions from her answer. Don't mention syncing.{_missed_line(missed)}\
+{niggle_note(niggles or [])}
 Keep it brief and cite sources at the end."""
 
 
@@ -290,13 +386,15 @@ class DuplicateRuns:
     items: tuple[coros.Pending, ...]
 
 
-Pending = fueling.FuelEntry | WeekProposal | DuplicateRuns | None
+Pending = fueling.FuelEntry | body.BodyEntry | WeekProposal | DuplicateRuns | None
 
 
 def encode_pending(pending: Pending) -> dict[str, Any] | None:
     """A waiting yes/no proposal as JSON, so it survives a restart."""
     if isinstance(pending, fueling.FuelEntry):
         return {"type": "fuel", **asdict(pending)}
+    if isinstance(pending, body.BodyEntry):
+        return {"type": "body", **asdict(pending)}
     if isinstance(pending, WeekProposal):
         return {"type": "week", **asdict(pending)}
     if isinstance(pending, DuplicateRuns):
@@ -314,6 +412,8 @@ def decode_pending(raw: dict[str, Any] | None) -> Pending:
         if raw.get("type") == "fuel":
             entry = fueling.FuelEntry(**data)
             return None if entry.problems() else entry
+        if raw.get("type") == "body":
+            return _checked_body(data)
         if raw.get("type") == "week":
             return WeekProposal(**data)
         if raw.get("type") == "duplicates":
@@ -379,6 +479,31 @@ def proposed_week(messages: list[dict[str, Any]]) -> WeekProposal | None:
     return None
 
 
+def _checked_body(args: dict[str, Any]) -> body.BodyEntry | None:
+    """A body entry only if every field has the right type and passes validation."""
+    try:
+        entry = tools.build_body_entry(args)
+    except tools.ToolError:
+        return None
+    return None if entry.problems() else entry
+
+
+def proposed_body(messages: list[dict[str, Any]]) -> body.BodyEntry | None:
+    """The last valid `propose_body_entry` call in these messages, re-checked in code."""
+    for message in reversed(messages):
+        if message.get("role") != "assistant" or not isinstance(message.get("content"), list):
+            continue
+        for block in reversed(message["content"]):
+            if _get(block, "type") != "tool_use" or _get(block, "name") != "propose_body_entry":
+                continue
+            args = _get(block, "input")
+            if not isinstance(args, dict) or tools.check_args(_BODY_SCHEMA, args):
+                return None
+            return _checked_body(args)
+    return None
+
+
+_BODY_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_body_entry")
 _PROPOSE_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_fuel_entry")
 _WEEK_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_week")
 
@@ -439,6 +564,8 @@ class SlackCoach:
             if PUSH.match(text):
                 self._push(channel, client, self._tomorrow())
                 return
+            if GREEN.match(text) and self._log_green(channel, client, event.get("ts")):
+                return
             if convo.debrief is None:
                 convo.debrief = self._open_debrief()
             if isinstance(convo.pending, WeekProposal) and SAVE_ONLY.match(text):
@@ -452,7 +579,7 @@ class SlackCoach:
                     convo.pending = None
                     client.chat_postMessage(channel=channel, text=SKIPPED)
                     return
-                if isinstance(convo.pending, WeekProposal):
+                if isinstance(convo.pending, WeekProposal | body.BodyEntry):
                     convo.pending = None
                 else:
                     if convo.debrief is not None:
@@ -460,10 +587,10 @@ class SlackCoach:
                     convo.pending, convo.debrief = None, None
                 client.chat_postMessage(channel=channel, text=CANCELLED)
                 return
-            question = text
+            question = self._body_tagged(text, event.get("ts"))
             week_start, missed = self._open_weekly()
             if week_start:
-                question = weekly_reply(week_start, question)
+                question = weekly_reply(week_start, question) + self._week_niggles(week_start)
                 convo.debrief = convo.debrief or missed
             if convo.debrief:
                 question = (
@@ -706,6 +833,9 @@ class SlackCoach:
         if isinstance(convo.pending, WeekProposal):
             self._save_week(channel, convo, convo.pending, client)
             return
+        if isinstance(convo.pending, body.BodyEntry):
+            self._save_body(channel, convo, convo.pending, client)
+            return
         conn = self.connect()
         try:
             saved = fueling.add_entry(conn, convo.pending)
@@ -727,6 +857,118 @@ class SlackCoach:
         week_start, _ = self._open_weekly()
         follow_up = week_after_debrief(week_start) if week_start else SAVE_FOLLOW_UP
         self._reply(channel, convo, client, follow_up)
+
+    def _sent_day(self, conn: sqlite3.Connection, ts: Any) -> str:
+        """The athlete-local date a DM was sent, from Slack's `ts`: catch-up answers messages
+        up to CATCH_UP_WINDOW old, so "today" at handling time can be the wrong day. A missing
+        or unusable `ts` (not a time, in the future, older than the window) means today."""
+        now = self.now()
+        try:
+            sent = datetime.fromtimestamp(float(ts), UTC)
+        except (TypeError, ValueError, OverflowError, OSError):
+            sent = now
+        if not timedelta(0) <= now - sent <= timedelta(seconds=CATCH_UP_WINDOW):
+            sent = now
+        return sent.astimezone(ZoneInfo(db.athlete_timezone(conn))).date().isoformat()
+
+    def _log_green(self, channel: str, client: SlackClient, ts: Any = None) -> bool:
+        """Her bare "green": saved in code as the entry for the day she sent it, no coach call,
+        no confirmation. False (nothing saved) only when no athlete is set up yet."""
+        conn = self.connect()
+        try:
+            try:
+                day, today = self._sent_day(conn, ts), self.today(conn)
+            except LookupError:
+                return False
+            body.add_entry(conn, body.BodyEntry(day, "green"))
+        finally:
+            conn.close()
+        said = GREEN_SAVED if day == today else GREEN_SAVED_EARLIER
+        client.chat_postMessage(channel=channel, text=said.format(day=day))
+        return True
+
+    def _body_tagged(self, text: str, ts: Any = None) -> str:
+        """A bare yellow / red gets the body-check tag for the day she sent it; anything else
+        goes to the coach as is."""
+        match = YELLOW_RED.match(text)
+        if not match:
+            return text
+        word = match.group(1).lower()
+        conn = self.connect()
+        try:
+            day = self._sent_day(conn, ts)
+        except LookupError:
+            return text
+        finally:
+            conn.close()
+        return body_reply(_CIRCLES.get(word, word), day, text)
+
+    def _save_body(
+        self, channel: str, convo: Conversation, entry: body.BodyEntry, client: SlackClient
+    ) -> None:
+        """Her yes to a proposed body entry: saved as she reported it. The reply is fixed text
+        chosen by her own status (reported swelling gets the red text); nothing here rates the
+        entry or says whether to run."""
+        convo.pending = None
+        conn = self.connect()
+        try:
+            saved = body.add_entry(conn, entry)
+        except body.BodyError as exc:
+            client.chat_postMessage(
+                channel=channel, text="Couldn't save that: " + "; ".join(exc.problems)
+            )
+            return
+        finally:
+            conn.close()
+        template = {"yellow": YELLOW_SAVED, "red": RED_SAVED}.get(saved["status"], BODY_SAVED)
+        if saved["status"] != "green" and saved.get("swelling"):
+            template = RED_SAVED  # reported swelling gets the see-someone-first text
+        text = template.format(id=saved["id"])
+        client.chat_postMessage(channel=channel, text=text)
+        if convo.turns:  # so the coach sees what she agreed to and what the bot offered
+            convo.turns += [
+                {"role": "user", "content": "yes"},
+                {"role": "assistant", "content": text},
+            ]
+            convo.turns = convo.turns[-2 * MAX_TURNS :]
+
+    def _open_niggles(self, since: str, until: str) -> list[dict[str, Any]]:
+        conn = self.connect()
+        try:
+            return body.open_items(conn, since, until)
+        finally:
+            conn.close()
+
+    def _week_niggles(self, week_start: str) -> str:
+        """Yellow / red entries since the Monday before `week_start`, as a note for the coach."""
+        monday = (date.fromisoformat(week_start) - timedelta(days=7)).isoformat()
+        return niggle_note(self._open_niggles(monday, week_start))
+
+    def maybe_body_ping(self, client: SlackClient) -> bool:
+        """Send today's body check if it's due: a long-run or workout day, in the morning
+        window, not queued on Slack, not sent yet and nothing logged today. True if sent."""
+        conn = self.connect()
+        try:
+            local = self.now().astimezone(ZoneInfo(db.athlete_timezone(conn)))
+            if not BODY_HOUR <= local.hour < BODY_LAST_HOUR:
+                return False
+            day = local.date().isoformat()
+            session = reports.planned_session(db.load_accepted_plan(conn), day)
+            if not session or session["kind"] not in BODY_SESSION_KINDS:
+                return False
+            if slack_schedule.body_logged(conn, day) or slack_schedule.queued(conn, BODY_KIND, day):
+                return False  # she already checked in, or Slack has it queued
+            sent = conn.execute(
+                "SELECT 1 FROM notifications WHERE kind = ? AND date = ?", (BODY_KIND, day)
+            ).fetchone()
+            if sent:
+                return False  # already sent live today
+            channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
+            client.chat_postMessage(channel=channel, text=body_ping_text())
+            reports.mark_notified(conn, BODY_KIND, day)  # after the post: a failed one retries
+            return True
+        finally:
+            conn.close()
 
     def maybe_ping(self, client: SlackClient) -> bool:
         """Send today's long-run check-in if it's due. True if one was sent."""
@@ -775,12 +1017,15 @@ class SlackCoach:
         finally:
             conn.close()
         synced, note = self._weekly_sync()
-        missed = self._missed_debrief((sunday - timedelta(days=6)).isoformat())
+        monday = (sunday - timedelta(days=6)).isoformat()
+        missed = self._missed_debrief(monday)
+        niggles = self._open_niggles(monday, sunday.isoformat())
         channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
         convo = self._conversation(channel)
         with convo.lock, self._saving(convo):
             convo.turns, convo.pending = [], None
-            answer = self._answer(weekly_prompt(sunday.isoformat(), synced, missed), convo)
+            prompt = weekly_prompt(sunday.isoformat(), synced, missed, niggles)
+            answer = self._answer(prompt, convo)
             text = WEEKLY_FAILED if answer == FAILED else to_mrkdwn(answer)
             if note:
                 text += "\n\n" + note
@@ -981,12 +1226,9 @@ class SlackCoach:
             reply = self.coach_factory(conn).ask(text, history=history)
             messages = list(getattr(reply, "messages", []))[len(history) :]
             entry = proposed_entry(messages)
-            if entry is not None:
-                convo.pending = entry
+            niggle = proposed_body(messages)
             week = proposed_week(messages)
-            if week is not None and self._revised_week(conn, week)[0] is not None:
-                convo.pending = week
-            else:
+            if week is not None and self._revised_week(conn, week)[0] is None:
                 week = None
         except CoachError:
             log.warning("coach could not finish a Slack reply")
@@ -997,8 +1239,30 @@ class SlackCoach:
         finally:
             conn.close()
         answer = reply.text or FAILED
-        if week is not None and answer != FAILED:
-            answer = ask_to_save_week(answer)
+        if answer == FAILED:
+            niggle = None  # the bot shows a body entry before it can be saved: not shown, not kept
+        # One yes can save one thing. The first of these is kept; she is told about the rest.
+        proposals: list[tuple[str, Pending]] = [
+            (name, proposal)
+            for name, proposal in (
+                ("body log entry", niggle),
+                ("week", week),
+                ("fueling entry", entry),
+            )
+            if proposal is not None
+        ]
+        if proposals:
+            convo.pending = proposals[0][1]
+        if answer != FAILED:
+            if niggle is not None:
+                if week is not None:  # the week isn't the thing being confirmed now
+                    answer = _SAVE_ASK.sub("", answer)
+                answer = ask_to_log_body(answer, niggle)
+            elif week is not None:
+                answer = ask_to_save_week(answer)
+            if len(proposals) > 1:
+                dropped = " and the ".join(name for name, _ in proposals[1:])
+                answer += "\n\n" + ONE_AT_A_TIME.format(kept=proposals[0][0], dropped=dropped)
         convo.turns += [
             {"role": "user", "content": text},
             {"role": "assistant", "content": answer},
@@ -1067,7 +1331,7 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
                 bot.resume(client)  # a reply the last restart cut off
             except Exception:
                 log.exception("resume failed")
-            checks = (bot.maybe_schedule, bot.maybe_ping, bot.maybe_weekly)
+            checks = (bot.maybe_schedule, bot.maybe_body_ping, bot.maybe_ping, bot.maybe_weekly)
             last_tick, last_catch_up = 0.0, 0.0
             while True:
                 tick = time.time()  # wall clock: jumps forward when the laptop slept

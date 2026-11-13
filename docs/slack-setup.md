@@ -79,6 +79,22 @@ back and asks "Save it?". Reply **yes** to save it to your fuel log or **no** to
 Anything else is treated as a correction. If you debrief before 10am, the check-in is skipped
 (saved in the last 5 minutes before 10, Slack may already have it on its way).
 
+## Body check and niggle log
+
+On days your accepted plan has a long run or a workout, the bot DMs you at 7am (your timezone):
+green, yellow or red? It's sent at most once a day, and not at all if you already logged that
+day. If the bot was off and Slack didn't have it queued, it still goes out until 10am.
+
+- **green** (just the word, any day, ping or not) is logged straight away. No AI call.
+- **yellow**, **red**, "log a niggle", or simply describing one goes to the coach. It asks once
+  for where it is, whether there's swelling and pain 0-10, then the bot shows the entry. Reply
+  **yes** to log it or **no** to drop it.
+- The coach never clears you to run and never reads a pain number as "fine". Yellow is logged
+  and comes up at Sunday's check-in, where the plan can change. Red gets a pointer to a
+  qualified professional before running on it, and an offer to lower the rest of the week
+  ("lower my week"), which you approve like any other week.
+- Yellow and red entries from the week are part of the Sunday check-in.
+
 ## Sunday weekly check-in
 
 Sundays at 6pm (your timezone; late until 10pm if the bot was off) the bot sends one message:
