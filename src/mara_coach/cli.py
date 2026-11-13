@@ -25,6 +25,7 @@ from . import (
     sources,
     tools,
     usage,
+    weather,
 )
 from .env import load_env
 
@@ -383,6 +384,30 @@ def usage_cmd(
     """Claude API spend: answers, cost by channel and model, cost per answer, 30-day projection."""
     today = datetime.now(UTC).date().isoformat()
     _out(usage.report(_conn(), since=usage.since_days(today, days), today=today))
+
+
+@app.command("weather")
+def weather_cmd(
+    date: Annotated[str | None, typer.Option(help="Local date YYYY-MM-DD (default: today)")] = None,
+    hour: Annotated[
+        int | None, typer.Option(help="Local start hour 0-23 (default: the current hour)")
+    ] = None,
+    hours: Annotated[int, typer.Option(help="Length of the run window in hours")] = 3,
+) -> None:
+    """Forecast for a run window from Open-Meteo (conditions only, nothing stored). Needs
+    COACH_LAT and COACH_LON in .env. Exit 1 with {ok: false, reason} on any failure."""
+    load_env()
+    try:
+        timezone = db.athlete_timezone(_conn())
+    except LookupError as exc:
+        result: dict[str, object] = {"ok": False, "reason": str(exc)}
+    else:
+        result = weather.forecast(
+            timezone=timezone, date=date, hour=hour, hours=hours, env=os.environ
+        )
+    _out(result)
+    if not result["ok"]:
+        raise typer.Exit(1)
 
 
 @coros_app.command("login")
