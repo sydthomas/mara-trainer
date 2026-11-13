@@ -56,16 +56,20 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach plan show` — accepted plan
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
-- `uv run coach dashboard [--out data/dashboard.html] [--weeks 16] [--today YYYY-MM-DD]` — local progress page
+- `uv run coach dashboard [--out data/dashboard.html] [--weeks 16] [--today YYYY-MM-DD] [--fit-dir exports/coros]` — local progress page
   (`mara_trainer/dashboard.py`): one offline HTML file (inline CSS + SVG, no scripts, nothing uploaded) with
-  milestones, weekly distance vs plan, long-run build-up, carbs per hour; a panel with no data says so;
+  milestones, weekly distance vs plan, long-run build-up, carbs per hour, heart rate at the usual pace
+  (weekly means from `hr_pace`, band named, trend caveat) and the body check log (one mark per entry by
+  date and status, shape + color; location in the table); no advice text; a panel with no data says so;
   prints `{path, panels, weeks, generated_for}`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
-- `uv run coach hr-pace [--dir exports/coros] [--weeks 12] [--pace-min M:SS --pace-max M:SS] [--unit mi|km] [--today YYYY-MM-DD]`
+- `uv run coach hr-pace [--dir exports/coros] [--weeks 12] [--pace-min M:SS --pace-max M:SS | --band-width 30] [--unit mi|km] [--today YYYY-MM-DD]`
   — heart rate at one easy pace band from the FIT files' per-second records (`hr_pace.py`; nothing
   stored): per run, per Monday-Sunday week, 4-week rolling mean, coverage, caveats. Default band =
   30 s/mi centred on the runner's most-used pace; a stretch survives up to 30 s outside the band.
-  Descriptive defaults, not coaching rules; no fitness score
+  `trend` (`hr_pace.trend_summary`): last 4 weeks' mean vs the 4 before, `enough_data` only when 3
+  of 4 weeks in each have data (usually false today). Descriptive defaults, not coaching rules; no
+  fitness score
 - `uv run coach coros week [--date YYYY-MM-DD] [--today YYYY-MM-DD]` — one plan week (default: the
   week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
   targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
@@ -128,7 +132,10 @@ be summarized. If no approved source covers a question, the coach says so.
   missed). Her reply (through Monday) logs a missed debrief first (yes), and is tagged so the
   coach writes the coming week with `propose_week` (guardrails check it, never saves). One yes
   saves it in code (old plan archived) and puts its runs on her COROS calendar; "save only"
-  skips the watch; "push my week" sends the coming week anytime. Setup: `docs/slack-setup.md`
+  skips the watch; "push my week" sends the coming week anytime. The live check-in ends with one
+  code-built line when `hr_pace` has enough weeks of data (HR at her usual pace, last 4 weeks vs
+  the 4 before, plus a fixed caveat; read from `exports/coros/` while the coach writes, dropped
+  if not ready; no line otherwise, and none in the queued fallback). Setup: `docs/slack-setup.md`
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.

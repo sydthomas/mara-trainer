@@ -21,7 +21,10 @@ advice here, and a caller should not read one into the trend.
 - `BAND_SECONDS_PER_MILE` / `PACE_STEP_SECONDS_PER_MILE`: the default band is 30 s/mile wide and
   centred (to the nearest 5 s/mile) on the runner's own most-used pace after the warm-ups, so no
   pace is invented and the usual pace does not sit on a band edge.
+  `--band-width` changes the width (a multiple of 5, up to `MAX_BAND_SECONDS_PER_MILE`).
 - `ROLLING_WEEKS`: the rolling value is the mean of the weekly means that exist in 4 weeks.
+- `TREND_PERIOD_WEEKS` / `TREND_MIN_WEEKS_WITH_DATA`: the trend summary compares the last 4
+  weeks with the 4 before, and only when at least 3 weeks in each period have data.
 
 Missing is not zero: a run with no heart-rate data or no time in band is counted in `coverage`
 and left out of every mean; a week with no usable run has null means.
@@ -49,8 +52,12 @@ MIN_SPEED = 0.5  # m/s; slower than this is standing or walking to a stop
 MAX_EXCURSION_SECONDS = 30
 BAND_SECONDS_PER_MILE = 30
 PACE_STEP_SECONDS_PER_MILE = 5
+MAX_BAND_SECONDS_PER_MILE = 120
 ROLLING_WEEKS = 4
+TREND_PERIOD_WEEKS = 4
+TREND_MIN_WEEKS_WITH_DATA = 3
 MAX_WEEKS = 104
+TREND_CAVEAT = "A trend from watch data in varying conditions, not a fitness score."
 CAVEATS = [
     "wrist_hr_noise",
     "conditions_vary",
@@ -198,10 +205,13 @@ def _trace(start: datetime, records: Sequence[tuple[datetime, Mapping[str, Any]]
 # ------------------------------------------------------------------ stretches and band
 
 
-def most_used_band(runs: list[RunTrace]) -> Band | None:
-    """A 30 s/mile band centred on the pace the runner used most after the warm-ups.
+def most_used_band(
+    runs: list[RunTrace], width_seconds_per_mile: int = BAND_SECONDS_PER_MILE
+) -> Band | None:
+    """A band (30 s/mile wide by default) centred on the pace the runner used most after the
+    warm-ups.
 
-    Running time is counted per 5 s/mile of smoothed pace; the 30 s/mile window holding the most
+    Running time is counted per 5 s/mile of smoothed pace; the window of that width holding the most
     time wins (ties go to the faster one) and the band is then centred on the mean pace inside
     it, rounded to 5 s/mile. Centring keeps the usual pace away from the band's edges, which a
     fixed grid (10:00, 10:30 ...) cannot do for a runner who sits on one of its lines.
@@ -216,7 +226,7 @@ def most_used_band(runs: list[RunTrace]) -> Band | None:
             pace_seconds_at[step] += dt * pace
     if not seconds_at:
         return None
-    width = BAND_SECONDS_PER_MILE // PACE_STEP_SECONDS_PER_MILE
+    width = width_seconds_per_mile // PACE_STEP_SECONDS_PER_MILE
 
     def seconds_in_window(first: int) -> float:
         return sum(seconds_at.get(step, 0.0) for step in range(first, first + width))
@@ -226,7 +236,7 @@ def most_used_band(runs: list[RunTrace]) -> Band | None:
     steps = [step for step in range(best, best + width) if step in seconds_at]
     mean_pace = sum(pace_seconds_at[step] for step in steps) / seconds_in_window(best)
     centre = round(mean_pace / PACE_STEP_SECONDS_PER_MILE) * PACE_STEP_SECONDS_PER_MILE
-    half = BAND_SECONDS_PER_MILE / 2
+    half = width_seconds_per_mile / 2
     return Band((centre - half) / MI, (centre + half) / MI, "most_used_pace")
 
 
@@ -292,15 +302,30 @@ def report(
     pace_min_seconds: int | None = None,
     pace_max_seconds: int | None = None,
     unit: str = "mi",
+    band_width_seconds_per_mile: int | None = None,
 ) -> dict[str, Any]:
     """Heart rate at one pace band for the last `weeks` Monday-Sunday weeks ending with `today`'s
-    week. `pace_min_seconds`/`pace_max_seconds` are per `unit` (min = the faster edge)."""
+    week. `pace_min_seconds`/`pace_max_seconds` are per `unit` (min = the faster edge);
+    `band_width_seconds_per_mile` sets the width of the automatic band instead (default 30)."""
     if unit not in ("mi", "km"):
         raise ValueError("--unit must be mi or km")
     if not 1 <= weeks <= MAX_WEEKS:
         raise ValueError(f"--weeks must be between 1 and {MAX_WEEKS}")
     if (pace_min_seconds is None) != (pace_max_seconds is None):
         raise ValueError("give both --pace-min and --pace-max, or neither")
+    width = band_width_seconds_per_mile
+    if width is not None and pace_min_seconds is not None:
+        raise ValueError("give --band-width or --pace-min/--pace-max, not both")
+    if width is None:
+        width = BAND_SECONDS_PER_MILE
+    if not (
+        PACE_STEP_SECONDS_PER_MILE <= width <= MAX_BAND_SECONDS_PER_MILE
+        and width % PACE_STEP_SECONDS_PER_MILE == 0
+    ):
+        raise ValueError(
+            f"--band-width must be a multiple of {PACE_STEP_SECONDS_PER_MILE} between "
+            f"{PACE_STEP_SECONDS_PER_MILE} and {MAX_BAND_SECONDS_PER_MILE} (seconds per mile)"
+        )
     this_monday = parse_date(week_bounds(today)[0])
     week_starts = [
         (this_monday - timedelta(days=7 * i)).isoformat() for i in range(weeks - 1, -1, -1)
@@ -351,7 +376,7 @@ def report(
         per = MI if unit == "mi" else KM
         band = Band(pace_min_seconds / per, pace_max_seconds / per, "arguments")
     else:
-        band = most_used_band([trace for _, _, trace in runs])
+        band = most_used_band([trace for _, _, trace in runs], width)
 
     run_rows: list[dict[str, Any]] = []
     by_week: dict[str, Totals] = {}
@@ -419,7 +444,7 @@ def report(
             }
         )
 
-    return {
+    out: dict[str, Any] = {
         "directory": str(directory),
         "window": {
             "today": today,
@@ -435,7 +460,7 @@ def report(
             "speed_smoothing_seconds": SMOOTHING_SECONDS,
             "max_record_gap_seconds": MAX_GAP_SECONDS,
             "max_excursion_seconds": MAX_EXCURSION_SECONDS,
-            "band_width_seconds_per_mile": BAND_SECONDS_PER_MILE,
+            "band_width_seconds_per_mile": width,
             "band_centre_step_seconds_per_mile": PACE_STEP_SECONDS_PER_MILE,
             "rolling_weeks": ROLLING_WEEKS,
             "rolling_method": "mean_of_weekly_means_with_data",
@@ -453,3 +478,78 @@ def report(
         "coverage": coverage,
         "caveats": list(CAVEATS),
     }
+    out["trend"] = trend_summary(out)
+    return out
+
+
+# ------------------------------------------------------------------ trend summary
+
+
+def _period(weeks: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    hrs = [w["mean_hr"] for w in weeks if w["mean_hr"] is not None]
+    enough = len(hrs) >= TREND_MIN_WEEKS_WITH_DATA
+    return {
+        "start": weeks[0]["week_start"] if weeks else None,
+        "end": weeks[-1]["week_end"] if weeks else None,
+        "weeks_with_data": len(hrs),
+        "runs_used": sum(w["runs_used"] for w in weeks),
+        # Null below the minimum: a mean of one or two weeks is not shown as a 4-week value.
+        "mean_hr": _round_hr(sum(hrs) / len(hrs)) if enough else None,
+    }
+
+
+def trend_summary(report: Mapping[str, Any]) -> dict[str, Any]:
+    """The report's weekly means as one comparison: the mean of the weekly means in the latest
+    `TREND_PERIOD_WEEKS` weeks against the same for the weeks before, with the band used, weeks
+    with data and runs used. Pure: reads only `report["weeks"]` and `report["band"]`.
+
+    `enough_data` is false unless at least `TREND_MIN_WEEKS_WITH_DATA` weeks in each period have
+    data (and the report covers both periods). Both numbers are descriptive defaults, not
+    coaching rules: they decide when two means are comparable, not what a change means. Nothing
+    here rates the difference; no sign, threshold or label is attached to it.
+    """
+    weeks = list(report["weeks"])
+    band = report["band"]
+    covered = len(weeks) >= 2 * TREND_PERIOD_WEEKS
+    latest = _period(weeks[-TREND_PERIOD_WEEKS:] if covered else [])
+    previous = _period(weeks[-2 * TREND_PERIOD_WEEKS : -TREND_PERIOD_WEEKS] if covered else [])
+    if band["pace_min"] is None:
+        reason: str | None = "no_band"
+    elif not covered:
+        reason = "report_shorter_than_two_periods"
+    elif latest["mean_hr"] is None or previous["mean_hr"] is None:
+        reason = "too_few_weeks_with_data"
+    else:
+        reason = None
+    return {
+        "enough_data": reason is None,
+        "reason": reason,
+        "period_weeks": TREND_PERIOD_WEEKS,
+        "min_weeks_with_data": TREND_MIN_WEEKS_WITH_DATA,
+        "method": "mean_of_weekly_means_with_data",
+        "band": {k: band[k] for k in ("chosen_by", "unit", "pace_min", "pace_max")},
+        "latest": latest,
+        "previous": previous,
+        "weeks_with_data": latest["weeks_with_data"] + previous["weeks_with_data"],
+        "runs_used": latest["runs_used"] + previous["runs_used"],
+    }
+
+
+def band_label(band: Mapping[str, Any]) -> str | None:
+    """'8:35-9:05/mi' from a report's band; None when there is no band."""
+    if band["pace_min"] is None or band["pace_max"] is None:
+        return None
+    return f"{band['pace_min'].split('/')[0]}-{band['pace_max']}"
+
+
+def trend_line(trend: Mapping[str, Any]) -> str | None:
+    """One fixed sentence for a recap, or None without enough data. It states the two means and
+    nothing else: no direction word, no judgement. Show `TREND_CAVEAT` next to it."""
+    if not trend["enough_data"]:
+        return None
+    span = band_label(trend["band"])
+    usual = trend["band"]["chosen_by"] == "most_used_pace"
+    lead = f"HR at your usual pace ({span})" if usual else f"HR at {span}"
+    n = trend["period_weeks"]
+    latest, previous = (int(trend[k]["mean_hr"] + 0.5) for k in ("latest", "previous"))
+    return f"{lead}: {latest} bpm over the last {n} weeks, {previous} the {n} before"

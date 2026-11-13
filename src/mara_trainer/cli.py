@@ -165,10 +165,13 @@ def dashboard_cmd(
     today: Annotated[
         str | None, typer.Option(help="Build as of this athlete-local date (YYYY-MM-DD)")
     ] = None,
+    fit_dir: Annotated[
+        Path, typer.Option(help="Folder of .fit files for the heart-rate panel (read only)")
+    ] = Path("exports/coros"),
 ) -> None:
     """Write the local progress dashboard: one offline HTML file, nothing uploaded."""
     try:
-        data = dashboard.build_data(_conn(), today, weeks)
+        data = dashboard.build_data(_conn(), today, weeks, fit_dir)
     except dashboard.DashboardError as exc:
         _fail(str(exc))
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -349,8 +352,13 @@ def hr_pace_cmd(
     ] = None,
     unit: Annotated[str, typer.Option(help="Unit for paces: mi or km")] = "mi",
     today: Annotated[str | None, typer.Option(help="Override today (YYYY-MM-DD)")] = None,
+    band_width: Annotated[
+        int | None,
+        typer.Option(help="Width of the automatic band in seconds per mile (default 30)"),
+    ] = None,
 ) -> None:
-    """Heart rate at one easy pace band, per run, per week and as a 4-week rolling mean.
+    """Heart rate at one easy pace band, per run, per week, as a 4-week rolling mean and as a
+    trend summary (last 4 weeks vs the 4 before, when both have enough weeks with data).
     Default band: the runner's own most-used pace. A description, not a fitness score."""
     try:
         timezone = db.athlete_timezone(_conn())
@@ -366,6 +374,7 @@ def hr_pace_cmd(
                 hr_pace.parse_pace(pace_min) if pace_min is not None else None,
                 hr_pace.parse_pace(pace_max) if pace_max is not None else None,
                 unit,
+                band_width,
             )
         )
     except (LookupError, ValueError) as exc:

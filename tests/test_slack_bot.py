@@ -819,3 +819,84 @@ def test_pending_round_trips_and_bad_data_is_dropped() -> None:
     assert slack_bot.decode_pending({"type": "fuel", "date": "2026-11-07", "bogus": 1}) is None
     assert slack_bot.decode_pending({"type": "fuel", "date": "Saturday"}) is None
     assert slack_bot.decode_pending(None) is None
+
+
+# ---------------------------------------------------------------- HR-at-pace line in the recap
+
+from mara_trainer import hr_pace  # noqa: E402
+
+from .test_hr_pace import write_run  # noqa: E402
+
+HR_LINE = (
+    "HR at your usual pace (10:05-10:35/mi): 150 bpm over the last 4 weeks, 155 the 4 before. "
+    + hr_pace.TREND_CAVEAT
+)
+
+
+def _steady_weeks(folder: Path, weeks_ago: list[int]) -> None:
+    """Synthetic 20-minute steady runs on Tuesdays before Sunday 2026-11-08: 150 bpm in the last
+    four weeks, 155 in the four before."""
+    for n in weeks_ago:
+        start = datetime(2026, 11, 3, 15, 0, tzinfo=UTC) - timedelta(days=7 * n)
+        write_run(folder, f"{n}.fit", start, [(1200, 2.6, 150 if n < 4 else 155)])
+
+
+def _weekly_text(monkeypatch: pytest.MonkeyPatch, folder: Path, answer: str = "Recap.") -> str:
+    monkeypatch.setattr(slack_bot, "HR_PACE_DIR", folder)
+    monkeypatch.setattr(slack_bot, "HR_PACE_WAIT", 60.0)  # the fake coach answers instantly
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    assert _debrief_bot(FakeCoach([answer]), shared, _sun(2, 9)).maybe_weekly(client)
+    (post,) = client.posted
+    return str(post["text"])
+
+
+def test_weekly_check_in_ends_with_the_hr_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _steady_weeks(tmp_path, [0, 1, 3, 4, 5, 7])  # 3 of 4 weeks in each period
+    assert _weekly_text(monkeypatch, tmp_path) == "Recap.\n\n" + HR_LINE
+
+
+def test_weekly_check_in_has_no_hr_line_without_enough_weeks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _steady_weeks(tmp_path / "few", [0, 1, 3, 4, 5])  # only 2 of the 4 weeks before
+    assert _weekly_text(monkeypatch, tmp_path / "few") == "Recap."
+    (tmp_path / "empty").mkdir()
+    assert _weekly_text(monkeypatch, tmp_path / "empty") == "Recap."
+    assert _weekly_text(monkeypatch, tmp_path / "missing") == "Recap."
+    (tmp_path / "junk").mkdir()
+    (tmp_path / "junk" / "broken.fit").write_bytes(b"not a fit file")
+    assert _weekly_text(monkeypatch, tmp_path / "junk") == "Recap."
+
+
+def test_hr_line_never_breaks_or_holds_up_the_check_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "a.fit").write_bytes(b"x")
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("synthetic failure")
+
+    monkeypatch.setattr(slack_bot.hr_pace, "report", boom)
+    assert slack_bot.hr_pace_line(tmp_path, "America/Los_Angeles", "2026-11-08") == ""
+    assert _weekly_text(monkeypatch, tmp_path) == "Recap."
+
+    release = slack_bot.threading.Event()
+    monkeypatch.setattr(slack_bot.hr_pace, "report", lambda *a, **k: release.wait(30))
+    line = slack_bot.start_hr_pace_line(tmp_path, "America/Los_Angeles", "2026-11-08", wait=0.01)
+    assert line() == ""  # still reading: no line instead of a late check-in
+    release.set()
+
+
+def test_no_hr_line_when_the_coach_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _steady_weeks(tmp_path, [0, 1, 3, 4, 5, 7])
+    monkeypatch.setattr(slack_bot, "HR_PACE_DIR", tmp_path)
+    monkeypatch.setattr(slack_bot, "HR_PACE_WAIT", 60.0)
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    assert _debrief_bot(FakeCoach([RuntimeError("API down")]), shared, _sun(2, 9)).maybe_weekly(
+        client
+    )
+    assert client.posted[0]["text"] == slack_bot.WEEKLY_FAILED
