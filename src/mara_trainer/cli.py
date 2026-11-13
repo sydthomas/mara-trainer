@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import coros_workouts, db, fueling, imports, paces, reports
+from . import coros_workouts, db, fueling, hr_pace, imports, paces, reports
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -301,6 +301,43 @@ def pace_cmd(
         _fail(str(exc))
     report["input"] = {"source": source, **report["input"]}
     _out(report)
+
+
+@app.command("hr-pace")
+def hr_pace_cmd(
+    directory: Annotated[
+        Path, typer.Option("--dir", help="Folder of .fit files (read only, nothing is stored)")
+    ] = Path("exports/coros"),
+    weeks: Annotated[int, typer.Option(help="Monday-Sunday weeks to cover, ending this week")] = 12,
+    pace_min: Annotated[
+        str | None, typer.Option(help="Faster edge of the pace band, M:SS per --unit")
+    ] = None,
+    pace_max: Annotated[
+        str | None, typer.Option(help="Slower edge of the pace band, M:SS per --unit")
+    ] = None,
+    unit: Annotated[str, typer.Option(help="Unit for paces: mi or km")] = "mi",
+    today: Annotated[str | None, typer.Option(help="Override today (YYYY-MM-DD)")] = None,
+) -> None:
+    """Heart rate at one easy pace band, per run, per week and as a 4-week rolling mean.
+    Default band: the runner's own most-used pace. A description, not a fitness score."""
+    try:
+        timezone = db.athlete_timezone(_conn())
+        day = (
+            date.fromisoformat(today) if today else datetime.now(ZoneInfo(timezone)).date()
+        ).isoformat()
+        _out(
+            hr_pace.report(
+                directory,
+                timezone,
+                day,
+                weeks,
+                hr_pace.parse_pace(pace_min) if pace_min is not None else None,
+                hr_pace.parse_pace(pace_max) if pace_max is not None else None,
+                unit,
+            )
+        )
+    except (LookupError, ValueError) as exc:
+        _fail(str(exc))
 
 
 @coros_app.command("week")
