@@ -50,12 +50,15 @@ def test_wanted_covers_the_next_seven_days() -> None:
     db.save_plan(shared.conn, PLAN)
     want = slack_schedule.wanted(shared.conn, _utc(1, 20))  # Sun 11-01 noon LA
     assert sorted(want) == [
+        ("body_check", "2026-11-07"),
         ("long_run_debrief", "2026-11-07"),
         ("weekly_checkin", "2026-11-01"),
         ("weekly_checkin", "2026-11-08"),
     ]
     assert want[("long_run_debrief", "2026-11-07")].post_at == _utc(7, 18)  # 10am LA
     assert want[("long_run_debrief", "2026-11-07")].text == slack_schedule.ping_text(10.0)
+    assert want[("body_check", "2026-11-07")].post_at == _utc(7, 15)  # 7am LA
+    assert want[("body_check", "2026-11-07")].text == slack_schedule.body_ping_text()
     preview = want[("weekly_checkin", "2026-11-01")].text
     assert (
         "sync your runs and send the full recap" in preview and "Sat 11-07: 10 mi long" in preview
@@ -70,7 +73,7 @@ def test_reconcile_is_idempotent_and_follows_plan_changes() -> None:
     shared, client = SharedDB(), ScheduleFake()
     db.save_plan(shared.conn, PLAN)
     bot = _debrief_bot(FakeCoach([]), shared, _utc(1, 20))
-    assert bot.maybe_schedule(client) == 3 and len(client.queued) == 3
+    assert bot.maybe_schedule(client) == 4 and len(client.queued) == 4
     assert bot.maybe_schedule(client) == 0  # nothing changed: no Slack calls
     changed = json.loads(json.dumps(PLAN))
     changed["weeks"][0]["sessions"][1]["distance_meters"] = 19312  # 12 mi long run
@@ -80,7 +83,7 @@ def test_reconcile_is_idempotent_and_follows_plan_changes() -> None:
     texts = list(_queued_texts(client).values())
     assert slack_schedule.ping_text(12.0) in texts and slack_schedule.ping_text(10.0) not in texts
     assert any("Sat 11-07: 12 mi long" in t for t in texts)
-    assert len(client.queued) == 3 and len(client.deleted) == 2
+    assert len(client.queued) == 4 and len(client.deleted) == 2
 
 
 def test_old_sync_fallbacks_are_removed() -> None:

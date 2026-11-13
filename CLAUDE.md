@@ -113,12 +113,13 @@ be summarized. If no approved source covers a question, the coach says so.
   body hash (edits send a section back to review). Only Sydney approves.
 - `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
   read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile, fuel_log,
-  search_sources, read_knowledge, propose_fuel_entry, propose_week, plan_week, allowed_domains); exit 1 on bad args or a tool error
+  body_log, search_sources, read_knowledge, propose_fuel_entry, propose_body_entry, propose_week,
+  plan_week, allowed_domains); exit 1 on bad args or a tool error
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
 - Slack while the laptop sleeps: the bot queues the next 7 days of fixed-time messages on Slack
-  (`slack_schedule.py`, table `scheduled_messages`: debrief pings and a 6pm note with next week's
+  (`slack_schedule.py`, table `scheduled_messages`: body checks, debrief pings and a 6pm note with next week's
   runs); awake, it cancels the 6pm fallback 5 min early and sends the live check-in.
   Queued messages never carry weather (it would be stale); a test pins this.
   Missed DMs are answered on wake (cursor in `slack_state`), never twice. A reply cut off by a
@@ -131,8 +132,14 @@ be summarized. If no approved source covers a question, the coach says so.
   `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USER_ID` and `ANTHROPIC_API_KEY` in `.env`;
   answers only the allowed user. On plan long-run days it DMs a debrief check-in at 10am local
   (once a day); the coach proposes the entry with `propose_fuel_entry` (validates, never saves)
-  and the bot saves it in code only when she replies yes. Sundays at 6pm local it syncs the
-  week's runs from COROS in code, then sends one weekly check-in (last week recap + next week
+  and the bot saves it in code only when she replies yes. On plan long-run and workout days it
+  DMs a body check at 7am local (green / yellow / red, once a day, queued ahead). A bare
+  "green" is logged in code (any day, no LLM). Yellow, red or "log a niggle" goes to the coach:
+  one question (where, swelling, pain 0-10), then `propose_body_entry` (validates, never saves);
+  the bot shows the entry and saves it on yes. The coach never clears her to run or reads a
+  pain number as clearance; red gets a referral and an offer to lower the week (`propose_week`
+  cut). The week's yellow/red entries go into the Sunday check-in. Sundays at 6pm local it
+  syncs the week's runs from COROS in code, then sends one weekly check-in (last week recap + next week
   preview + one question: how the week felt, what's coming up, and the long-run debrief if it was
   missed). Her reply (through Monday) logs a missed debrief first (yes), and is tagged so the
   coach writes the coming week with `propose_week` (guardrails check it, never saves). One yes

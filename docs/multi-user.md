@@ -14,7 +14,7 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | Name and story in the prompt | `agent.py` system prompt: "You are Sydney's marathon coach... her first marathon" | Build from the athlete's profile (name, experience, pronouns) per request |
 | One Slack user | `SLACK_ALLOWED_USER_ID`; one bot process | A `slack_user_id -> athlete_id` table; unknown users get an invite flow, not the coach |
 | One DM channel and message cursor | `slack_state` (`dm_channel`, `last_handled_ts`, `inflight_reply`, `dm_turns`), `scheduled_messages` | Key both by athlete (and Slack user) |
-| Schedule constants | `slack_bot.py`: 10am debrief, 6pm weekly (syncs COROS first) ("Sydney's choice") | Per-athlete settings in the DB |
+| Schedule constants | `slack_schedule.py` / `slack_bot.py`: 7am body check, 10am debrief, 6pm weekly (syncs COROS first) ("Sydney's choice") | Per-athlete settings in the DB |
 | COROS through Claude Code | `.mcp.json`, one OAuth login on her laptop; `coros-sync` and `coros-run-planner` are skills | Per-user OAuth with tokens stored server-side; sync and push become server jobs |
 | One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
 | One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |

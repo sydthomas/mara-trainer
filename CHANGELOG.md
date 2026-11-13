@@ -35,6 +35,14 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   (temperature, humidity, dew point, feels-like, rain, wind, UV; °F and mph beside SI). Conditions
   only, no advice; nothing is stored. Location comes from `COACH_LAT` / `COACH_LON`, rounded to 2
   decimals before the request. (#44)
+- Slack: body check and niggle log. On long-run and workout days the bot asks green / yellow /
+  red at 7am (queued on Slack, so it arrives while the laptop sleeps). A bare "green" is logged
+  in code with no AI call. Yellow, red or "log a niggle" goes to the coach, which asks once for
+  where, swelling and pain 0-10 and calls the new `propose_body_entry` tool (validates, never
+  saves); the bot shows the entry and saves it on yes. The coach never clears the runner to run
+  or reads a pain number as clearance: yellow comes up at Sunday's check-in, red gets a referral
+  and an offer to lower the week (the existing `propose_week` cut). The week's yellow/red
+  entries go into the Sunday check-in. New read tool `body_log`; four eval cases. (#51)
 - `coach weather`: optional wet-bulb globe temperature per hour (`wbgt_c`, `wbgt_f`) from the US
   National Weather Service. It runs only when `COACH_NWS_CONTACT` is set (NWS asks for a contact
   in the User-Agent; it is sent there and shown nowhere). Outside the US, or when NWS has no WBGT,
