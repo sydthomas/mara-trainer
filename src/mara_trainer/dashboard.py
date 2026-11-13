@@ -186,8 +186,7 @@ def build_data(
         empty="Import runs or accept a plan to see the long-run build-up.",
     )
 
-    logged = fueling.list_entries(conn, last=fueling.MAX_LAST, since=rollups[0].start_date)
-    entries = [e for e in reversed(logged["entries"]) if e["date"] <= today]
+    entries = fueling.entries_between(conn, rollups[0].start_date, today)
     rated = [e for e in entries if e["carbs_per_hour"] is not None]
     fuel = _columns_panel(
         "fueling",

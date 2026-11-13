@@ -110,6 +110,24 @@ def test_fueling_only_plots_entries_with_a_rate(full: sqlite3.Connection) -> Non
     assert "1 of 2" in fuel["note"]
 
 
+def test_fueling_counts_every_entry_in_the_window(conn: sqlite3.Connection) -> None:
+    """More entries than `fuel show` lists at once: none dropped, later ones don't crowd out."""
+    for _ in range(2):
+        fueling.add_entry(
+            conn, fueling.FuelEntry(date="2026-03-08", duration_seconds=5400, carbs_grams=60)
+        )
+    for _ in range(fueling.MAX_LAST):
+        fueling.add_entry(
+            conn, fueling.FuelEntry(date="2026-04-01", duration_seconds=3600, carbs_grams=30)
+        )
+    fuel = panel(dashboard.build_data(conn, TODAY, 4), "fueling")
+    assert [r["date"] for r in fuel["rows"]] == ["2026-03-08", "2026-03-08"]
+    assert "2 of 2" in fuel["note"]
+    later = panel(dashboard.build_data(conn, "2026-04-05", 8), "fueling")
+    assert len(later["rows"]) == fueling.MAX_LAST + 2
+    assert later["rows"][0]["date"] == "2026-03-08"
+
+
 def test_fueling_logged_without_rate_is_no_data(conn: sqlite3.Connection) -> None:
     fueling.add_entry(conn, fueling.FuelEntry(date="2026-03-15", stomach=4))
     fuel = panel(dashboard.build_data(conn, TODAY, 4), "fueling")
