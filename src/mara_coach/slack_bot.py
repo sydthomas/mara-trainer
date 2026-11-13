@@ -30,6 +30,13 @@
   (plan, ping record, fuel log), so it survives restarts.
 - COROS sync: "sync my runs" (or just "sync") pulls this week's runs in code with `coros`, no
   coach call. Possible duplicates are imported only if she replies yes.
+- Weather: the live Sunday check-in ends with one conditions line per coming run (default
+  location, `DEFAULT_MORNING_HOUR`), built in code from `weather.forecast` at send time; a failed
+  lookup just leaves the block out, and the week costs one Open-Meteo request (plus two NWS
+  requests at most), not one per run. "weather" / "weather at NAME" answers for the next plan run
+  with no coach call (today's, unless a run is already imported for today), restart-proof like
+  the other code-handled phrases. Conditions only, never advice; nothing is stored, and queued
+  fallbacks never carry it.
 - Restart-proof replies: a reply in progress is recorded in `slack_state` (`INFLIGHT_KEY`) until
   it's answered. On start, `resume` finishes it and removes its stuck placeholder (at most
   `MAX_TRIES` attempts, so a reply that crashes the bot can't loop), or says it was lost if it's
@@ -60,8 +67,9 @@ from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
 from mara_trainer import db, fueling, hr_pace, reports
+from mara_trainer.dates import date_in_timezone, parse_instant
 
-from . import coros, slack_schedule, tools
+from . import coros, slack_schedule, tools, weather
 from .agent import Coach, CoachError
 from .slack_schedule import (
     DEBRIEF_KIND,
@@ -240,6 +248,43 @@ SAVE_FOLLOW_UP = (
     "(Saved.) Give me your short coach reply: one or two observations from my fuel log, and "
     "one small thing to try next long run if it's worth changing anything."
 )
+
+
+# --- Weather: conditions only, built in code, fetched at send time, never stored. Queued
+# fallbacks (`slack_schedule`) never carry it: a forecast written days ahead would be stale.
+DEFAULT_MORNING_HOUR = 7  # athlete-local; the plan has no start times, so forecasts use this hour
+WEATHER_KINDS = ("easy", "workout", "long", "race")
+WEATHER = re.compile(
+    r"^\s*(what(['’]?s|\s+is)\s+the\s+)?weather(\s+for\s+my(\s+next)?\s+run)?"
+    r"(\s+(at|in)\s+(?P<place>[\w-]+))?\s*[.!?]*$",
+    re.I,
+)
+WEATHER_HEADER = "*Forecast for this week's runs* (conditions at a morning start):"
+NO_RUN_SOON = f"No run on your plan in the next {weather.FORECAST_DAYS} days, so no forecast."
+WEATHER_FAILED = "Couldn't get the forecast just now."
+CHECKING_WEATHER = "Checking the forecast..."
+
+
+def _live_forecast(*, nws: bool = True, **window: Any) -> dict[str, Any]:
+    """`weather.forecast` with the weather settings from the environment and nothing else.
+    `nws=False` leaves the NWS contact out, so no NWS request is made."""
+    names = [weather.LAT_ENV, weather.LON_ENV, weather.PLACES_ENV]
+    if nws:
+        names.append(weather.NWS_CONTACT_ENV)
+    return weather.forecast(env={n: os.environ[n] for n in names if n in os.environ}, **window)
+
+
+def hour_label(hour: int) -> str:
+    return f"{hour % 12 or 12}{'am' if hour < 12 else 'pm'}"
+
+
+def attribution_line(results: list[dict[str, Any]]) -> str:
+    """The attribution texts `weather.py` returned, each once, linked."""
+    credits: dict[str, str] = {}
+    for result in results:
+        for credit in result["attribution"]:
+            credits.setdefault(credit["text"], credit["url"])
+    return "_" + " · ".join(f"<{url}|{text}>" for text, url in credits.items()) + "_"
 
 
 def weekly_reply(week_start: str, text: str) -> str:
@@ -478,6 +523,10 @@ class SlackCoach:
             if PUSH.match(text):
                 self._push(channel, client, self._tomorrow())
                 return
+            asked_weather = WEATHER.match(text)
+            if asked_weather:
+                self._weather(channel, client, asked_weather.group("place") or "")
+                return
             if convo.debrief is None:
                 convo.debrief = self._open_debrief()
             if isinstance(convo.pending, WeekProposal) and SAVE_ONLY.match(text):
@@ -550,6 +599,8 @@ class SlackCoach:
                 self._sync(channel, convo, client, placeholder, tries)
             elif job["kind"] == "push":  # safe to repeat: days with a workout are skipped
                 self._push(channel, client, job["question"], placeholder, tries)
+            elif job["kind"] == "weather":  # read-only, so safe to repeat
+                self._weather(channel, client, job["question"], placeholder, tries)
             else:
                 self._reply(channel, convo, client, job["question"], placeholder, tries)
         return True
@@ -824,6 +875,8 @@ class SlackCoach:
             text = WEEKLY_FAILED if answer == FAILED else to_mrkdwn(answer)
             if answer != FAILED and (trend := hr_line()):
                 text += "\n\n" + trend
+            if answer != FAILED:
+                text += self._weekly_weather(coming)
             if note:
                 text += "\n\n" + note
             if answer != FAILED and coming:
@@ -855,6 +908,118 @@ class SlackCoach:
             notes.append(SYNC_LEFT.format(n=report.not_downloaded))
         synced = f"Runs synced from COROS just now: {len(report.imported)} new."
         return synced, "\n".join(notes) or None
+
+    forecast = staticmethod(_live_forecast)  # tests swap in a fake; never the network there
+
+    def _weekly_weather(self, week: dict[str, Any] | None) -> str:
+        """The forecast block for the live Sunday check-in, or "" (no runs, no location, any
+        failure). It can't stop the check-in and holds it up by one set of requests at most,
+        however many runs the week has: nothing here raises, the responses are fetched once and
+        reused for every run day, and after the first miss no more requests are made."""
+        try:
+            return self._conditions_block(week)
+        except Exception as exc:  # the type only: a message could hold a URL
+            log.warning("weather block skipped (%s)", type(exc).__name__)
+            return ""
+
+    def _conditions_block(self, week: dict[str, Any] | None) -> str:
+        runs = [s for s in (week or {}).get("sessions", []) if s["kind"] in WEATHER_KINDS]
+        if not runs:
+            return ""
+        conn = self.connect()
+        try:
+            timezone = db.athlete_timezone(conn)
+        finally:
+            conn.close()
+        lines: list[str] = []
+        results: list[dict[str, Any]] = []
+        nws = True
+        bodies: dict[str, bytes] = {}  # this message only: one request serves every run day
+        for run in runs:  # one lookup per run day, in date order
+            result = self.forecast(
+                timezone=timezone,
+                date=run["date"],
+                hour=DEFAULT_MORNING_HOUR,
+                hours=1,
+                now=self.now(),
+                nws=nws,
+                reuse=bodies,
+            )
+            if not result.get("ok"):
+                break  # past the forecast (so are the later runs) or a failure: stop asking
+            nws = nws and bool(result["nws"]["ok"])  # NWS missed once: don't wait on it again
+            results.append(result)
+            lines.append(
+                f"• {run['weekday'][:3]} {run['date'][5:]} morning "
+                f"({hour_label(DEFAULT_MORNING_HOUR)}): "
+                f"{weather.conditions_text(result['hours'][0])}"
+            )
+        if not lines:
+            return ""
+        return "\n\n" + "\n".join([WEATHER_HEADER, *lines, attribution_line(results)])
+
+    def _weather(
+        self,
+        channel: str,
+        client: SlackClient,
+        place: str,
+        placeholder: str | None = None,
+        tries: int = 1,
+    ) -> None:
+        """Her "weather" / "weather at NAME" (`place` "" = the default location): conditions for
+        the next plan run, answered in code with no coach call. Tracked like a sync, so a
+        restart mid-lookup finishes it."""
+        if placeholder is None:
+            placeholder = client.chat_postMessage(channel=channel, text=CHECKING_WEATHER)["ts"]
+        self._track("weather", channel, placeholder, tries, place)
+        try:
+            try:
+                text = self._weather_reply(place or None)
+            except Exception as exc:
+                log.warning("weather reply failed (%s)", type(exc).__name__)
+                text = WEATHER_FAILED
+            _finish(client, channel, placeholder, text)
+        finally:
+            self._untrack()
+
+    def _weather_reply(self, place: str | None) -> str:
+        conn = self.connect()
+        try:
+            timezone = db.athlete_timezone(conn)
+            plan = db.load_accepted_plan(conn)
+            ran = {
+                date_in_timezone(parse_instant(a.started_at), timezone)
+                for a in db.load_activities(conn)
+            }
+        finally:
+            conn.close()
+        local = self.now().astimezone(ZoneInfo(timezone))
+        for offset in range(weather.FORECAST_DAYS):
+            day = local.date() + timedelta(days=offset)
+            if offset == 0 and day.isoformat() in ran:
+                continue  # today's run is already imported: the next one is what she means
+            session = reports.planned_session(plan, day.isoformat())
+            if session and session["kind"] in WEATHER_KINDS:
+                break
+        else:
+            return NO_RUN_SOON
+        hour = DEFAULT_MORNING_HOUR
+        when = f"morning ({hour_label(hour)})"
+        if day == local.date() and local.hour > hour:  # today's morning has passed: from now
+            hour = local.hour
+            when = hour_label(hour)
+        result = self.forecast(
+            timezone=timezone, date=day.isoformat(), hour=hour, hours=1, place=place, now=self.now()
+        )
+        if not result.get("ok"):
+            return f"Couldn't get the forecast: {result.get('reason', 'no reason given')}."
+        miles = round(session["distance_meters"] / tools.MI_METERS, 1)
+        where = "" if result["place"] == weather.DEFAULT_PLACE else f" at {result['place']}"
+        return (
+            f"*{reports.WEEKDAYS[session['day']][:3]} {day.isoformat()[5:]}: {miles:g} mi "
+            f"{session['kind']}, {when}{where}*\n"
+            f"{weather.conditions_text(result['hours'][0])}\n{attribution_line([result])}"
+        )
 
     def _open_weekly(self) -> tuple[str | None, Debrief | None]:
         """The week her check-in reply should write, if the check-in went out this Sunday and

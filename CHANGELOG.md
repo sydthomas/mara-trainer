@@ -40,6 +40,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   in the User-Agent; it is sent there and shown nowhere). Outside the US, or when NWS has no WBGT,
   the values are null with a reason and the rest of the forecast is unchanged. A number only: no
   heat flags, no advice. `attribution` is now a list (Open-Meteo, plus NWS when used). (#48)
+- Weather: named places and the forecast in Slack. `coach weather --place NAME` uses a place from
+  the optional `COACH_PLACES` setting (`name:lat,lon;name:lat,lon`), rounded like the default; the
+  output shows the name, never coordinates. In Slack, the live Sunday check-in ends with one
+  conditions line per coming run (morning start, default location), and "weather" or "weather at
+  NAME" answers for the next plan run with no AI call. Conditions only, fetched when the message
+  is sent, never stored; a failed lookup leaves the lines out, and messages queued for when the
+  laptop sleeps never carry a forecast. (#49)
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
   API cost), asks before importing possible duplicates, and replies with the week's total. Also
   `coach coros login` (one-time sign-in, saved in the macOS keychain) and `coach coros sync`.

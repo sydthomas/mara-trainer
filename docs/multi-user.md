@@ -22,6 +22,8 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | One folder of FIT files, one timezone | `hr_pace.py` / `coach hr-pace`: reads every `.fit` in `exports/coros/` as one runner's, weeks from the single `athlete` row's timezone | Pass the athlete's own files and timezone (the function already takes both as arguments) |
 | One FIT folder for the Slack line and the dashboard | `slack_bot.HR_PACE_DIR` (= `coros.EXPORTS`) for the Sunday HR-at-pace line; `coach dashboard --fit-dir` defaults to `exports/coros` | Per-athlete file storage; pass that athlete's folder |
 | One home location | `COACH_LAT` / `COACH_LON` in `.env` (`weather.py`) | Per-athlete location in the DB (or per request), still rounded before it leaves the server |
+| One runner's named places | `COACH_PLACES` in `.env` (`weather.py`): one shared list of `name:lat,lon` | Places per athlete in the DB, still rounded and never shown back |
+| One default run hour | `slack_bot.py` `DEFAULT_MORNING_HOUR` (7am): forecast lines assume a morning start because the plan has no start times | A usual start time per athlete (or per session) in the DB |
 | One NWS contact | `COACH_NWS_CONTACT` in `.env` (`weather.py`): the runner's own contact in the User-Agent to `api.weather.gov` | The service's own operator contact from server config; never a runner's |
 | Local files | `exports/`, `plans/`, `data/eval-runs/` | Object storage keyed by athlete, or rows in the DB |
 | Approvals by name | `sources.approved_by`, knowledge approvals, "only Sydney approves" | A coach/admin role. Sources and knowledge stay shared; runners never approve them |

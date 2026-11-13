@@ -1,11 +1,24 @@
 """Run-time forecast from Open-Meteo (https://open-meteo.com/), fetched on demand.
 
-Conditions only: no pace adjustment, no heat advice, no thresholds. Nothing is stored or cached.
+Conditions only: no pace adjustment, no heat advice, no thresholds. Nothing is stored, and
+nothing is cached beyond a dict a caller may pass for one message (`reuse`, below).
 The request carries coordinates rounded to 2 decimals, the athlete's IANA timezone and the
 variable names, and nothing else (no key, no account, no name, urllib's default User-Agent).
 Coordinates come from `COACH_LAT` / `COACH_LON` and are never put in the output.
 
+Named places: optional `COACH_PLACES` (`name:lat,lon;name:lat,lon`; names are case-insensitive
+letters, digits, `_`, `-`). `forecast(place=NAME)` uses that place, rounded the same way, and
+sends only that one location. The output carries the name (or "default"), never coordinates. A
+malformed entry makes only its own name unusable; its reason names the entry, never its text.
+
 `forecast` never raises: every failure is `{"ok": False, "reason": ...}`.
+
+One response for several windows: a caller that needs more than one window at one location (the
+Slack check-in: one line per run day) passes the same `reuse` dict to each call. Response bodies
+are kept in it by URL, so the identical request is made once (Open-Meteo's answer already holds
+all 16 days). The dict is the caller's, lives only as long as the caller keeps it, and must not
+be saved or logged (its keys are request URLs). Failures are never kept. Without `reuse` every
+call asks afresh.
 
 Optional second lookup: the US National Weather Service (https://api.weather.gov, flow per
 https://www.weather.gov/documentation/services-web-api) for wet-bulb globe temperature (WBGT).
@@ -49,6 +62,9 @@ TIMEOUT_SECONDS = 10.0
 FORECAST_DAYS = 16  # the most the forecast API serves
 MAX_HOURS = 24
 LAT_ENV, LON_ENV = "COACH_LAT", "COACH_LON"
+PLACES_ENV = "COACH_PLACES"  # optional named places: name:lat,lon;name:lat,lon
+DEFAULT_PLACE = "default"  # COACH_LAT / COACH_LON
+PLACE_NAME = re.compile(r"[a-z0-9_-]{1,32}", re.ASCII)  # after lower-casing
 TIME_FORMAT = "%Y-%m-%dT%H:%M"
 TIME_UNIT = "unixtime"
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -162,6 +178,17 @@ def _round(value: float, digits: int) -> float:
     return js_round(value * scale) / scale
 
 
+def _rounded(text: str, limit: float) -> str | None:
+    """A coordinate rounded to 2 decimals (about 1 km) as a request string, or None."""
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(value) or abs(value) > limit:
+        return None
+    return f"{round(value, 2) + 0.0:.2f}"  # + 0.0: never "-0.00"
+
+
 def _coordinates(env: Mapping[str, str]) -> tuple[str, str]:
     """Rounded to 2 decimals (about 1 km) as request strings. Values never appear in errors."""
     missing = [name for name in (LAT_ENV, LON_ENV) if not env.get(name, "").strip()]
@@ -172,14 +199,75 @@ def _coordinates(env: Mapping[str, str]) -> tuple[str, str]:
         )
     out = []
     for name, limit in ((LAT_ENV, 90.0), (LON_ENV, 180.0)):
-        try:
-            value = float(env[name])
-        except ValueError:
-            value = math.nan
-        if not math.isfinite(value) or abs(value) > limit:
+        rounded = _rounded(env[name], limit)
+        if rounded is None:
             raise _Problem(f"{name} must be a number between -{limit:g} and {limit:g}")
-        out.append(f"{round(value, 2) + 0.0:.2f}")  # + 0.0: never "-0.00"
+        out.append(rounded)
     return out[0], out[1]
+
+
+def places(env: Mapping[str, str]) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
+    """`COACH_PLACES` (`name:lat,lon;name:lat,lon`) as usable places and problems.
+
+    Usable: lower-case name -> coordinates rounded like the default location. Problems: name
+    (or `entry N` when the entry has no usable name) -> a reason that never holds coordinates or
+    any other text from a broken entry. A problem makes only its own name unusable.
+    """
+    usable: dict[str, tuple[str, str]] = {}
+    problems: dict[str, str] = {}
+    entries = [e.strip() for e in env.get(PLACES_ENV, "").split(";")]
+    for number, entry in enumerate((e for e in entries if e), start=1):
+        raw_name, colon, raw_point = entry.partition(":")
+        name = raw_name.strip().lower()
+        if not colon or not PLACE_NAME.fullmatch(name):
+            problems[f"entry {number}"] = (
+                f"entry {number} of {PLACES_ENV} can't be used: it must be name:lat,lon with a "
+                "name of letters, digits, _ or -"
+            )
+            continue
+        if name == DEFAULT_PLACE:
+            problems[name] = (
+                f'place "{name}" can\'t be used: that name means {LAT_ENV} / {LON_ENV}; pick '
+                f"another name in {PLACES_ENV}"
+            )
+            continue
+        if name in usable or name in problems:
+            usable.pop(name, None)  # which one was meant is not ours to guess
+            problems[name] = f'place "{name}" can\'t be used: it is listed twice in {PLACES_ENV}'
+            continue
+        parts = raw_point.split(",")
+        latitude = _rounded(parts[0], 90.0) if len(parts) == 2 else None
+        longitude = _rounded(parts[1], 180.0) if len(parts) == 2 else None
+        if latitude is None or longitude is None:
+            problems[name] = (
+                f'place "{name}" can\'t be used: its {PLACES_ENV} entry must be name:lat,lon in '
+                "decimal degrees (latitude -90 to 90, longitude -180 to 180)"
+            )
+            continue
+        usable[name] = (latitude, longitude)
+    return usable, problems
+
+
+def _location(env: Mapping[str, str], place: str | None) -> tuple[str, str, str]:
+    """(place name, latitude, longitude) for the request: the default location, or one named
+    place. Only that one location is returned, so only it can be sent."""
+    name = DEFAULT_PLACE if place is None else place.strip().lower()
+    if name == DEFAULT_PLACE:
+        return (DEFAULT_PLACE, *_coordinates(env))
+    usable, problems = places(env)
+    if name in usable:
+        return (name, *usable[name])
+    known = sorted(usable)
+    if name in problems and PLACE_NAME.fullmatch(name):
+        raise _Problem(problems[name], known_places=known)
+    # What was typed is echoed only when it is shaped like a name (it could be coordinates).
+    what = f'unknown place "{name}"' if PLACE_NAME.fullmatch(name) else "that is not a place name"
+    if known:
+        raise _Problem(f"{what}; known places: {', '.join(known)}", known_places=known)
+    raise _Problem(
+        f"{what}; no places are set (add {PLACES_ENV}=name:lat,lon;name:lat,lon to .env)",
+        known_places=known,
+    )
 
 
 def request_url(latitude: str, longitude: str, timezone: str) -> str:
@@ -285,6 +373,24 @@ def _hour_row(
     row["wbgt_c"] = None if wbgt is None else _round(wbgt, 1)
     row["wbgt_f"] = None if wbgt is None else _round(wbgt * 9 / 5 + 32, 1)
     return row
+
+
+def conditions_text(hour: Mapping[str, Any]) -> str:
+    """One hour row as a short display line in °F and mph. Values only: no advice and no
+    judgement. A missing value reads "n/a"; WBGT appears only when NWS returned it."""
+
+    def show(key: str, unit: str) -> str:
+        value = hour.get(key)
+        return "n/a" if value is None else f"{js_round(value)}{unit}"
+
+    text = (
+        f"{show('temperature_f', '°F')} (feels {show('apparent_temperature_f', '°F')}), "
+        f"dew point {show('dew_point_f', '°F')}, wind {show('wind_speed_mph', ' mph')}, "
+        f"rain chance {show('precipitation_probability_pct', '%')}"
+    )
+    if hour.get("wbgt_f") is not None:
+        text += f", WBGT {show('wbgt_f', '°F')}"
+    return text
 
 
 def _nws_get(fetch: NwsFetch, url: str, headers: Mapping[str, str], not_found: str) -> Any:
@@ -399,6 +505,26 @@ def _wbgt(
     return {"ok": True, "hours_with_wbgt": sum(v is not None for v in values)}, values
 
 
+def _reusing(fetch: Fetch, bodies: dict[str, bytes]) -> Fetch:
+    """`fetch`, asking once per URL: a body already in `bodies` is returned without a request."""
+
+    def get(url: str, timeout: float) -> bytes:
+        if url not in bodies:
+            bodies[url] = fetch(url, timeout)  # a failure raises here and nothing is kept
+        return bodies[url]
+
+    return get
+
+
+def _reusing_nws(fetch: NwsFetch, bodies: dict[str, bytes]) -> NwsFetch:
+    def get(url: str, timeout: float, headers: Mapping[str, str]) -> bytes:
+        if url not in bodies:
+            bodies[url] = fetch(url, timeout, headers)
+        return bodies[url]
+
+    return get
+
+
 def _local(timestamp: int, zone: ZoneInfo) -> str:
     """A UTC instant as local wall-clock time, with the offset that applies at that instant."""
     try:
@@ -412,6 +538,7 @@ def _forecast(
     date: str | None,
     hour: int | None,
     hours: int,
+    place: str | None,
     env: Mapping[str, str],
     fetch: Fetch,
     nws_fetch: NwsFetch,
@@ -442,7 +569,7 @@ def _forecast(
         labels = [datetime.fromtimestamp(t, zone).strftime(TIME_FORMAT) for t in wanted]
     except (OverflowError, ValueError, OSError):
         raise _Problem("--date is out of range") from None
-    latitude, longitude = _coordinates(env)
+    place_name, latitude, longitude = _location(env, place)
 
     times, series = _parse(_fetch(fetch, request_url(latitude, longitude, timezone)))
     index = {t: i for i, t in enumerate(times)}
@@ -464,6 +591,7 @@ def _forecast(
     nws, wbgt = _wbgt(env, latitude, longitude, wanted, nws_fetch)
     return {
         "ok": True,
+        "place": place_name,
         "date": day.isoformat(),
         "start_hour": start_hour,
         "timezone": timezone,
@@ -484,20 +612,37 @@ def forecast(
     date: str | None = None,
     hour: int | None = None,
     hours: int = 3,
+    place: str | None = None,
     env: Mapping[str, str],
     fetch: Fetch | None = None,
     nws_fetch: NwsFetch | None = None,
     now: datetime | None = None,
+    reuse: dict[str, bytes] | None = None,
 ) -> dict[str, Any]:
     """Hourly conditions for `hours` hours from `hour` on `date`, local to `timezone`.
 
     Defaults: today and the current local hour. `env` supplies `COACH_LAT` / `COACH_LON` and,
-    optionally, `COACH_NWS_CONTACT` (adds `wbgt_c` from NWS; see the module docstring).
+    optionally, `COACH_NWS_CONTACT` (adds `wbgt_c` from NWS; see the module docstring) and
+    `COACH_PLACES`. `place` names one of those places (case-insensitive); without it the default
+    location is used. The result's `place` is the name or "default", never coordinates.
     Returns `{"ok": True, "hours": [...], ...}` or `{"ok": False, "reason": ...}`; never raises.
+    An unknown or unusable place is `ok: False` with `known_places`, and nothing is requested.
+    `reuse`: a dict shared by several calls so identical requests are made once (module docstring).
     """
+    get, nws_get = fetch or http_get, nws_fetch or nws_http_get
+    if reuse is not None:
+        get, nws_get = _reusing(get, reuse), _reusing_nws(nws_get, reuse)
     try:
         return _forecast(
-            timezone, date, hour, hours, env, fetch or http_get, nws_fetch or nws_http_get, now
+            timezone,
+            date,
+            hour,
+            hours,
+            place,
+            env,
+            get,
+            nws_get,
+            now,
         )
     except _Problem as problem:
         return {"ok": False, "reason": problem.reason, **problem.extra}
