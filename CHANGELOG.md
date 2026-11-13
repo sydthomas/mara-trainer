@@ -15,6 +15,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   accepted plan; a day that already has a workout is skipped and listed, never doubled.
 
 ### Added
+- HR at pace and the body check log are now visible. `coach hr-pace` takes `--band-width` and
+  prints a `trend` summary (last 4 weeks' mean heart rate in the band vs the 4 before; it says
+  `enough_data: false` unless 3 of 4 weeks in each period have data). With enough data the live
+  Sunday check-in in Slack ends with that one line and a fixed caveat (a trend from watch data,
+  not a fitness score); otherwise there is no line. `coach dashboard` gains two panels: weekly
+  heart rate at the usual pace and a timeline of body checks by date and status. No advice or
+  interpretation anywhere. (#50)
 - Body check / niggle log: `coach body log --status green|yellow|red` (optional context,
   location, swelling, pain 0-10, notes), `coach body show` and `coach body delete`. It stores the
   runner's own status as given; nothing in code rates an entry or says whether to run (#43).
@@ -41,6 +48,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   in the User-Agent; it is sent there and shown nowhere). Outside the US, or when NWS has no WBGT,
   the values are null with a reason and the rest of the forecast is unchanged. A number only: no
   heat flags, no advice. `attribution` is now a list (Open-Meteo, plus NWS when used). (#48)
+- Weather: named places and the forecast in Slack. `coach weather --place NAME` uses a place from
+  the optional `COACH_PLACES` setting (`name:lat,lon;name:lat,lon`), rounded like the default; the
+  output shows the name, never coordinates. In Slack, the live Sunday check-in ends with one
+  conditions line per coming run (morning start, default location), and "weather" or "weather at
+  NAME" answers for the next plan run with no AI call. Conditions only, fetched when the message
+  is sent, never stored; a failed lookup leaves the lines out, and messages queued for when the
+  laptop sleeps never carry a forecast. (#49)
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
   API cost), asks before importing possible duplicates, and replies with the week's total. Also
   `coach coros login` (one-time sign-in, saved in the macOS keychain) and `coach coros sync`.

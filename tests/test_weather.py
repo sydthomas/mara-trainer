@@ -779,3 +779,23 @@ def test_nws_http_get_does_not_follow_redirects(local_server: tuple[str, Seen]) 
     assert excinfo.value.code == 301
     # The contact header went to the URL asked for and to no other.
     assert [path for path, _ in seen] == ["/moved"]
+
+
+def test_reuse_asks_once_for_several_windows_at_one_location() -> None:
+    fetch, nws, bodies = ok_fetch(), FakeNws(), {}
+    first = run(fetch, nws_fetch=nws, env=NWS_ENV, reuse=bodies)
+    second = run(fetch, nws_fetch=nws, env=NWS_ENV, hour=8, hours=1, reuse=bodies)
+    assert first["ok"] and second["ok"]
+    assert second["hours"][0] == first["hours"][1]
+    assert len(fetch.calls) == 1 and len(nws.calls) == 2
+    assert first == run(ok_fetch(), nws_fetch=FakeNws(), env=NWS_ENV)  # same result as without
+
+
+def test_reuse_does_not_keep_failures_and_is_off_by_default() -> None:
+    bodies: dict[str, bytes] = {}
+    assert not run(FakeFetch(TimeoutError("timed out")), reuse=bodies)["ok"]
+    assert bodies == {}
+    fetch = ok_fetch()
+    run(fetch)
+    run(fetch)
+    assert len(fetch.calls) == 2

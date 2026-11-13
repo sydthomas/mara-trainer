@@ -103,6 +103,24 @@ coming week (each run with effort, strength days, and the week's focus from appr
 sections), and one question about your week. Reply to adjust anything. It only runs while the
 plan covers that week or the next, and costs about 15 to 20 cents each.
 
+When a location is set (`COACH_LAT` / `COACH_LON` in `.env`), the live check-in ends with one
+forecast line per run in the coming week: temperature, feels-like, dew point, wind and rain
+chance at a 7am start (the plan has no start times), plus wet-bulb globe temperature when
+`COACH_NWS_CONTACT` is set and NWS has it. These are conditions only, with no advice, looked up
+when the message is sent and not saved. If the lookup fails, the check-in goes out without them.
+The short note Slack sends while the laptop is asleep never has a forecast.
+
+## Ask for the forecast
+
+DM the bot **weather** (or **weather for my run**) for the conditions at your next plan run, or
+**weather at NAME** for a place you named in `.env`
+(`COACH_PLACES=name:lat,lon;name:lat,lon`, for example a coast and an inland spot). It answers in
+plain code, with no API cost. On a run day it answers for today's run until a run for today is in
+the database (say **sync my runs** first if you already ran); after that it answers for the next
+one. For today's run once 7am has passed, it shows the current hour instead. An unknown name gets
+the list of names you set. Coordinates are rounded to 2 decimals before the request and never
+shown in Slack. If the bot restarts mid-lookup, it finishes the answer on start.
+
 ## Sync your runs from Slack
 
 DM the bot **sync my runs** (or just **sync**) to pull this week's COROS runs into the database,

@@ -325,3 +325,146 @@ def test_cli_prints_json(tmp_path: Path, tmp_db: Path) -> None:
     assert json.loads(r.output)["runs"][0]["status"] == "no_time_in_band"
     assert runner.invoke(app, [*args, "--pace-min", "8:30"]).exit_code == 1
     assert runner.invoke(app, [*args, "--pace-min", "fast", "--pace-max", "9:00"]).exit_code == 1
+
+
+# ------------------------------------------------------------------ band width
+
+
+def test_band_width_widens_the_automatic_band(tmp_path: Path) -> None:
+    write_run(tmp_path, "a.fit", RUN_START, [(1800, EASY, 140)])
+    default = run_report(tmp_path, weeks=2)
+    assert default["definition"]["band_width_seconds_per_mile"] == 30
+    wide = run_report(tmp_path, weeks=2, band_width_seconds_per_mile=60)
+    assert (wide["band"]["pace_min"], wide["band"]["pace_max"]) == ("9:50/mi", "10:50/mi")
+    assert wide["band"]["chosen_by"] == "most_used_pace"
+    assert wide["definition"]["band_width_seconds_per_mile"] == 60
+    assert run_report(tmp_path, weeks=2, band_width_seconds_per_mile=30)["band"] == default["band"]
+
+
+def test_band_width_bad_values(tmp_path: Path) -> None:
+    for width in (0, -30, 4, 32, 125):
+        with pytest.raises(ValueError, match="band-width"):
+            run_report(tmp_path, band_width_seconds_per_mile=width)
+    with pytest.raises(ValueError, match="not both"):
+        run_report(
+            tmp_path, pace_min_seconds=600, pace_max_seconds=630, band_width_seconds_per_mile=60
+        )
+
+
+def test_cli_band_width(tmp_path: Path, tmp_db: Path) -> None:
+    runner = CliRunner()
+    folder = tmp_path / "fits"
+    assert runner.invoke(app, ["init-db", "--timezone", TZ]).exit_code == 0
+    write_run(folder, "a.fit", RUN_START, [(1800, EASY, 140)])
+    args = ["hr-pace", "--dir", str(folder), "--today", TODAY, "--weeks", "2"]
+    data = json.loads(runner.invoke(app, [*args, "--band-width", "60"]).output)
+    assert data["band"]["pace_max"] == "10:50/mi"
+    assert data["trend"]["enough_data"] is False
+    assert runner.invoke(app, [*args, "--band-width", "7"]).exit_code == 1
+
+
+# ------------------------------------------------------------------ trend summary
+
+
+def fake_report(hrs: list[float | None], chosen_by: str = "most_used_pace") -> dict:  # type: ignore[type-arg]
+    """Only the parts `trend_summary` reads: weekly rows (oldest first) and the band."""
+    first = datetime(2026, 1, 5)  # a Monday
+    weeks = []
+    for i, hr in enumerate(hrs):
+        monday = first + timedelta(days=7 * i)
+        weeks.append(
+            {
+                "week_start": monday.date().isoformat(),
+                "week_end": (monday + timedelta(days=6)).date().isoformat(),
+                "runs_used": 0 if hr is None else 2,
+                "mean_hr": hr,
+            }
+        )
+    has_band = chosen_by != "none"
+    band = {
+        "chosen_by": chosen_by,
+        "unit": "mi",
+        "pace_min": "8:35/mi" if has_band else None,
+        "pace_max": "9:05/mi" if has_band else None,
+    }
+    return {"weeks": weeks, "band": band}
+
+
+def test_trend_exactly_at_the_minimum_weeks() -> None:
+    # 3 of 4 in each period: the smallest case that counts.
+    trend = hr_pace.trend_summary(fake_report([155, None, 156, 154, 151, 152, None, 153.4]))
+    assert trend["enough_data"] is True and trend["reason"] is None
+    assert trend["latest"]["mean_hr"] == 152.1 and trend["previous"]["mean_hr"] == 155.0
+    assert trend["latest"]["weeks_with_data"] == trend["previous"]["weeks_with_data"] == 3
+    assert (trend["weeks_with_data"], trend["runs_used"]) == (6, 12)
+    assert (trend["period_weeks"], trend["min_weeks_with_data"]) == (4, 3)
+    assert trend["band"] == {
+        "chosen_by": "most_used_pace",
+        "unit": "mi",
+        "pace_min": "8:35/mi",
+        "pace_max": "9:05/mi",
+    }
+    assert (trend["previous"]["start"], trend["previous"]["end"]) == ("2026-01-05", "2026-02-01")
+    assert (trend["latest"]["start"], trend["latest"]["end"]) == ("2026-02-02", "2026-03-01")
+    assert hr_pace.trend_line(trend) == (
+        "HR at your usual pace (8:35-9:05/mi): 152 bpm over the last 4 weeks, 155 the 4 before"
+    )
+    # No word about what the difference means.
+    assert not {"fitter", "fatigue", "improv", "better", "worse"} & set(str(trend).lower().split())
+
+
+@pytest.mark.parametrize(
+    "hrs",
+    [
+        [155, 156, 154, 153, 151, 152, None, None],  # latest period one week short
+        [155, None, None, 153, 151, 152, 150, 149],  # previous period one week short
+        [None, None, None, None, 151, 152, 150, 149],  # nothing to compare with
+        [155, 156, 154, 153, None, None, None, None],
+    ],
+)
+def test_trend_gaps_mean_not_enough_data(hrs: list[float | None]) -> None:
+    trend = hr_pace.trend_summary(fake_report(hrs))
+    assert trend["enough_data"] is False and trend["reason"] == "too_few_weeks_with_data"
+    assert hr_pace.trend_line(trend) is None
+    # A period below the minimum has no mean at all (missing, not a mean of one or two weeks).
+    for key, weeks in (("previous", hrs[:4]), ("latest", hrs[4:])):
+        have = sum(1 for h in weeks if h is not None)
+        assert trend[key]["weeks_with_data"] == have
+        assert (trend[key]["mean_hr"] is None) == (have < 3)
+
+
+def test_trend_empty_short_and_no_band() -> None:
+    empty = hr_pace.trend_summary(fake_report([None] * 12))
+    assert empty["enough_data"] is False and empty["reason"] == "too_few_weeks_with_data"
+    assert empty["latest"]["mean_hr"] is None and empty["previous"]["mean_hr"] is None
+    assert (empty["weeks_with_data"], empty["runs_used"]) == (0, 0)
+    short = hr_pace.trend_summary(fake_report([150] * 7))
+    assert short["enough_data"] is False and short["reason"] == "report_shorter_than_two_periods"
+    assert short["latest"]["start"] is None
+    no_band = hr_pace.trend_summary(fake_report([None] * 8, chosen_by="none"))
+    assert no_band["enough_data"] is False and no_band["reason"] == "no_band"
+    assert hr_pace.band_label(no_band["band"]) is None
+    for trend in (empty, short, no_band):
+        assert hr_pace.trend_line(trend) is None
+
+
+def test_trend_uses_only_the_last_eight_weeks_and_names_a_given_band() -> None:
+    hrs: list[float | None] = [190, 190, 190, 190, 160, 160, 160, 160, 150, 150, 150, 150.5]
+    trend = hr_pace.trend_summary(fake_report(hrs, chosen_by="arguments"))
+    assert trend["previous"]["mean_hr"] == 160.0 and trend["latest"]["mean_hr"] == 150.1
+    assert hr_pace.trend_line(trend) == (
+        "HR at 8:35-9:05/mi: 150 bpm over the last 4 weeks, 160 the 4 before"
+    )
+
+
+def test_report_carries_the_trend(tmp_path: Path) -> None:
+    # Six Tuesdays: three in each 4-week period (weeks of 01-12..02-02 and 02-09..03-02).
+    for i, hr in ((0, 150), (1, 150), (3, 150), (4, 156), (5, 156), (7, 156)):
+        write_run(tmp_path, f"{i}.fit", RUN_START - timedelta(days=7 * i), [(1200, EASY, hr)])
+    out = run_report(tmp_path)
+    assert out["trend"] == hr_pace.trend_summary(out)
+    assert out["trend"]["enough_data"] is True
+    assert (out["trend"]["latest"]["mean_hr"], out["trend"]["previous"]["mean_hr"]) == (150, 156)
+    assert out["trend"]["runs_used"] == 6
+    assert run_report(tmp_path, weeks=4)["trend"]["reason"] == "report_shorter_than_two_periods"
+    assert run_report(tmp_path / "missing")["trend"]["reason"] == "no_band"
