@@ -1460,7 +1460,7 @@
       "trust_reason": "Peer-reviewed pilot randomized trial in Pilot Feasibility Stud 7(1):58 (doi 10.1186/s40814-021-00792-5), CC BY 4.0.",
       "notes": "States the pain-monitoring model: pain up to 5/10 during or right after activity, back to baseline by the next morning. Used here for knee tendon rehab supervised by a physical therapist; a feasibility pilot, not proof the thresholds work for runners.",
       "female_evidence": "sex_reported",
-      "population_note": "15 participants (5 women), mean age 26.6, mostly recreational athletes with patellar tendinopathy, not runners. Too small for results by sex."
+      "population_note": "15 participants (5 women), mean age 26.6, mostly recreational athletes with patellar tendinopathy; not a running-specific sample (sports not reported). Too small for results by sex."
     },
     {
       "slug": "dejager-wearable-hrv-menstrual-cycle-2026",
