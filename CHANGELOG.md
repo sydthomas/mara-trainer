@@ -18,7 +18,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - `coach weather [--date] [--hour] [--hours]`: the forecast for a run window from Open-Meteo
   (temperature, humidity, dew point, feels-like, rain, wind, UV; °F and mph beside SI). Conditions
   only, no advice; nothing is stored. Location comes from `COACH_LAT` / `COACH_LON`, rounded to 2
-  decimals before the request. (#PR)
+  decimals before the request. (#44)
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
   API cost), asks before importing possible duplicates, and replies with the week's total. Also
   `coach coros login` (one-time sign-in, saved in the macOS keychain) and `coach coros sync`.
