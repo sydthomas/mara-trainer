@@ -1357,6 +1357,215 @@
       "fetchable": false,
       "female_evidence": "unknown",
       "population_note": ""
+    },
+    {
+      "slug": "frandsen-high-risk-running-sessions-2025",
+      "title": "How much running is too much? Identifying high-risk running sessions in a 5200-person cohort study",
+      "author": "Schuster Brandt Frandsen J, Hulme A, Parner ET, Møller M, Lindman I, Abrahamson J, Sjørup Simonsen N, Sandell Jacobsen J, Ramskov D, Skejø S, Malisoux L, Bertelsen ML, Nielsen RO",
+      "kind": "research",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12421110/",
+      "topics": [
+        "injury",
+        "training"
+      ],
+      "license": "open_access",
+      "year": 2025,
+      "trust_reason": "Peer-reviewed 18-month cohort study in Br J Sports Med 59(17):1203-1210 (doi 10.1136/bjsports-2024-109380); open access, CC BY-NC.",
+      "notes": "Overuse injury rate rose when one run was more than 10% longer than the longest run of the previous 30 days, most for runs more than double it. The week-to-week ratio showed no link and the acute:chronic ratio pointed the other way.",
+      "female_evidence": "sex_reported",
+      "population_note": "5,205 runners, 22% female, mean age 45.8 (SD 10.4); 588,071 sessions. Far from a woman in her early 20s; results by sex not seen in the abstract."
+    },
+    {
+      "slug": "buist-graded-training-program-2008",
+      "title": "No effect of a graded training program on the number of running-related injuries in novice runners: a randomized controlled trial",
+      "author": "Buist I, Bredeweg SW, van Mechelen W, Lemmink KA, Pepping GJ, Diercks RL",
+      "kind": "research",
+      "url": "https://doi.org/10.1177/0363546507307505",
+      "topics": [
+        "injury",
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2008,
+      "trust_reason": "Peer-reviewed randomized controlled trial in Am J Sports Med 36(1):33-39; abstract read, full text not reviewed.",
+      "notes": "Tests the 10% rule: a 13-week graded build-up gave novices the same injury rate (about 21%) as a standard 8-week program (about 20%). Cite and link only.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "532 novice runners preparing for a short run, not marathon training. Sex split and ages not in the abstract."
+    },
+    {
+      "slug": "impellizzeri-acwr-pitfalls-2020",
+      "title": "Acute:Chronic Workload Ratio: Conceptual Issues and Fundamental Pitfalls",
+      "author": "Impellizzeri FM, Tenan MS, Kempton T, Novak A, Coutts AJ",
+      "kind": "review",
+      "url": "https://doi.org/10.1123/ijspp.2019-0864",
+      "topics": [
+        "injury",
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2020,
+      "trust_reason": "Peer-reviewed methodological critique in Int J Sports Physiol Perform 15(6):907-913; abstract read, full text not reviewed.",
+      "notes": "Argues the acute:chronic workload ratio has no shown causal link to injury and is statistically flawed, so it should not drive load decisions. Counterweight to ioc-load-injury-risk-2016. Cite and link only.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Methods critique with no participant sample, so no sex data to rate."
+    },
+    {
+      "slug": "warden-optimal-load-bone-stress-2021",
+      "title": "Optimal Load for Managing Low-Risk Tibial and Metatarsal Bone Stress Injuries in Runners: The Science Behind the Clinical Reasoning",
+      "author": "Warden SJ, Edwards WB, Willy RW",
+      "kind": "review",
+      "url": "https://doi.org/10.2519/jospt.2021.9982",
+      "topics": [
+        "injury",
+        "health"
+      ],
+      "license": "copyrighted",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed clinical commentary in J Orthop Sports Phys Ther 51(7):322-330 by bone and running-injury researchers; abstract read, full text not reviewed.",
+      "notes": "For low-risk shin and foot bone stress injuries, loading should cause no symptoms during, after or the next day, and running returns volume first, then speed. Clinician-managed rehab; supports referral, not self-treatment. Cite and link only.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Clinical commentary with no participant sample; sex not discussed in the abstract."
+    },
+    {
+      "slug": "beck-bone-stress-adolescent-athletes-2021",
+      "title": "Risk Factors, Diagnosis and Management of Bone Stress Injuries in Adolescent Athletes: A Narrative Review",
+      "author": "Beck B, Drysdale L",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8073721/",
+      "topics": [
+        "injury",
+        "health"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed narrative review in Sports (Basel) 9(4):52 (doi 10.3390/sports9040052), CC BY.",
+      "notes": "Covers how bone stress injuries present (gradual, activity-linked bone pain that becomes focal), the sites that heal poorly, and the link with low energy availability and missed periods. Background for referral, not diagnosis.",
+      "female_evidence": "sex_reported",
+      "population_note": "Adolescent athletes (most data from teens, younger than an adult runner); narrative review, no pooled sample. Reports girls and boys separately in places and covers menstrual function, the Triad and RED-S."
+    },
+    {
+      "slug": "sprague-pain-guided-activity-patellar-tendinopathy-2021",
+      "title": "Pain-guided activity modification during treatment for patellar tendinopathy: a feasibility and pilot randomized clinical trial",
+      "author": "Sprague AL, Couppé C, Pohlig RT, Snyder-Mackler L, Silbernagel KG",
+      "kind": "research",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7905015/",
+      "topics": [
+        "injury"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed pilot randomized trial in Pilot Feasibility Stud 7(1):58 (doi 10.1186/s40814-021-00792-5), CC BY 4.0.",
+      "notes": "States the pain-monitoring model: pain up to 5/10 during or right after activity, back to baseline by the next morning. Used here for knee tendon rehab supervised by a physical therapist; a feasibility pilot, not proof the thresholds work for runners.",
+      "female_evidence": "sex_reported",
+      "population_note": "15 participants (5 women), mean age 26.6, mostly recreational athletes with patellar tendinopathy, not runners. Too small for results by sex."
+    },
+    {
+      "slug": "dejager-wearable-hrv-menstrual-cycle-2026",
+      "title": "Wearable-Derived Heart Rate Variability Across the Menstrual Cycle, Hormonal Contraceptive Use, and Reproductive Life Stages in Females: A Living Systematic Review",
+      "author": "de Jager E, Caulfield B, Angelidi E, MacNamee B, Holden S",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13198475/",
+      "topics": [
+        "health",
+        "recovery",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2026,
+      "trust_reason": "Peer-reviewed living systematic review in Sports Med 56(5):1153-1173 (doi 10.1007/s40279-025-02388-y), CC BY.",
+      "notes": "Wearable HRV tends to run higher early in the cycle and lower later (about 3-9%), and lower in hormonal contraceptive users, so a dip can be cycle timing and not fatigue. Phase definitions varied, so no pooled estimate.",
+      "female_evidence": "female_specific",
+      "population_note": "16 studies of females of any age, including contraceptive users, pregnancy and menopause; participant total not in the abstract. Not athlete-specific."
+    },
+    {
+      "slug": "meeusen-overtraining-consensus-2013",
+      "title": "Prevention, diagnosis, and treatment of the overtraining syndrome: joint consensus statement of the European College of Sport Science and the American College of Sports Medicine",
+      "author": "Meeusen R, Duclos M, Foster C, Fry A, Gleeson M, Nieman D, Raglin J, Rietjens G, Steinacker J, Urhausen A",
+      "kind": "position_stand",
+      "url": "https://doi.org/10.1249/MSS.0b013e318279a10a",
+      "topics": [
+        "training",
+        "recovery",
+        "health"
+      ],
+      "license": "copyrighted",
+      "year": 2013,
+      "trust_reason": "Joint consensus statement of the European College of Sport Science and the American College of Sports Medicine, Med Sci Sports Exerc 45(1):186-205; abstract read, full text not reviewed.",
+      "notes": "Separates short-term overreaching from overtraining syndrome and says no single marker reliably detects it, so lasting underperformance needs a medical work-up. Cite and link only.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Consensus statement; sex of the underlying study samples not stated in the abstract."
+    },
+    {
+      "slug": "moore-cold-water-immersion-meta-2022",
+      "title": "Impact of Cold-Water Immersion Compared with Passive Recovery Following a Single Bout of Strenuous Exercise on Athletic Performance in Physically Active Participants: A Systematic Review with Meta-analysis and Meta-regression",
+      "author": "Moore E, Fuller JT, Buckley JD, Saunders S, Halson SL, Broatch JR, Bellenger CR",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9213381/",
+      "topics": [
+        "recovery"
+      ],
+      "license": "cc_by",
+      "year": 2022,
+      "trust_reason": "Peer-reviewed systematic review with meta-analysis and meta-regression in Sports Med 52(7):1667-1688 (doi 10.1007/s40279-022-01644-9), CC BY.",
+      "notes": "Compared with resting, cold-water immersion after hard exercise helped next-day power, soreness and perceived recovery but not strength. Shorter, colder dips did best.",
+      "female_evidence": "unknown",
+      "population_note": "52 studies of physically active people; sex split not in the abstract and not checked in the full text."
+    },
+    {
+      "slug": "smyth-marathon-decoupling-2022",
+      "title": "Decoupling of Internal and External Workload During a Marathon: An Analysis of Durability in 82,303 Recreational Runners",
+      "author": "Smyth B, Maunder E, Meyler S, Hunter B, Muniz-Pumares D",
+      "kind": "research",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9388405/",
+      "topics": [
+        "training",
+        "race_week"
+      ],
+      "license": "cc_by",
+      "year": 2022,
+      "trust_reason": "Peer-reviewed analysis of race-day wearable data in Sports Med 52(9):2283-2295 (doi 10.1007/s40279-022-01680-5), CC BY.",
+      "notes": "Heart rate drifting up relative to pace began around 25 km on average, and runners who drifted less and later finished faster. Race-day data only, so it describes durability and does not test how to train it.",
+      "female_evidence": "sex_reported",
+      "population_note": "82,303 recreational marathoners, 13,125 female (about 16%); women drifted less and later than men. Ages not in the abstract."
+    },
+    {
+      "slug": "ely-weather-marathon-performance-2007",
+      "title": "Impact of weather on marathon-running performance",
+      "author": "Ely MR, Cheuvront SN, Roberts WO, Montain SJ",
+      "kind": "research",
+      "url": "https://doi.org/10.1249/mss.0b013e31802d3aba",
+      "topics": [
+        "race_week",
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2007,
+      "trust_reason": "Peer-reviewed analysis of results and weather records from seven North American marathons in Med Sci Sports Exerc 39(3):487-493; abstract read, full text not reviewed.",
+      "notes": "Marathon times slowed step by step as wet-bulb globe temperature rose from 5 to 25 C, and slower finishers lost more than the front of the race. Cite and link only.",
+      "fetchable": false,
+      "female_evidence": "sex_reported",
+      "population_note": "Top three men and top three women plus 25th to 300th finishers over many race years; the women's trend was similar but not statistically significant. Front-of-field runners, not recreational."
+    },
+    {
+      "slug": "knechtle-boston-weather-2019",
+      "title": "The role of weather conditions on running performance in the Boston Marathon from 1972 to 2018",
+      "author": "Knechtle B, Di Gangi S, Rüst CA, Villiger E, Rosemann T, Nikolaidis PT",
+      "kind": "research",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6407773/",
+      "topics": [
+        "race_week",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2019,
+      "trust_reason": "Peer-reviewed analysis of 47 years of Boston Marathon results in PLoS One 14(3):e0212797 (doi 10.1371/journal.pone.0212797), CC BY.",
+      "notes": "Warmer air, rain and headwind went with slower Boston times and tailwind with faster ones; each extra degree C cost all finishers far more time than it cost the winners.",
+      "female_evidence": "sex_reported",
+      "population_note": "580,990 results from 382,209 Boston finishers, a qualifying-time field; sex was a model factor, but weather effects by sex were not in the abstract."
     }
   ]
 }
