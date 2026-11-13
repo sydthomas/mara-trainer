@@ -76,7 +76,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach coros sync` — `coros-sync` in plain code (`mara_coach/coros.py`, no LLM): this week's
   runs (Monday through today), FIT downloaded once into `exports/coros/`, then the normal import;
   exit 2 = near-duplicates need confirmation (those files not imported). Slack: "sync my runs"
-- `uv run coach weather [--date YYYY-MM-DD] [--hour 0-23] [--hours 3]` — run-window forecast from
+- `uv run coach weather [--date YYYY-MM-DD] [--hour 0-23] [--hours 3] [--place NAME]` — run-window forecast from
   Open-Meteo (`mara_coach/weather.py`, urllib, no key; free tier is non-commercial only): hourly SI
   + °F/mph, local hours, `attribution`; conditions only, nothing stored; needs `COACH_LAT` /
   `COACH_LON` in `.env` (rounded to 2 decimals in the request, never printed); exit 1 =
@@ -84,7 +84,11 @@ be summarized. If no approved source covers a question, the coach says so.
   `COACH_NWS_CONTACT` in `.env` adds `wbgt_c`/`wbgt_f` per hour from the US National Weather
   Service (`api.weather.gov`, `/points` then its gridpoint URL, ~7 days, US only): the contact goes
   only in that User-Agent, never in output; unset = no NWS request; any NWS problem =
-  `nws: {ok: false, reason}` with null WBGT, still exit 0. No heat flags or advice
+  `nws: {ok: false, reason}` with null WBGT, still exit 0. No heat flags or advice.
+  `--place NAME` uses a place from optional `COACH_PLACES` in `.env` (`name:lat,lon;name:lat,lon`,
+  names case-insensitive, rounded the same, only that place sent); output has `place` (the name or
+  `default`), never coordinates; a malformed entry breaks only its own name; an unknown name =
+  `{ok: false, known_places}`. Slack: "weather" / "weather at NAME" (next plan run, in code, no LLM)
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
@@ -112,6 +116,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - Slack while the laptop sleeps: the bot queues the next 7 days of fixed-time messages on Slack
   (`slack_schedule.py`, table `scheduled_messages`: debrief pings and a 6pm note with next week's
   runs); awake, it cancels the 6pm fallback 5 min early and sends the live check-in.
+  Queued messages never carry weather (it would be stale); a test pins this.
   Missed DMs are answered on wake (cursor in `slack_state`), never twice. A reply cut off by a
   restart is finished on start; answers arrive as new messages (Slack notifies on those, not on
   edits) and the placeholder is deleted. The DM history and a waiting yes/no question
@@ -128,7 +133,10 @@ be summarized. If no approved source covers a question, the coach says so.
   missed). Her reply (through Monday) logs a missed debrief first (yes), and is tagged so the
   coach writes the coming week with `propose_week` (guardrails check it, never saves). One yes
   saves it in code (old plan archived) and puts its runs on her COROS calendar; "save only"
-  skips the watch; "push my week" sends the coming week anytime. Setup: `docs/slack-setup.md`
+  skips the watch; "push my week" sends the coming week anytime. The live check-in ends with one
+  forecast line per coming run, built in code (`weather.py`, default location, 7am
+  `DEFAULT_MORNING_HOUR` since the plan has no start times; conditions only, fetched at send time,
+  never stored; any weather failure just leaves the lines out). Setup: `docs/slack-setup.md`
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
@@ -244,7 +252,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent), `weather.py` (Open-Meteo run-window forecast + optional NWS
-  WBGT, nothing stored); agent and Slack land here
+  WBGT, named places, nothing stored); agent and Slack land here
 - `knowledge/` — the knowledge base: one cited Markdown section per topic (README = format)
 - `sources/seed.json` — proposed seed sources (links + metadata + our own one-line notes, no copied text)
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)

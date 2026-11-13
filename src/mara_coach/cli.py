@@ -393,9 +393,15 @@ def weather_cmd(
         int | None, typer.Option(help="Local start hour 0-23 (default: the current hour)")
     ] = None,
     hours: Annotated[int, typer.Option(help="Length of the run window in hours")] = 3,
+    place: Annotated[
+        str | None,
+        typer.Option(help="A place named in COACH_PLACES (default: COACH_LAT / COACH_LON)"),
+    ] = None,
 ) -> None:
     """Forecast for a run window from Open-Meteo (conditions only, nothing stored). Needs
-    COACH_LAT and COACH_LON in .env. Exit 1 with {ok: false, reason} on any failure. With
+    COACH_LAT and COACH_LON in .env, or --place NAME with COACH_PLACES=name:lat,lon;name:lat,lon
+    (output has the place name, never coordinates; an unknown name lists the known ones). Exit 1
+    with {ok: false, reason} on any failure. With
     COACH_NWS_CONTACT set, also asks the US National Weather Service for wet-bulb globe
     temperature (wbgt_c); an NWS failure is reported under `nws` and never fails the command."""
     load_env()
@@ -405,7 +411,7 @@ def weather_cmd(
         result: dict[str, object] = {"ok": False, "reason": str(exc)}
     else:
         result = weather.forecast(
-            timezone=timezone, date=date, hour=hour, hours=hours, env=os.environ
+            timezone=timezone, date=date, hour=hour, hours=hours, place=place, env=os.environ
         )
     _out(result)
     if not result["ok"]:
