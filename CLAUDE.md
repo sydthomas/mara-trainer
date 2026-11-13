@@ -89,8 +89,8 @@ be summarized. If no approved source covers a question, the coach says so.
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
 - Slack while the laptop sleeps: the bot queues the next 7 days of fixed-time messages on Slack
-  (`slack_schedule.py`, table `scheduled_messages`: debrief pings, a sync reminder, a 6pm note with
-  next week's runs); awake, it cancels the sync/6pm fallbacks 5 min early and sends the live ones.
+  (`slack_schedule.py`, table `scheduled_messages`: debrief pings and a 6pm note with next week's
+  runs); awake, it cancels the 6pm fallback 5 min early and sends the live check-in.
   Missed DMs are answered on wake (cursor in `slack_state`), never twice. A reply cut off by a
   restart is finished on start; answers arrive as new messages (Slack notifies on those, not on
   edits) and the placeholder is deleted. The DM history and a waiting yes/no question
@@ -101,8 +101,10 @@ be summarized. If no approved source covers a question, the coach says so.
   `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USER_ID` and `ANTHROPIC_API_KEY` in `.env`;
   answers only the allowed user. On plan long-run days it DMs a debrief check-in at 10am local
   (once a day); the coach proposes the entry with `propose_fuel_entry` (validates, never saves)
-  and the bot saves it in code only when she replies yes. Sundays at 5pm local it nudges her to sync runs if any planned
-  ones are missing, and at 6pm it sends a weekly check-in (last week recap + next week preview). After her reply the coach writes the coming week with `propose_week` (guardrails check it, never saves); the bot saves it in code only on yes and archives the old plan. Setup: `docs/slack-setup.md`
+  and the bot saves it in code only when she replies yes. Sundays at 6pm local it syncs the
+  week's runs from COROS in code, then sends one weekly check-in (last week recap + next week
+  preview + one question: how the week felt, what's coming up, and the long-run debrief if it was
+  missed). Her reply (through Monday) logs a missed debrief first (yes), and is tagged so the coach writes the coming week with `propose_week` (guardrails check it, never saves); the bot saves it in code only on yes and archives the old plan. Setup: `docs/slack-setup.md`
 - `uv run coach eval run --answers FILE.json [--evals evals/coach-questions.json]` — score saved
   answers `{case_id: answer_text}` offline against each case's `checks`; JSON report per case and
   by category; exit 0 none failed, 3 any failed. No API calls.
@@ -134,14 +136,14 @@ be summarized. If no approved source covers a question, the coach says so.
   - Sync: the `coros-sync` skill pulls the current training week's runs (Monday through today;
     Monday-Sunday weeks, like the plan) (`downloadActivityFitFiles` per run, copied to
     `exports/coros/<labelId>.fit`, skipped if present; then `coach import`, so re-running is safe).
-    Sundays at 5pm local the Slack bot nudges her to sync if fewer runs are imported than planned;
-    she can reply "sync my runs" in Slack (code-side sync, below).
+    The Slack bot syncs on its own before the Sunday 6pm check-in; she can also reply "sync my
+    runs" in Slack anytime (code-side sync, below).
   - Weekly push: the `coros-run-planner` skill puts the coming week's runs on her COROS calendar
-    (Sunday, after the weekly check-in; the Slack check-in ends with a nudge). Workouts come only
+    (Sunday, after the weekly check-in, until Slack can push it). Workouts come only
     from `coach coros week`, sent unchanged after one yes for the week. The MCP can't move or
     delete scheduled workouts, so check `queryTrainingSchedule` first and never create twice.
-  - Code-side sync (`mara_coach/coros.py`, `coach coros sync`, "sync my runs" in Slack): the same
-    read-only flow as `coros-sync` without an LLM; it calls only `querySportRecords` and
+  - Code-side sync (`mara_coach/coros.py`, `coach coros sync`, "sync my runs" and the Sunday
+    check-in in Slack): the same read-only flow as `coros-sync` without an LLM; it calls only `querySportRecords` and
     `downloadActivityFitFiles`. Its own OAuth sign-in (`coach coros login`), tokens in the keychain.
   - Not in `mara_coach` yet: COROS tools for the coach agent itself are a separate, planned step.
 - **Strava — not used.** Strava's API Policy of 2026-06-01 bars storing Strava data or feeding it

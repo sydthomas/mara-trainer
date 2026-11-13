@@ -12,9 +12,12 @@
   most once a day (`notifications` table). The coach gathers the details and calls
   `propose_fuel_entry`, which only validates. The entry is saved here, in code, only when the
   runner replies yes; "no" drops it. The AI never writes the log itself.
-- Weekly check-in: Sundays at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`), when
-  the week ending or the next one is in the plan. The coach writes a recap of the week and a
-  preview of the next one; her reply continues the conversation.
+- Sunday is one conversation: at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`),
+  when the week ending or the next one is in the plan, the bot first syncs the week's runs from
+  COROS in code (no separate reminder), then the coach writes a recap of the week and a preview
+  of the next one, ending with one question. Her reply (through Monday, `WEEKLY_KEY`) is tagged
+  as a check-in answer, so the coach writes the week with `propose_week`; the bot saves it in
+  code on yes.
 - Asleep-proof: fixed-time messages are also queued on Slack's servers (`slack_schedule`), so
   they arrive while the laptop sleeps; the live versions replace them when the bot is awake.
   On start, after a sleep, and every `CATCH_UP_EVERY`, the bot answers DMs it missed (last
@@ -59,9 +62,6 @@ from .agent import Coach, CoachError
 from .slack_schedule import (
     DEBRIEF_KIND,
     PING_HOUR,
-    RUN_KINDS,
-    SYNC_HOUR,
-    SYNC_KIND,
     WEEKLY_HOUR,
     WEEKLY_KIND,
     ping_text,
@@ -129,19 +129,6 @@ def exit_when_stuck(
     return on_error
 
 
-def sync_nudge_text(imported: int, planned: int) -> str:
-    return (
-        f"Your runs this week: {imported} of {planned} planned are imported. Before your 6pm "
-        'check-in, reply "sync my runs" here so the recap has your data.'
-    )
-
-
-COROS_NUDGE = (
-    '\n\n_Once your week is set, say "push my week to COROS" in Claude Code to put it on your '
-    "watch._"
-)
-
-
 PUSH_WEEK = 'Say "push my week" in Claude Code to put it on your watch.'
 WATCH_STALE = (
     "If this week is already on your watch, change or remove those workouts in the COROS app; "
@@ -149,12 +136,20 @@ WATCH_STALE = (
 )
 
 
-def weekly_prompt(sunday: str) -> str:
+WEEKLY_KEY = "weekly_reply"  # Monday of the week her check-in reply should write
+SYNC_DUPLICATES = (
+    '_Some runs look like ones already imported. Reply "sync my runs" to review them._'
+)
+SYNC_LEFT = '_{n} run(s) didn\'t download from COROS yet. Reply "sync my runs" later._'
+SYNC_FAILED = "Couldn't sync from COROS just now, so the recap may be missing runs."
+
+
+def weekly_prompt(sunday: str, synced: str, missed: Debrief | None = None) -> str:
     day = date.fromisoformat(sunday)
     monday = (day - timedelta(days=6)).isoformat()
     next_monday = (day + timedelta(days=1)).isoformat()
     return f"""(Weekly check-in, Sunday {sunday}. The week ending today ran {monday} to {sunday}; \
-the next week starts {next_monday}.)
+the next week starts {next_monday}. {synced})
 
 Write my Sunday check-in as one Slack message:
 1. Last week: compare plan_week for {monday} with summary for week {monday} and fuel_log \
@@ -164,9 +159,20 @@ zero) and recap from the fuel log and what I told you.
 days, then the week's focus for its phase (for example easy volume, the workout, hills, speed, \
 long-run fueling practice). Take that focus only from approved read_knowledge sections and say \
 if none covers something.
-3. End with one question: anything coming up this week (travel, soreness, busy days)? Say you'll \
-write the week's exact sessions from her answer.
+3. End with one question in two parts: how did last week feel (energy, legs, sleep, anything \
+off)? And anything coming up this week (travel, soreness, busy days)? Say you'll write the \
+week's exact sessions from her answer. Don't mention syncing.{_missed_line(missed)}
 Keep it brief and cite sources at the end."""
+
+
+def _missed_line(missed: Debrief | None) -> str:
+    if missed is None:
+        return ""
+    return (
+        f"\nMy {missed.planned_miles:g} mi long run on {missed.date} isn't debriefed yet: in the "
+        "same question, also ask how it went (distance and time, effort 1-10, what I ate before "
+        "and how long before, what I took during, stomach and energy)."
+    )
 
 
 SYNC = re.compile(r"^\s*(please\s+)?sync(\s+my)?(\s+runs)?(\s+from\s+coros)?\b[\s.!]*$", re.I)
@@ -179,6 +185,23 @@ SAVE_FOLLOW_UP = (
     "(Saved.) Give me your short coach reply: one or two observations from my fuel log, and "
     "one small thing to try next long run if it's worth changing anything."
 )
+
+
+def weekly_reply(week_start: str, text: str) -> str:
+    """Her answer to the Sunday check-in, tagged so the coach writes the week as a proposal."""
+    return (
+        f"(My reply to your Sunday check-in. Write the week of {week_start} from it and call "
+        "propose_week, unless I'm asking about something else. If I'm also debriefing a long "
+        "run, propose the fuel entry first; the week comes after I say yes to it.)\n\n" + text
+    )
+
+
+def week_after_debrief(week_start: str) -> str:
+    """After a debrief saved from the Sunday check-in, move on to writing the week."""
+    return (
+        "(Saved.) Give me your short coach reply on the long run in a line or two, then write "
+        f"the week of {week_start} from what I told you and call propose_week."
+    )
 
 
 def setup_reply(user: str) -> str:
@@ -414,10 +437,14 @@ class SlackCoach:
                 client.chat_postMessage(channel=channel, text=CANCELLED)
                 return
             question = text
+            week_start, missed = self._open_weekly()
+            if week_start:
+                question = weekly_reply(week_start, question)
+                convo.debrief = convo.debrief or missed
             if convo.debrief:
                 question = (
                     f"(Long-run debrief for {convo.debrief.date}: "
-                    f"{convo.debrief.planned_miles:g} mi long run on the plan.)\n\n{text}"
+                    f"{convo.debrief.planned_miles:g} mi long run on the plan.)\n\n{question}"
                 )
             self._reply(channel, convo, client, question)
 
@@ -544,6 +571,8 @@ class SlackCoach:
             revised, problems = self._revised_week(conn, week)
             if revised is not None:
                 db.save_plan(conn, revised)
+                if _state(conn, WEEKLY_KEY) == week.start_date:
+                    _delete_state(conn, WEEKLY_KEY)  # the week is written: replies are chat again
             today = self.today(conn)
         finally:
             conn.close()
@@ -629,7 +658,9 @@ class SlackCoach:
             text=f"Saved to your fuel log (entry {saved['id']})"
             + (f", {cph:g} g carbs per hour." if cph is not None else "."),
         )
-        self._reply(channel, convo, client, SAVE_FOLLOW_UP)
+        week_start, _ = self._open_weekly()
+        follow_up = week_after_debrief(week_start) if week_start else SAVE_FOLLOW_UP
+        self._reply(channel, convo, client, follow_up)
 
     def maybe_ping(self, client: SlackClient) -> bool:
         """Send today's long-run check-in if it's due. True if one was sent."""
@@ -660,33 +691,6 @@ class SlackCoach:
         finally:
             conn.close()
 
-    def maybe_sync_nudge(self, client: SlackClient) -> bool:
-        """Sunday 5pm: if fewer runs are imported this week than the plan had so far, ask her to
-        sync before the check-in. Plain text, no API call. True if sent."""
-        conn = self.connect()
-        try:
-            now = self.now()
-            local = now.astimezone(ZoneInfo(db.athlete_timezone(conn)))
-            if local.weekday() != 6 or local.hour != SYNC_HOUR:
-                return False
-            sunday = local.date().isoformat()
-            week = reports.plan_week(db.load_accepted_plan(conn), sunday)
-            if week is None:
-                return False
-            planned = sum(
-                1 for s in week["sessions"] if s["kind"] in RUN_KINDS and s["date"] <= sunday
-            )
-            imported = reports.summary(conn, week=sunday, now=now)["summary"]["run_count"]
-            if slack_schedule.queued(conn, SYNC_KIND, sunday):
-                return False  # the fallback couldn't be cancelled; Slack posts it
-            if imported >= planned or not reports.mark_notified(conn, SYNC_KIND, sunday):
-                return False
-        finally:
-            conn.close()
-        channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
-        client.chat_postMessage(channel=channel, text=sync_nudge_text(imported, planned))
-        return True
-
     def maybe_weekly(self, client: SlackClient) -> bool:
         """Send the Sunday check-in if it's due. True if one was sent (or a failure note)."""
         conn = self.connect()
@@ -704,16 +708,90 @@ class SlackCoach:
                 return False  # marked before the coach runs, so a failure never retries in a loop
         finally:
             conn.close()
+        synced, note = self._weekly_sync()
+        missed = self._missed_debrief((sunday - timedelta(days=6)).isoformat())
         channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
         convo = self._conversation(channel)
-        with convo.lock:
+        with convo.lock, self._saving(convo):
             convo.turns, convo.pending = [], None
-            answer = self._answer(weekly_prompt(sunday.isoformat()), convo)
+            answer = self._answer(weekly_prompt(sunday.isoformat(), synced, missed), convo)
             text = WEEKLY_FAILED if answer == FAILED else to_mrkdwn(answer)
+            if note:
+                text += "\n\n" + note
             if answer != FAILED and coming:
-                text += COROS_NUDGE
+                conn = self.connect()
+                try:
+                    _set_state(conn, WEEKLY_KEY, next_monday)
+                finally:
+                    conn.close()
             client.chat_postMessage(channel=channel, text=text)
         return True
+
+    def _weekly_sync(self) -> tuple[str, str | None]:
+        """Pull the week's runs before the recap. Returns a line for the coach and an optional
+        note for her (sign-in needed, duplicates to review, runs left to download)."""
+        conn = self.connect()
+        try:
+            report = self.sync(conn, self.now())
+        except coros.CorosError as exc:
+            return "(COROS sync failed: recap from the runs already imported.)", f"_{exc}_"
+        except Exception:  # network or SDK surprises: the check-in still goes out
+            log.exception("COROS sync before the check-in failed")
+            return "(COROS sync failed: recap from the runs already imported.)", SYNC_FAILED
+        finally:
+            conn.close()
+        notes = []
+        if report.pending:
+            notes.append(SYNC_DUPLICATES)
+        if report.not_downloaded:
+            notes.append(SYNC_LEFT.format(n=report.not_downloaded))
+        synced = f"Runs synced from COROS just now: {len(report.imported)} new."
+        return synced, "\n".join(notes) or None
+
+    def _open_weekly(self) -> tuple[str | None, Debrief | None]:
+        """The week her check-in reply should write, if the check-in went out this Sunday and
+        that week isn't saved yet (open through Monday, so a morning reply still counts), and
+        last week's long run if it still needs a debrief."""
+        conn = self.connect()
+        try:
+            week_start = _state(conn, WEEKLY_KEY)
+            if week_start is None:
+                return None, None
+            try:
+                today = self.today(conn)
+            except LookupError:
+                return None, None
+            if today > week_start:
+                _delete_state(conn, WEEKLY_KEY)
+                return None, None
+        finally:
+            conn.close()
+        last_monday = (date.fromisoformat(week_start) - timedelta(days=7)).isoformat()
+        return week_start, self._missed_debrief(last_monday)
+
+    def _missed_debrief(self, monday: str) -> Debrief | None:
+        """The long run in the week starting `monday` if it's done, not in the fuel log, and she
+        didn't decline saving it: the Sunday check-in asks for it."""
+        conn = self.connect()
+        try:
+            week = reports.plan_week(db.load_accepted_plan(conn), monday)
+            today = self.today(conn)
+            for s in (week or {}).get("sessions", []):
+                if (
+                    s["kind"] != "long"
+                    or s["date"] > today
+                    or slack_schedule.logged(conn, s["date"])
+                ):
+                    continue
+                closed = conn.execute(
+                    "SELECT 1 FROM notifications WHERE kind = ? AND date = ?",
+                    (DEBRIEF_CLOSED, s["date"]),
+                ).fetchone()
+                if not closed:
+                    return Debrief(s["date"], s["miles"], self.clock() + DEBRIEF_TTL)
+            return None
+        finally:
+            conn.close()
 
     def maybe_schedule(self, client: SlackClient) -> int:
         """Keep Slack's queue of fallback messages in step with the plan; cancel the ones about
@@ -874,6 +952,11 @@ def _set_state(conn: sqlite3.Connection, key: str, value: str) -> None:
         )
 
 
+def _delete_state(conn: sqlite3.Connection, key: str) -> None:
+    with conn:
+        conn.execute("DELETE FROM slack_state WHERE key = ?", (key,))
+
+
 def _connect() -> sqlite3.Connection:
     conn = db.connect()
     db.migrate(conn)
@@ -914,7 +997,7 @@ def run(env: dict[str, str]) -> None:  # pragma: no cover - needs real Slack tok
                 bot.resume(client)  # a reply the last restart cut off
             except Exception:
                 log.exception("resume failed")
-            checks = (bot.maybe_schedule, bot.maybe_ping, bot.maybe_sync_nudge, bot.maybe_weekly)
+            checks = (bot.maybe_schedule, bot.maybe_ping, bot.maybe_weekly)
             last_tick, last_catch_up = 0.0, 0.0
             while True:
                 tick = time.time()  # wall clock: jumps forward when the laptop slept

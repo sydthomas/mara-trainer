@@ -286,8 +286,20 @@ class SlackFake(FakeClient):
         return {"channel": {"id": "D1"}}
 
 
-def _debrief_bot(coach: FakeCoach, shared: Any, when: datetime, clock: Clock | None = None):  # type: ignore[no-untyped-def]
-    return SlackCoach(SYDNEY, lambda conn: coach, shared, clock or Clock(), lambda: when)
+def _no_new_runs(conn: sqlite3.Connection, now: datetime) -> Any:
+    from mara_coach import coros
+
+    return coros.SyncReport("2026-11-02", "2026-11-08")
+
+
+def _debrief_bot(
+    coach: FakeCoach,
+    shared: Any,
+    when: datetime,
+    clock: Clock | None = None,
+    sync: Any = _no_new_runs,
+):  # type: ignore[no-untyped-def]
+    return SlackCoach(SYDNEY, lambda conn: coach, shared, clock or Clock(), lambda: when, sync)
 
 
 def _sat(hour_utc: int) -> datetime:  # 2026-11-07 is a Saturday; LA is UTC-8 then
@@ -440,7 +452,13 @@ def test_weekly_check_in_preview_before_the_plan_starts() -> None:
     coach = FakeCoach(["Week 1 preview"])
     sunday_before = datetime(2026, 11, 2, 2, tzinfo=UTC)  # Sun 2026-11-01 6pm LA
     assert _debrief_bot(coach, shared, sunday_before).maybe_weekly(client)
-    assert client.posted[-1]["text"] == "Week 1 preview" + slack_bot.COROS_NUDGE
+    assert client.posted[-1]["text"] == "Week 1 preview"  # no "push in Claude Code" nudge
+    assert (
+        shared.conn.execute(
+            "SELECT value FROM slack_state WHERE key = ?", (slack_bot.WEEKLY_KEY,)
+        ).fetchone()[0]
+        == "2026-11-02"
+    )  # her reply writes week 1
 
 
 def test_weekly_check_in_failure_posts_a_note_once() -> None:
@@ -469,7 +487,7 @@ def test_plan_week_tool(conn: sqlite3.Connection) -> None:
     assert tools.call_tool(conn, "plan_week", {"date": "2027-01-01"})["week"] is None
 
 
-# ------------------------------------------------------------------ Sunday 5pm sync nudge
+# ------------------------------------------------------------------ Sunday: sync, then recap
 
 
 def _import_run(conn: sqlite3.Connection, start: datetime) -> None:
@@ -478,26 +496,138 @@ def _import_run(conn: sqlite3.Connection, start: datetime) -> None:
     imports.commit(conn, imports.DecodedFile("fit", draft.fingerprint, [draft]), "x.fit")
 
 
-def test_sync_nudge_at_five_when_planned_runs_are_missing() -> None:
-    shared, client = SharedDB(), SlackFake()
-    db.save_plan(shared.conn, PLAN)  # week of 2026-11-02: one long run, Saturday 11-07
-    coach = FakeCoach([])
-    assert not _debrief_bot(coach, shared, _sun(0, 9)).maybe_sync_nudge(client)  # Sun 4pm LA
-    bot = _debrief_bot(coach, shared, _sun(1, 9))  # Sun 5pm LA
-    assert bot.maybe_sync_nudge(client)
-    assert client.posted[-1]["text"] == slack_bot.sync_nudge_text(0, 1)
-    assert "sync my runs" in client.posted[-1]["text"]
-    assert not bot.maybe_sync_nudge(client)  # once per Sunday
-    assert coach.calls == []  # plain text, no API call
+def test_weekly_check_in_syncs_runs_first() -> None:
+    """No 5pm reminder: the check-in pulls the week's runs itself, then recaps them."""
+    from mara_coach import coros
 
-
-def test_no_sync_nudge_when_runs_are_in_or_no_plan_week() -> None:
-    shared, client = SharedDB(), SlackFake()
-    assert not _debrief_bot(FakeCoach([]), shared, _sun(1, 9)).maybe_sync_nudge(client)  # no plan
+    shared, client, order = SharedDB(), SlackFake(), []
     db.save_plan(shared.conn, PLAN)
-    _import_run(shared.conn, datetime(2026, 11, 7, 16, 0, tzinfo=UTC))  # Sat 8am LA
-    assert not _debrief_bot(FakeCoach([]), shared, _sun(1, 9)).maybe_sync_nudge(client)
-    assert client.posted == []
+
+    def sync(conn: sqlite3.Connection, now: datetime) -> coros.SyncReport:
+        order.append("sync")
+        _import_run(conn, datetime(2026, 11, 7, 16, 0, tzinfo=UTC))
+        return coros.SyncReport("2026-11-02", "2026-11-08", imported=["Sat 11/7: 10.00 mi"])
+
+    class OrderedCoach(FakeCoach):
+        def ask(self, question: str, history: list[dict[str, Any]] | None = None) -> CoachReply:
+            order.append("coach")
+            return super().ask(question, history)
+
+    coach = OrderedCoach(["Recap"])
+    assert _debrief_bot(coach, shared, _sun(2, 9), sync=sync).maybe_weekly(client)
+    assert order == ["sync", "coach"]
+    assert "Runs synced from COROS just now: 1 new." in coach.calls[0][0]
+    assert [m["text"] for m in client.posted] == ["Recap"]  # one message, no sync report
+
+
+@pytest.mark.parametrize(
+    ("error", "note"),
+    [
+        ("sign_in", "_" + "COROS needs you to sign in again"),
+        ("crash", slack_bot.SYNC_FAILED),
+    ],
+)
+def test_weekly_check_in_goes_out_when_sync_fails(error: str, note: str) -> None:
+    from mara_coach import coros
+
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+
+    def sync(conn: sqlite3.Connection, now: datetime) -> coros.SyncReport:
+        raise coros.SignInNeeded if error == "sign_in" else RuntimeError("network")
+
+    coach = FakeCoach(["Recap"])
+    assert _debrief_bot(coach, shared, _sun(2, 9), sync=sync).maybe_weekly(client)
+    assert "COROS sync failed" in coach.calls[0][0]
+    text = client.posted[-1]["text"]
+    assert text.startswith("Recap\n\n") and note in text
+
+
+def test_weekly_check_in_points_to_duplicates_and_leftovers(tmp_path: Path) -> None:
+    from mara_coach import coros
+
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    pending = coros.Pending(tmp_path / "1.fit", ("k",), ("Sat 11/7",))
+    report = coros.SyncReport("2026-11-02", "2026-11-08", pending=[pending], not_downloaded=2)
+    bot = _debrief_bot(FakeCoach(["Recap"]), shared, _sun(2, 9), sync=lambda c, n: report)
+    assert bot.maybe_weekly(client)
+    text = client.posted[-1]["text"]
+    assert slack_bot.SYNC_DUPLICATES in text and "2 run(s) didn't download" in text
+    assert bot.conversations["D1"].pending is None  # her answer isn't taken as a yes to them
+
+
+def test_reply_to_the_check_in_asks_for_a_proposal_through_monday() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    sunday_before = datetime(2026, 11, 2, 2, tzinfo=UTC)  # Sun 2026-11-01 6pm LA
+    coach = FakeCoach(["Week 1 preview", "Here's the week", "Sure"])
+    assert _debrief_bot(coach, shared, sunday_before).maybe_weekly(client)
+    monday = datetime(2026, 11, 2, 17, tzinfo=UTC)  # Mon 9am LA: still her check-in reply
+    _debrief_bot(coach, shared, monday).handle({**_dm("Busy Thursday"), "ts": "1"}, client)
+    assert coach.calls[1][0] == slack_bot.weekly_reply("2026-11-02", "Busy Thursday")
+    assert "propose_week" in coach.calls[1][0]
+    tuesday = datetime(2026, 11, 3, 17, tzinfo=UTC)
+    _debrief_bot(coach, shared, tuesday).handle({**_dm("Thanks"), "ts": "2"}, client)
+    assert coach.calls[2][0] == "Thanks"  # Tuesday: plain chat again
+
+
+TWO_WEEKS = {
+    "weeks": [
+        *PLAN["weeks"],
+        {
+            "week": 2,
+            "start_date": "2026-11-09",
+            "sessions": [
+                {"day": 0, "kind": "rest", "distance_meters": 0},
+                {"day": 6, "kind": "long", "distance_meters": 19312},
+            ],
+        },
+    ]
+}
+
+
+def test_check_in_asks_how_the_week_felt() -> None:
+    shared = SharedDB()
+    db.save_plan(shared.conn, PLAN)
+    _import_run(shared.conn, datetime(2026, 11, 7, 16, 0, tzinfo=UTC))
+    fueling.add_entry(shared.conn, fueling.FuelEntry("2026-11-07", distance_meters=16093))
+    coach = FakeCoach(["Recap"])
+    _debrief_bot(coach, shared, _sun(2, 9)).maybe_weekly(SlackFake())
+    assert "how did last week feel" in coach.calls[0][0]
+    assert "isn't debriefed yet" not in coach.calls[0][0]  # Saturday is in the fuel log
+
+
+def test_missed_saturday_debrief_folds_into_sunday() -> None:
+    """No debrief Saturday: the check-in asks for it, her reply logs it (yes), then the week."""
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, TWO_WEEKS)
+    coach = ProposingCoach(["Recap. How'd the week feel, and Saturday's 10?"], None)
+    sunday = _debrief_bot(coach, shared, _sun(2, 9))  # Sun 6pm LA
+    assert sunday.maybe_weekly(client)
+    assert "My 10 mi long run on 2026-11-07 isn't debriefed yet" in coach.calls[0][0]
+    later = _sun(4, 9)  # Sun 8pm LA
+    coach.answers += ["Here's the entry. Save it?", "Nice fueling. Here's your week."]
+    coach.propose = PROPOSAL
+    bot = _debrief_bot(coach, shared, later)
+    bot.handle({**_dm("Tired legs. Did 10 in 1:30, 7 chews"), "ts": "1"}, client)
+    assert "propose the fuel entry first" in coach.calls[1][0]
+    assert "Long-run debrief for 2026-11-07" in coach.calls[1][0]
+    bot.handle({**_dm("yes"), "ts": "2"}, client)
+    assert shared.conn.execute("SELECT count(*) FROM fuel_log").fetchone()[0] == 1
+    assert coach.calls[2][0] == slack_bot.week_after_debrief("2026-11-09")
+
+
+def test_declined_debrief_is_not_asked_again_on_sunday() -> None:
+    shared = SharedDB()
+    db.save_plan(shared.conn, TWO_WEEKS)
+    db_conn = shared.conn
+    from mara_trainer import reports as _reports
+
+    _reports.mark_notified(db_conn, slack_bot.DEBRIEF_CLOSED, "2026-11-07")
+    coach = FakeCoach(["Recap"])
+    _debrief_bot(coach, shared, _sun(2, 9)).maybe_weekly(SlackFake())
+    assert "isn't debriefed yet" not in coach.calls[0][0]
 
 
 # ------------------------------------------------------------------ COROS sync from Slack
