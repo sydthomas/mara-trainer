@@ -132,3 +132,16 @@ def test_fuel_log_tool_is_read_only(conn: sqlite3.Connection) -> None:
     assert got["count"] == 1 and got["entries"][0]["carbs_per_hour"] == 40.0
     with pytest.raises(tools.ToolError):
         tools.call_tool(conn, "fuel_log", {"last": 0})
+
+
+def test_entries_between_is_date_bounded_oldest_first_and_unlimited(
+    conn: sqlite3.Connection,
+) -> None:
+    for day in ("2026-11-20", "2026-11-01", "2026-11-10"):
+        fueling.add_entry(conn, fueling.FuelEntry(date=day, duration_seconds=3600, carbs_grams=45))
+    got = fueling.entries_between(conn, "2026-11-01", "2026-11-10")
+    assert [e["date"] for e in got] == ["2026-11-01", "2026-11-10"]
+    assert got[0]["carbs_per_hour"] == 45.0
+    for _ in range(fueling.MAX_LAST + 1):
+        fueling.add_entry(conn, fueling.FuelEntry(date="2026-11-05", stomach=3))
+    assert len(fueling.entries_between(conn, "2026-11-01", "2026-11-10")) == fueling.MAX_LAST + 3

@@ -9,7 +9,7 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | Assumption | Where | For user #2 |
 |---|---|---|
 | One athlete row | `athlete`, `race_setup`, `athlete_profile`: `id INTEGER PRIMARY KEY CHECK (id = 1)` | Drop the check; `athlete.id` becomes the tenant key |
-| Per-athlete rows with no owner column | `activities`, `daily_check_ins`, `import_batches`, `training_plans`, `fuel_log`, `notifications`, `api_usage` | Add `athlete_id` (FK, NOT NULL, indexed) to each; every query filters by it |
+| Per-athlete rows with no owner column | `activities`, `daily_check_ins`, `import_batches`, `training_plans`, `fuel_log`, `niggle_log`, `notifications`, `api_usage` | Add `athlete_id` (FK, NOT NULL, indexed) to each; every query filters by it |
 | Single-file SQLite | `data/coach.db` (`COACH_DB_PATH`) | Postgres once hosted: concurrent writers, backups, row-level security. Migrations use SQLite SQL (`strftime`, `json_valid`, `GLOB`) and need a port |
 | Name and story in the prompt | `agent.py` system prompt: "You are Sydney's marathon coach... her first marathon" | Build from the athlete's profile (name, experience, pronouns) per request |
 | One Slack user | `SLACK_ALLOWED_USER_ID`; one bot process | A `slack_user_id -> athlete_id` table; unknown users get an invite flow, not the coach |
@@ -18,6 +18,8 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | COROS through Claude Code | `.mcp.json`, one OAuth login on her laptop; `coros-sync` and `coros-run-planner` are skills | Per-user OAuth with tokens stored server-side; sync and push become server jobs |
 | One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
 | One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
+| One dashboard file | `dashboard.py`: reads the single athlete row (timezone, units), writes `data/dashboard.html` | Build per athlete behind sign-in; never a shared file |
+| One folder of FIT files, one timezone | `hr_pace.py` / `coach hr-pace`: reads every `.fit` in `exports/coros/` as one runner's, weeks from the single `athlete` row's timezone | Pass the athlete's own files and timezone (the function already takes both as arguments) |
 | One home location | `COACH_LAT` / `COACH_LON` in `.env` (`weather.py`) | Per-athlete location in the DB (or per request), still rounded before it leaves the server |
 | Local files | `exports/`, `plans/`, `data/eval-runs/` | Object storage keyed by athlete, or rows in the DB |
 | Approvals by name | `sources.approved_by`, knowledge approvals, "only Sydney approves" | A coach/admin role. Sources and knowledge stay shared; runners never approve them |

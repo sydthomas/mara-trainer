@@ -56,7 +56,16 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach plan show` — accepted plan
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
+- `uv run coach dashboard [--out data/dashboard.html] [--weeks 16] [--today YYYY-MM-DD]` — local progress page
+  (`mara_trainer/dashboard.py`): one offline HTML file (inline CSS + SVG, no scripts, nothing uploaded) with
+  milestones, weekly distance vs plan, long-run build-up, carbs per hour; a panel with no data says so;
+  prints `{path, panels, weeks, generated_for}`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
+- `uv run coach hr-pace [--dir exports/coros] [--weeks 12] [--pace-min M:SS --pace-max M:SS] [--unit mi|km] [--today YYYY-MM-DD]`
+  — heart rate at one easy pace band from the FIT files' per-second records (`hr_pace.py`; nothing
+  stored): per run, per Monday-Sunday week, 4-week rolling mean, coverage, caveats. Default band =
+  30 s/mi centred on the runner's most-used pace; a stretch survives up to 30 s outside the band.
+  Descriptive defaults, not coaching rules; no fitness score
 - `uv run coach coros week [--date YYYY-MM-DD] [--today YYYY-MM-DD]` — one plan week (default: the
   week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
   targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
@@ -75,6 +84,9 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
+- `uv run coach body log --status green|yellow|red [--date YYYY-MM-DD] [--context before_run|after_run|other] [--location ...] [--swelling/--no-swelling] [--pain 0-10] [--notes ...]`
+  — body check / niggle log: her own status, stored as given (no classification or advice in code)
+- `uv run coach body show [--last N] [--since YYYY-MM-DD]` / `coach body delete ID`
 - `uv run coach source import [sources/seed.json] [--update]` — add seed sources as `proposed`; `--update` refreshes metadata of existing ones (approval kept)
 - `uv run coach source add --slug ... --title ... --author ... --kind ... --topics a,b --license ... --trust-reason ... [--url https://...]`
 - `uv run coach source list [--status proposed|approved|retired] [--topic fueling] [--women-tested]`
@@ -220,7 +232,10 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Layout
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
-  `fueling.py` (fueling log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  `fueling.py` (fueling log), `body.py` (body check / niggle log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log` and `niggle_log`)
+  `fueling.py` (fueling log), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  `fueling.py` (fueling log), `hr_pace.py` (heart rate at a fixed pace, from FIT records), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input

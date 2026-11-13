@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import coros_workouts, db, fueling, imports, paces, reports
+from . import body, coros_workouts, dashboard, db, fueling, hr_pace, imports, paces, reports
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -30,12 +30,17 @@ fuel_app = typer.Typer(
     help="Fueling log: what you ate before and took during runs (no calories).",
     no_args_is_help=True,
 )
+body_app = typer.Typer(
+    help="Body check / niggle log: your own green, yellow or red (stored, never judged).",
+    no_args_is_help=True,
+)
 coros_app = typer.Typer(
     help="COROS workouts built from the accepted plan (sent by Claude via the COROS MCP).",
     no_args_is_help=True,
 )
 app.add_typer(plan_app, name="plan")
 app.add_typer(fuel_app, name="fuel")
+app.add_typer(body_app, name="body")
 app.add_typer(coros_app, name="coros")
 
 KM = 1000.0
@@ -149,6 +154,33 @@ def summary_cmd(
         _out(reports.summary(_conn(), week, weeks))
     except reports.ReportError as exc:
         _fail(str(exc))
+
+
+@app.command("dashboard")
+def dashboard_cmd(
+    out: Annotated[
+        Path, typer.Option(help="HTML file to write (keep it under data/, which is gitignored)")
+    ] = Path("data/dashboard.html"),
+    weeks: Annotated[int, typer.Option(help="Monday-Sunday weeks to show, ending this week")] = 16,
+    today: Annotated[
+        str | None, typer.Option(help="Build as of this athlete-local date (YYYY-MM-DD)")
+    ] = None,
+) -> None:
+    """Write the local progress dashboard: one offline HTML file, nothing uploaded."""
+    try:
+        data = dashboard.build_data(_conn(), today, weeks)
+    except dashboard.DashboardError as exc:
+        _fail(str(exc))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(dashboard.render_html(data), encoding="utf-8")
+    _out(
+        {
+            "path": str(out),
+            "panels": [{"id": p["id"], "status": p["status"]} for p in data["panels"]],
+            "weeks": data["weeks"],
+            "generated_for": data["generated_for"],
+        }
+    )
 
 
 @app.command("validate-plan")
@@ -303,6 +335,43 @@ def pace_cmd(
     _out(report)
 
 
+@app.command("hr-pace")
+def hr_pace_cmd(
+    directory: Annotated[
+        Path, typer.Option("--dir", help="Folder of .fit files (read only, nothing is stored)")
+    ] = Path("exports/coros"),
+    weeks: Annotated[int, typer.Option(help="Monday-Sunday weeks to cover, ending this week")] = 12,
+    pace_min: Annotated[
+        str | None, typer.Option(help="Faster edge of the pace band, M:SS per --unit")
+    ] = None,
+    pace_max: Annotated[
+        str | None, typer.Option(help="Slower edge of the pace band, M:SS per --unit")
+    ] = None,
+    unit: Annotated[str, typer.Option(help="Unit for paces: mi or km")] = "mi",
+    today: Annotated[str | None, typer.Option(help="Override today (YYYY-MM-DD)")] = None,
+) -> None:
+    """Heart rate at one easy pace band, per run, per week and as a 4-week rolling mean.
+    Default band: the runner's own most-used pace. A description, not a fitness score."""
+    try:
+        timezone = db.athlete_timezone(_conn())
+        day = (
+            date.fromisoformat(today) if today else datetime.now(ZoneInfo(timezone)).date()
+        ).isoformat()
+        _out(
+            hr_pace.report(
+                directory,
+                timezone,
+                day,
+                weeks,
+                hr_pace.parse_pace(pace_min) if pace_min is not None else None,
+                hr_pace.parse_pace(pace_max) if pace_max is not None else None,
+                unit,
+            )
+        )
+    except (LookupError, ValueError) as exc:
+        _fail(str(exc))
+
+
 @coros_app.command("week")
 def coros_week_cmd(
     day: Annotated[
@@ -399,6 +468,66 @@ def fuel_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> No
     """Delete one fueling entry (for typos)."""
     if not fueling.delete_entry(_conn(), entry_id):
         _fail(f"no fuel entry with id {entry_id}")
+    _out({"ok": True, "deleted": entry_id})
+
+
+@body_app.command("log")
+def body_log(
+    status: Annotated[str, typer.Option(help="Your own call: green, yellow or red")],
+    date_: Annotated[
+        str | None,
+        typer.Option("--date", help="Date YYYY-MM-DD (default: today in your timezone)"),
+    ] = None,
+    context: Annotated[
+        str | None, typer.Option(help="When: before_run, after_run or other")
+    ] = None,
+    location: Annotated[str | None, typer.Option(help="Where, e.g. 'right midfoot'")] = None,
+    swelling: Annotated[
+        bool | None, typer.Option("--swelling/--no-swelling", help="Any swelling")
+    ] = None,
+    pain: Annotated[int | None, typer.Option(help="Pain 0 (none) to 10 (worst)")] = None,
+    notes: Annotated[str | None, typer.Option(help="Anything else")] = None,
+) -> None:
+    """Log one body check as you report it. Stored only: no rating, no advice."""
+    conn = _conn()
+    if date_ is None:
+        try:
+            date_ = reports.athlete_today(conn)
+        except reports.ReportError as exc:
+            _fail(str(exc))
+    entry = body.BodyEntry(
+        date=date_,
+        status=status,
+        context=context,
+        location=location,
+        swelling=swelling,
+        pain=pain,
+        notes=notes,
+    )
+    try:
+        saved = body.add_entry(conn, entry)
+    except body.BodyError as exc:
+        _fail("invalid body entry", problems=exc.problems)
+    _out({"ok": True, "entry": saved})
+
+
+@body_app.command("show")
+def body_show(
+    last: Annotated[int, typer.Option(help="How many entries, newest first")] = 10,
+    since: Annotated[str | None, typer.Option(help="Only entries on/after YYYY-MM-DD")] = None,
+) -> None:
+    """Recent body checks with counts by status and coverage counts."""
+    try:
+        _out(body.list_entries(_conn(), last, since))
+    except body.BodyError as exc:
+        _fail(str(exc))
+
+
+@body_app.command("delete")
+def body_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> None:
+    """Delete one body check (for typos)."""
+    if not body.delete_entry(_conn(), entry_id):
+        _fail(f"no body entry with id {entry_id}")
     _out({"ok": True, "deleted": entry_id})
 
 
