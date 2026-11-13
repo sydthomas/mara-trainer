@@ -411,7 +411,8 @@ def fuel_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> No
 def body_log(
     status: Annotated[str, typer.Option(help="Your own call: green, yellow or red")],
     date_: Annotated[
-        str | None, typer.Option("--date", help="Date YYYY-MM-DD (default: today)")
+        str | None,
+        typer.Option("--date", help="Date YYYY-MM-DD (default: today in your timezone)"),
     ] = None,
     context: Annotated[
         str | None, typer.Option(help="When: before_run, after_run or other")
@@ -424,8 +425,14 @@ def body_log(
     notes: Annotated[str | None, typer.Option(help="Anything else")] = None,
 ) -> None:
     """Log one body check as you report it. Stored only: no rating, no advice."""
+    conn = _conn()
+    if date_ is None:
+        try:
+            date_ = reports.athlete_today(conn)
+        except reports.ReportError as exc:
+            _fail(str(exc))
     entry = body.BodyEntry(
-        date=date_ or date.today().isoformat(),
+        date=date_,
         status=status,
         context=context,
         location=location,
@@ -434,7 +441,7 @@ def body_log(
         notes=notes,
     )
     try:
-        saved = body.add_entry(_conn(), entry)
+        saved = body.add_entry(conn, entry)
     except body.BodyError as exc:
         _fail("invalid body entry", problems=exc.problems)
     _out({"ok": True, "entry": saved})

@@ -236,3 +236,23 @@ def test_cli_log_show_delete(tmp_db: Path) -> None:
     assert runner.invoke(app, ["body", "show", "--since", "yesterday"]).exit_code == 1
     assert runner.invoke(app, ["body", "delete", str(entry["id"])]).exit_code == 0
     assert runner.invoke(app, ["body", "delete", str(entry["id"])]).exit_code == 1
+
+
+def test_cli_log_defaults_to_athlete_local_date(
+    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mara_trainer import reports
+
+    assert runner.invoke(app, ["init-db", "--timezone", "Pacific/Auckland"]).exit_code == 0
+    # The athlete-local date, not the machine's date, is the default.
+    monkeypatch.setattr(reports, "athlete_today", lambda _: "2031-01-02")
+    r = runner.invoke(app, ["body", "log", "--status", "green"])
+    assert r.exit_code == 0, r.output
+    assert json.loads(r.output)["entry"]["date"] == "2031-01-02"
+
+
+def test_cli_log_rejects_empty_date(tmp_db: Path) -> None:
+    assert runner.invoke(app, ["init-db"]).exit_code == 0
+    r = runner.invoke(app, ["body", "log", "--status", "green", "--date", ""])
+    assert r.exit_code == 1, r.output
+    assert json.loads(runner.invoke(app, ["body", "show"]).output)["count"] == 0
