@@ -76,6 +76,11 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach coros sync` — `coros-sync` in plain code (`mara_coach/coros.py`, no LLM): this week's
   runs (Monday through today), FIT downloaded once into `exports/coros/`, then the normal import;
   exit 2 = near-duplicates need confirmation (those files not imported). Slack: "sync my runs"
+- `uv run coach weather [--date YYYY-MM-DD] [--hour 0-23] [--hours 3]` — run-window forecast from
+  Open-Meteo (`mara_coach/weather.py`, urllib, no key; free tier is non-commercial only): hourly SI
+  + °F/mph, local hours, `attribution`; conditions only, nothing stored; needs `COACH_LAT` /
+  `COACH_LON` in `.env` (rounded to 2 decimals in the request, never printed); exit 1 =
+  `{ok: false, reason}` (network, bad response, date past the ~16-day forecast)
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
@@ -234,7 +239,8 @@ be summarized. If no approved source covers a question, the coach says so.
   (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
-  schemas, reused by the future API agent); agent and Slack land here
+  schemas, reused by the future API agent), `weather.py` (Open-Meteo run-window forecast, nothing
+  stored); agent and Slack land here
 - `knowledge/` — the knowledge base: one cited Markdown section per topic (README = format)
 - `sources/seed.json` — proposed seed sources (links + metadata + our own one-line notes, no copied text)
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
