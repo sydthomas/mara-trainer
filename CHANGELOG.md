@@ -28,6 +28,11 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   (temperature, humidity, dew point, feels-like, rain, wind, UV; °F and mph beside SI). Conditions
   only, no advice; nothing is stored. Location comes from `COACH_LAT` / `COACH_LON`, rounded to 2
   decimals before the request. (#44)
+- `coach weather`: optional wet-bulb globe temperature per hour (`wbgt_c`, `wbgt_f`) from the US
+  National Weather Service. It runs only when `COACH_NWS_CONTACT` is set (NWS asks for a contact
+  in the User-Agent; it is sent there and shown nowhere). Outside the US, or when NWS has no WBGT,
+  the values are null with a reason and the rest of the forecast is unchanged. A number only: no
+  heat flags, no advice. `attribution` is now a list (Open-Meteo, plus NWS when used). (#48)
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
   API cost), asks before importing possible duplicates, and replies with the week's total. Also
   `coach coros login` (one-time sign-in, saved in the macOS keychain) and `coach coros sync`.

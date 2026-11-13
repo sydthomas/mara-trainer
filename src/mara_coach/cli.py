@@ -395,7 +395,9 @@ def weather_cmd(
     hours: Annotated[int, typer.Option(help="Length of the run window in hours")] = 3,
 ) -> None:
     """Forecast for a run window from Open-Meteo (conditions only, nothing stored). Needs
-    COACH_LAT and COACH_LON in .env. Exit 1 with {ok: false, reason} on any failure."""
+    COACH_LAT and COACH_LON in .env. Exit 1 with {ok: false, reason} on any failure. With
+    COACH_NWS_CONTACT set, also asks the US National Weather Service for wet-bulb globe
+    temperature (wbgt_c); an NWS failure is reported under `nws` and never fails the command."""
     load_env()
     try:
         timezone = db.athlete_timezone(_conn())
