@@ -7,6 +7,10 @@ Coordinates come from `COACH_LAT` / `COACH_LON` and are never put in the output.
 
 `forecast` never raises: every failure is `{"ok": False, "reason": ...}`.
 
+Hours are asked for as unix timestamps and converted to local time here. Open-Meteo's ISO
+timestamps use one fixed UTC offset for the whole range, so they are an hour off after a
+daylight-saving change (https://open-meteo.com/en/docs, `timezone` / `timeformat`).
+
 The free Open-Meteo API is for non-commercial use (https://open-meteo.com/en/terms); data is
 CC BY 4.0, so every successful result carries `attribution`.
 """
@@ -16,11 +20,12 @@ from __future__ import annotations
 import http.client
 import json
 import math
+import re
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from datetime import date as date_cls
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -34,6 +39,8 @@ FORECAST_DAYS = 16  # the most the forecast API serves
 MAX_HOURS = 24
 LAT_ENV, LON_ENV = "COACH_LAT", "COACH_LON"
 TIME_FORMAT = "%Y-%m-%dT%H:%M"
+TIME_UNIT = "unixtime"
+DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 # Open-Meteo hourly variable -> (output key, unit the API must report for it).
 # Names confirmed against https://open-meteo.com/en/docs on 2026-11-12.
@@ -100,7 +107,7 @@ def _coordinates(env: Mapping[str, str]) -> tuple[str, str]:
     missing = [name for name in (LAT_ENV, LON_ENV) if not env.get(name, "").strip()]
     if missing:
         raise _Problem(
-            f"location is not set: add {' and '.join(missing)} to .env (see .env.example)",
+            f"location is not set: add {' and '.join(missing)} (decimal degrees) to .env",
             missing=missing,
         )
     out = []
@@ -111,7 +118,7 @@ def _coordinates(env: Mapping[str, str]) -> tuple[str, str]:
             value = math.nan
         if not math.isfinite(value) or abs(value) > limit:
             raise _Problem(f"{name} must be a number between -{limit:g} and {limit:g}")
-        out.append(f"{round(value, 2):.2f}")
+        out.append(f"{round(value, 2) + 0.0:.2f}")  # + 0.0: never "-0.00"
     return out[0], out[1]
 
 
@@ -125,6 +132,7 @@ def request_url(latitude: str, longitude: str, timezone: str) -> str:
                 "longitude": longitude,
                 "hourly": ",".join(VARIABLES),
                 "timezone": timezone,
+                "timeformat": TIME_UNIT,
                 "wind_speed_unit": "ms",
                 "forecast_days": FORECAST_DAYS,
             }
@@ -133,13 +141,17 @@ def request_url(latitude: str, longitude: str, timezone: str) -> str:
 
 
 def _fetch(fetch: Fetch, url: str) -> bytes:
+    timed_out = f"weather request timed out after {TIMEOUT_SECONDS:g} s"
     try:
         return fetch(url, TIMEOUT_SECONDS)
     except urllib.error.HTTPError as exc:
         raise _Problem(f"weather request failed: HTTP {exc.code}") from None
     except TimeoutError:
-        raise _Problem(f"weather request timed out after {TIMEOUT_SECONDS:g} s") from None
+        raise _Problem(timed_out) from None
     except (OSError, http.client.HTTPException) as exc:
+        # urlopen wraps a connect timeout in URLError
+        if isinstance(getattr(exc, "reason", None), TimeoutError):
+            raise _Problem(timed_out) from None
         raise _Problem(f"couldn't reach Open-Meteo ({type(exc).__name__})") from None
     except Exception as exc:  # an injected fetch may fail any way; callers must never see it
         raise _Problem(f"weather request failed ({type(exc).__name__})") from None
@@ -149,15 +161,22 @@ def _number(value: Any) -> float | None:
     """Missing stays null. Anything that isn't a number is a malformed response."""
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
-        raise _Problem("unexpected weather response: a value is not a number")
-    return float(value)
+    problem = _Problem("unexpected weather response: a value is not a number")
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise problem
+    try:
+        number = float(value)
+    except OverflowError:  # an integer too large for a float
+        raise problem from None
+    if not math.isfinite(number):
+        raise problem
+    return number
 
 
-def _parse(body: bytes) -> tuple[list[str], dict[str, list[Any]]]:
+def _parse(body: bytes) -> tuple[list[int], dict[str, list[Any]]]:
     try:
         data = json.loads(body)
-    except ValueError:  # JSONDecodeError and UnicodeDecodeError
+    except (ValueError, RecursionError):  # JSONDecodeError, UnicodeDecodeError, deep nesting
         raise _Problem("unexpected weather response: not JSON") from None
     if not isinstance(data, dict):
         raise _Problem("unexpected weather response: not a JSON object")
@@ -167,7 +186,12 @@ def _parse(body: bytes) -> tuple[list[str], dict[str, list[Any]]]:
     if not isinstance(hourly, dict) or not isinstance(units, dict):
         raise _Problem("unexpected weather response: no hourly data")
     times = hourly.get("time")
-    if not isinstance(times, list) or not times or not all(isinstance(t, str) for t in times):
+    if (
+        units.get("time") != TIME_UNIT
+        or not isinstance(times, list)
+        or not times
+        or not all(isinstance(t, int) and not isinstance(t, bool) for t in times)
+    ):
         raise _Problem("unexpected weather response: no hourly times")
     series: dict[str, list[Any]] = {}
     for name, (_, unit) in VARIABLES.items():
@@ -199,6 +223,14 @@ def _hour_row(time: str, index: int, series: dict[str, list[Any]]) -> dict[str, 
     return row
 
 
+def _local(timestamp: int, zone: ZoneInfo) -> str:
+    """A UTC instant as local wall-clock time, with the offset that applies at that instant."""
+    try:
+        return datetime.fromtimestamp(timestamp, zone).strftime(TIME_FORMAT)
+    except (OverflowError, ValueError, OSError):
+        raise _Problem("unexpected weather response: a time is out of range") from None
+
+
 def _forecast(
     timezone: str,
     date: str | None,
@@ -213,27 +245,40 @@ def _forecast(
     except (KeyError, ValueError, OSError):
         raise _Problem(f"unknown IANA timezone: {timezone}") from None
     local_now = (now or _now(zone)).astimezone(zone)
+    bad_date = _Problem(f"--date must be YYYY-MM-DD, got {date!r}")
+    if date is not None and not DATE_PATTERN.fullmatch(date):  # fromisoformat takes week dates too
+        raise bad_date
     try:
         day = local_now.date() if date is None else date_cls.fromisoformat(date)
     except ValueError:
-        raise _Problem(f"--date must be YYYY-MM-DD, got {date!r}") from None
-    if date is not None and len(date) != 10:
-        raise _Problem(f"--date must be YYYY-MM-DD, got {date!r}")
+        raise bad_date from None
     start_hour = local_now.hour if hour is None else hour
     if not 0 <= start_hour <= 23:
         raise _Problem("--hour must be 0-23")
     if not 1 <= hours <= MAX_HOURS:
         raise _Problem(f"--hours must be 1-{MAX_HOURS}")
+    # The window is `hours` real hours from the local start, so it stays right across a
+    # daylight-saving change.
+    try:
+        start = int(datetime(day.year, day.month, day.day, start_hour, tzinfo=zone).timestamp())
+        wanted = [start + 3600 * i for i in range(hours)]
+        labels = [datetime.fromtimestamp(t, zone).strftime(TIME_FORMAT) for t in wanted]
+    except (OverflowError, ValueError, OSError):
+        raise _Problem("--date is out of range") from None
     latitude, longitude = _coordinates(env)
 
     times, series = _parse(_fetch(fetch, request_url(latitude, longitude, timezone)))
     index = {t: i for i, t in enumerate(times)}
-    start = datetime(day.year, day.month, day.day, start_hour)
-    wanted = [(start + timedelta(hours=i)).strftime(TIME_FORMAT) for i in range(hours)]
-    first, last = min(times), max(times)
-    if any(t not in index for t in wanted):
+    # Open-Meteo pads the end of the range with nulls: the forecast ends at the last hour
+    # that has any value.
+    with_data = [t for t, i in index.items() if any(v[i] is not None for v in series.values())]
+    if not with_data:
+        raise _Problem("unexpected weather response: no values")
+    end = max(with_data)
+    first, last = _local(min(times), zone), _local(end, zone)
+    if any(t not in index or t > end for t in wanted):
         raise _Problem(
-            f"{wanted[0]} to {wanted[-1]} is outside the forecast, which covers {first} to {last}",
+            f"{labels[0]} to {labels[-1]} is outside the forecast, which covers {first} to {last}",
             forecast_from=first,
             forecast_through=last,
         )
@@ -242,7 +287,9 @@ def _forecast(
         "date": day.isoformat(),
         "start_hour": start_hour,
         "timezone": timezone,
-        "hours": [_hour_row(t, index[t], series) for t in wanted],
+        "hours": [
+            _hour_row(label, index[t], series) for t, label in zip(wanted, labels, strict=True)
+        ],
         "units": UNITS,
         "forecast_through": last,
         "attribution": ATTRIBUTION,
@@ -268,3 +315,5 @@ def forecast(
         return _forecast(timezone, date, hour, hours, env, fetch or http_get, now)
     except _Problem as problem:
         return {"ok": False, "reason": problem.reason, **problem.extra}
+    except Exception as exc:  # the promise is "never raises": name the type, nothing else
+        return {"ok": False, "reason": f"weather lookup failed ({type(exc).__name__})"}
