@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import coros_workouts, dashboard, db, fueling, imports, paces, reports
+from . import body, coros_workouts, dashboard, db, fueling, imports, paces, reports
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -30,12 +30,17 @@ fuel_app = typer.Typer(
     help="Fueling log: what you ate before and took during runs (no calories).",
     no_args_is_help=True,
 )
+body_app = typer.Typer(
+    help="Body check / niggle log: your own green, yellow or red (stored, never judged).",
+    no_args_is_help=True,
+)
 coros_app = typer.Typer(
     help="COROS workouts built from the accepted plan (sent by Claude via the COROS MCP).",
     no_args_is_help=True,
 )
 app.add_typer(plan_app, name="plan")
 app.add_typer(fuel_app, name="fuel")
+app.add_typer(body_app, name="body")
 app.add_typer(coros_app, name="coros")
 
 KM = 1000.0
@@ -426,6 +431,66 @@ def fuel_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> No
     """Delete one fueling entry (for typos)."""
     if not fueling.delete_entry(_conn(), entry_id):
         _fail(f"no fuel entry with id {entry_id}")
+    _out({"ok": True, "deleted": entry_id})
+
+
+@body_app.command("log")
+def body_log(
+    status: Annotated[str, typer.Option(help="Your own call: green, yellow or red")],
+    date_: Annotated[
+        str | None,
+        typer.Option("--date", help="Date YYYY-MM-DD (default: today in your timezone)"),
+    ] = None,
+    context: Annotated[
+        str | None, typer.Option(help="When: before_run, after_run or other")
+    ] = None,
+    location: Annotated[str | None, typer.Option(help="Where, e.g. 'right midfoot'")] = None,
+    swelling: Annotated[
+        bool | None, typer.Option("--swelling/--no-swelling", help="Any swelling")
+    ] = None,
+    pain: Annotated[int | None, typer.Option(help="Pain 0 (none) to 10 (worst)")] = None,
+    notes: Annotated[str | None, typer.Option(help="Anything else")] = None,
+) -> None:
+    """Log one body check as you report it. Stored only: no rating, no advice."""
+    conn = _conn()
+    if date_ is None:
+        try:
+            date_ = reports.athlete_today(conn)
+        except reports.ReportError as exc:
+            _fail(str(exc))
+    entry = body.BodyEntry(
+        date=date_,
+        status=status,
+        context=context,
+        location=location,
+        swelling=swelling,
+        pain=pain,
+        notes=notes,
+    )
+    try:
+        saved = body.add_entry(conn, entry)
+    except body.BodyError as exc:
+        _fail("invalid body entry", problems=exc.problems)
+    _out({"ok": True, "entry": saved})
+
+
+@body_app.command("show")
+def body_show(
+    last: Annotated[int, typer.Option(help="How many entries, newest first")] = 10,
+    since: Annotated[str | None, typer.Option(help="Only entries on/after YYYY-MM-DD")] = None,
+) -> None:
+    """Recent body checks with counts by status and coverage counts."""
+    try:
+        _out(body.list_entries(_conn(), last, since))
+    except body.BodyError as exc:
+        _fail(str(exc))
+
+
+@body_app.command("delete")
+def body_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> None:
+    """Delete one body check (for typos)."""
+    if not body.delete_entry(_conn(), entry_id):
+        _fail(f"no body entry with id {entry_id}")
     _out({"ok": True, "deleted": entry_id})
 
 

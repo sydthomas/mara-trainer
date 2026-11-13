@@ -9,7 +9,7 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | Assumption | Where | For user #2 |
 |---|---|---|
 | One athlete row | `athlete`, `race_setup`, `athlete_profile`: `id INTEGER PRIMARY KEY CHECK (id = 1)` | Drop the check; `athlete.id` becomes the tenant key |
-| Per-athlete rows with no owner column | `activities`, `daily_check_ins`, `import_batches`, `training_plans`, `fuel_log`, `notifications`, `api_usage` | Add `athlete_id` (FK, NOT NULL, indexed) to each; every query filters by it |
+| Per-athlete rows with no owner column | `activities`, `daily_check_ins`, `import_batches`, `training_plans`, `fuel_log`, `niggle_log`, `notifications`, `api_usage` | Add `athlete_id` (FK, NOT NULL, indexed) to each; every query filters by it |
 | Single-file SQLite | `data/coach.db` (`COACH_DB_PATH`) | Postgres once hosted: concurrent writers, backups, row-level security. Migrations use SQLite SQL (`strftime`, `json_valid`, `GLOB`) and need a port |
 | Name and story in the prompt | `agent.py` system prompt: "You are Sydney's marathon coach... her first marathon" | Build from the athlete's profile (name, experience, pronouns) per request |
 | One Slack user | `SLACK_ALLOWED_USER_ID`; one bot process | A `slack_user_id -> athlete_id` table; unknown users get an invite flow, not the coach |
