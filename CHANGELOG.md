@@ -5,14 +5,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
-### Changed
-- Slack: Sunday is one conversation. The 6pm check-in syncs the week's COROS runs first (the 5pm
-  reminder and the "push in Claude Code" nudge are gone). It asks how the week felt, and for the
-  long-run debrief if Saturday's was missed; her reply through Monday logs that debrief (yes),
-  then always gets a proposed week to say yes to.
-- Slack: one yes saves the week and puts its runs on the COROS watch calendar ("save only" skips
-  the watch; "push my week" sends the coming week anytime). Workouts come unchanged from the
-  accepted plan; a day that already has a workout is skipped and listed, never doubled.
+## [0.3.0] - 2026-11-12
 
 ### Added
 - HR at pace and the body check log are now visible. `coach hr-pace` takes `--band-width` and
@@ -70,6 +63,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   stress, pain monitoring, cycle and HRV, overtraining, cold water, durability and race weather (#45).
 
 ### Changed
+- Slack: Sunday is one conversation. The 6pm check-in syncs the week's COROS runs first (the 5pm
+  reminder and the "push in Claude Code" nudge are gone). It asks how the week felt, and for the
+  long-run debrief if Saturday's was missed; her reply through Monday logs that debrief (yes),
+  then always gets a proposed week to say yes to.
+- Slack: one yes saves the week and puts its runs on the COROS watch calendar ("save only" skips
+  the watch; "push my week" sends the coming week anytime). Workouts come unchanged from the
+  accepted plan; a day that already has a workout is skipped and listed, never doubled.
 - `coach eval live` runs as a fictional runner in a throwaway database, so eval answers no longer
   mix in the real runner's profile and plan. Eval costs are in its report, not `coach usage`.
 
@@ -147,6 +147,7 @@ First tagged version: a working single-athlete coach.
 ### Removed
 - Strava integration: its 2026-06-01 API policy bars storing data or feeding it to AI apps (#16).
 
-[Unreleased]: https://github.com/sydthomas/mara-trainer/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sydthomas/mara-trainer/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sydthomas/mara-trainer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sydthomas/mara-trainer/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sydthomas/mara-trainer/releases/tag/v0.1.0

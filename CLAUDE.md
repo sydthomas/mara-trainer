@@ -258,11 +258,8 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Layout
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
-  `fueling.py` (fueling log), `body.py` (body check / niggle log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  `fueling.py` (fueling log), `body.py` (body check / niggle log), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `hr_pace.py` (heart rate at a fixed pace, from FIT records), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log` and `niggle_log`)
-  `fueling.py` (fueling log), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
-  `fueling.py` (fueling log), `hr_pace.py` (heart rate at a fixed pace, from FIT records), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
-  (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent), `weather.py` (Open-Meteo run-window forecast + optional NWS
