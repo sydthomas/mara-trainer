@@ -154,6 +154,15 @@ def delete_entry(conn: sqlite3.Connection, entry_id: int) -> bool:
     return cur.rowcount > 0
 
 
+def entries_between(conn: sqlite3.Connection, since: str, until: str) -> list[dict[str, Any]]:
+    """Every entry dated since..until (inclusive), oldest first. No row limit."""
+    rows = conn.execute(
+        "SELECT * FROM fuel_log WHERE date >= ? AND date <= ? ORDER BY date, id",
+        (since, until),
+    ).fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
 def list_entries(
     conn: sqlite3.Connection, last: int = 10, since: str | None = None
 ) -> dict[str, Any]:

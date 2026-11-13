@@ -56,6 +56,10 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach plan show` — accepted plan
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
+- `uv run coach dashboard [--out data/dashboard.html] [--weeks 16] [--today YYYY-MM-DD]` — local progress page
+  (`mara_trainer/dashboard.py`): one offline HTML file (inline CSS + SVG, no scripts, nothing uploaded) with
+  milestones, weekly distance vs plan, long-run build-up, carbs per hour; a panel with no data says so;
+  prints `{path, panels, weeks, generated_for}`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
 - `uv run coach coros week [--date YYYY-MM-DD] [--today YYYY-MM-DD]` — one plan week (default: the
   week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
@@ -220,6 +224,8 @@ be summarized. If no approved source covers a question, the coach says so.
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
   `fueling.py` (fueling log), `body.py` (body check / niggle log), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log` and `niggle_log`)
+  `fueling.py` (fueling log), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  (all tables, including the coach's `sources`, `athlete_profile` and `fuel_log`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent); agent and Slack land here
