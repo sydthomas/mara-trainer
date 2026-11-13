@@ -1,6 +1,6 @@
 ---
 name: coros-run-planner
-description: Put Sydney's coming week of runs on her COROS watch. Use when she says "push my week", "put this week on my watch/COROS", "schedule my workouts", or after the Sunday weekly check-in. Builds the week's COROS workouts from the accepted plan with `coach coros week`, reads them back, and only after one yes creates them on her COROS calendar with the official COROS MCP.
+description: Put Sydney's coming week of runs on her COROS watch. Use when she says "push my week", "put this week on my watch/COROS", "schedule my workouts" in Claude Code (in Slack, the bot pushes the week itself on her yes). Builds the week's COROS workouts from the accepted plan with `coach coros week`, reads them back, and only after one yes creates them on her COROS calendar with the official COROS MCP.
 allowed-tools: Bash(uv run coach coros week *) Bash(uv run coach coros week) Bash(uv run coach plan show) Bash(uv run coach race show)
 ---
 

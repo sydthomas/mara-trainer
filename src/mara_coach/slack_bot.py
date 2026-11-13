@@ -16,8 +16,10 @@
   when the week ending or the next one is in the plan, the bot first syncs the week's runs from
   COROS in code (no separate reminder), then the coach writes a recap of the week and a preview
   of the next one, ending with one question. Her reply (through Monday, `WEEKLY_KEY`) is tagged
-  as a check-in answer, so the coach writes the week with `propose_week`; the bot saves it in
-  code on yes.
+  as a check-in answer, so the coach writes the week with `propose_week`. One "yes" saves it in
+  code and puts its runs on her COROS calendar (`coros.push_week`: workouts from the accepted
+  plan only, days that already have a workout skipped and listed); "save only" skips the watch.
+  "push my week" sends the coming week anytime, the same way.
 - Asleep-proof: fixed-time messages are also queued on Slack's servers (`slack_schedule`), so
   they arrive while the laptop sleeps; the live versions replace them when the bot is awake.
   On start, after a sleep, and every `CATCH_UP_EVERY`, the bot answers DMs it missed (last
@@ -129,11 +131,25 @@ def exit_when_stuck(
     return on_error
 
 
-PUSH_WEEK = 'Say "push my week" in Claude Code to put it on your watch.'
-WATCH_STALE = (
-    "If this week is already on your watch, change or remove those workouts in the COROS app; "
-    "I can't move them."
+PUSH_LATER = 'Not on your watch yet. Say "push my week" when you want it there.'
+PUSHING = "Putting your runs on your watch..."
+PUSH = re.compile(
+    r"^\s*(please\s+)?push(\s+my)?(\s+(week|runs|workouts))?"
+    r"(\s+to\s+(coros|my\s+watch|the\s+watch))?\b[\s.!]*$",
+    re.I,
 )
+SAVE_ONLY = re.compile(
+    r"^\s*(just\s+)?save(\s+it)?\s+only\b[\s.!]*$|^\s*just\s+save(\s+it)?[\s.!]*$", re.I
+)
+WEEK_QUESTION = (
+    "Reply *yes* to save it and put its runs on your watch, *save only* to just save it, or *no*."
+)
+_SAVE_ASK = re.compile(r"\s*\**\s*Save this week\?\s*\**\s*$", re.I)
+
+
+def ask_to_save_week(answer: str) -> str:
+    """The coach's week write-up, ending with the bot's own yes / save only / no question."""
+    return _SAVE_ASK.sub("", answer).rstrip() + "\n\n" + WEEK_QUESTION
 
 
 WEEKLY_KEY = "weekly_reply"  # Monday of the week her check-in reply should write
@@ -376,6 +392,7 @@ class SlackCoach:
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         sync: Callable[[sqlite3.Connection, datetime], coros.SyncReport] = coros.sync_week,
+        push: Callable[[sqlite3.Connection, str, datetime], coros.PushReport] = coros.push_week,
     ) -> None:
         self.allowed_user = allowed_user
         self.coach_factory = coach_factory or (lambda conn: Coach(conn, channel="slack"))
@@ -383,6 +400,7 @@ class SlackCoach:
         self.clock = clock
         self.now = now
         self.sync = sync
+        self.push = push
         self.conversations: dict[str, Conversation] = {}
         self._guard = threading.Lock()
 
@@ -418,8 +436,14 @@ class SlackCoach:
             if SYNC.match(text):
                 self._sync(channel, convo, client)
                 return
+            if PUSH.match(text):
+                self._push(channel, client, self._tomorrow())
+                return
             if convo.debrief is None:
                 convo.debrief = self._open_debrief()
+            if isinstance(convo.pending, WeekProposal) and SAVE_ONLY.match(text):
+                self._save_week(channel, convo, convo.pending, client, push=False)
+                return
             if convo.pending is not None and YES.match(text):
                 self._save(channel, convo, client)
                 return
@@ -485,6 +509,8 @@ class SlackCoach:
                 _finish(client, channel, placeholder, LOST)
             elif job["kind"] == "sync":
                 self._sync(channel, convo, client, placeholder, tries)
+            elif job["kind"] == "push":  # safe to repeat: days with a workout are skipped
+                self._push(channel, client, job["question"], placeholder, tries)
             else:
                 self._reply(channel, convo, client, job["question"], placeholder, tries)
         return True
@@ -563,8 +589,20 @@ class SlackCoach:
         except (reports.ReportError, ValueError) as exc:
             return None, [str(exc)]
 
+    def _tomorrow(self) -> str:
+        conn = self.connect()
+        try:
+            return (date.fromisoformat(self.today(conn)) + timedelta(days=1)).isoformat()
+        finally:
+            conn.close()
+
     def _save_week(
-        self, channel: str, convo: Conversation, week: WeekProposal, client: SlackClient
+        self,
+        channel: str,
+        convo: Conversation,
+        week: WeekProposal,
+        client: SlackClient,
+        push: bool = True,
     ) -> None:
         conn = self.connect()
         try:
@@ -573,7 +611,6 @@ class SlackCoach:
                 db.save_plan(conn, revised)
                 if _state(conn, WEEKLY_KEY) == week.start_date:
                     _delete_state(conn, WEEKLY_KEY)  # the week is written: replies are chat again
-            today = self.today(conn)
         finally:
             conn.close()
         convo.pending = None
@@ -583,11 +620,40 @@ class SlackCoach:
                 channel=channel, text="Couldn't save that week: " + "; ".join(problems)
             )
             return
-        note = WATCH_STALE if week.start_date <= today else PUSH_WEEK
-        client.chat_postMessage(
-            channel=channel,
-            text=f"Saved Week {saved['week']}. {note}\n\n{reports.week_card(saved, week.focus)}",
-        )
+        text = f"Saved Week {saved['week']}.\n\n{reports.week_card(saved, week.focus)}"
+        if not push:
+            client.chat_postMessage(channel=channel, text=f"{text}\n\n{PUSH_LATER}")
+            return
+        client.chat_postMessage(channel=channel, text=text)
+        self._push(channel, client, week.start_date)
+
+    def _push(
+        self,
+        channel: str,
+        client: SlackClient,
+        day: str,
+        placeholder: str | None = None,
+        tries: int = 1,
+    ) -> None:
+        """Put the plan week containing `day` on her COROS calendar. Only after her yes (or her
+        "push my week"); the workouts come from the accepted plan, unchanged."""
+        if placeholder is None:
+            placeholder = client.chat_postMessage(channel=channel, text=PUSHING)["ts"]
+        self._track("push", channel, placeholder, tries, day)
+        try:
+            conn = self.connect()
+            try:
+                text = coros.push_text(self.push(conn, day, self.now()))
+            except coros.CorosError as exc:
+                text = str(exc)
+            except Exception:  # network or SDK surprises: keep the bot up
+                log.exception("COROS push failed")
+                text = 'Couldn\'t reach COROS just now. Say "push my week" to try again.'
+            finally:
+                conn.close()
+            _finish(client, channel, placeholder, text)
+        finally:
+            self._untrack()
 
     def _sync(
         self,
@@ -920,6 +986,8 @@ class SlackCoach:
             week = proposed_week(messages)
             if week is not None and self._revised_week(conn, week)[0] is not None:
                 convo.pending = week
+            else:
+                week = None
         except CoachError:
             log.warning("coach could not finish a Slack reply")
             return FAILED
@@ -929,6 +997,8 @@ class SlackCoach:
         finally:
             conn.close()
         answer = reply.text or FAILED
+        if week is not None and answer != FAILED:
+            answer = ask_to_save_week(answer)
         convo.turns += [
             {"role": "user", "content": text},
             {"role": "assistant", "content": answer},

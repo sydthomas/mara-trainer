@@ -188,3 +188,95 @@ def test_cli_sync_reports_sign_in_needed(tmp_db: Path, monkeypatch: pytest.Monke
     runner.invoke(app, ["init-db"])
     result = runner.invoke(app, ["coros", "sync"])
     assert result.exit_code == 1 and "coach coros login" in result.output
+
+
+# ------------------------------------------------------------------ watch push
+
+SCHEDULE = """Training Schedule
+========================
+
+2026-11-17
+Easy 3 mi
+Standalone workout (scheduled from the workout library)
+idInPlan: 7
+Distance: 4.83 km
+
+2026-11-18
+Intervals 5x1K
+Plan workout
+idInPlan: 3
+Distance: 8.00 km"""
+
+
+def _workout(day: str, weekday: str, name: str) -> dict[str, Any]:
+    course = {"sportType": 1, "courseName": name, "courseDescription": "x", "sections": []}
+    return {"date": day, "coros_date": day.replace("-", ""), "weekday": weekday, "course": course}
+
+
+WEEK = {
+    "week": 3,
+    "workouts": [
+        _workout("2026-11-16", "Monday", "Easy 2 mi"),
+        _workout("2026-11-17", "Tuesday", "Easy 3 mi"),
+        _workout("2026-11-18", "Wednesday", "Easy 4 mi"),
+        _workout("2026-11-21", "Saturday", "Long run 12 mi"),
+    ],
+    "skipped": [
+        {
+            "date": "2026-11-19",
+            "weekday": "Thursday",
+            "kind": "strength",
+            "reason": "Add it in the app.",
+        }
+    ],
+}
+
+
+class FakeWatch:
+    def __init__(self, fail_on: str | None = None) -> None:
+        self.created: list[tuple[str, str]] = []
+        self.asked: list[tuple[str, str]] = []
+        self.fail_on = fail_on
+
+    async def schedule(self, start: str, end: str) -> dict[str, list[str]]:
+        self.asked.append((start, end))
+        return coros.parse_schedule(SCHEDULE)
+
+    async def create(self, coros_date: str, course: dict[str, Any]) -> None:
+        if coros_date == self.fail_on:
+            raise CorosError("COROS said: bad date")
+        self.created.append((coros_date, course["courseName"]))
+
+
+def test_parse_schedule_names_by_date() -> None:
+    assert coros.parse_schedule(SCHEDULE) == {
+        "2026-11-17": ["Easy 3 mi"],
+        "2026-11-18": ["Intervals 5x1K"],
+    }
+    assert coros.parse_schedule("Training Schedule\n\nNo workouts scheduled.") == {}
+
+
+def test_push_never_doubles_a_day() -> None:
+    """Empty days get ours; our own earlier push is left; any other workout blocks the day."""
+    api = FakeWatch(fail_on="20261121")
+    report = asyncio.run(coros.push_workouts(api, WEEK))
+    assert api.asked == [("20261116", "20261121")]
+    assert api.created == [("20261116", "Easy 2 mi")]
+    assert report.sent == ["Mon 11/16: Easy 2 mi"]
+    assert report.already == ["Tue 11/17: Easy 3 mi"]
+    assert report.conflicts == ["Wed 11/18: Easy 4 mi (already there: Intervals 5x1K)"]
+    assert report.failed == ["Sat 11/21: Long run 12 mi: COROS said: bad date"]
+    assert report.not_sent == ["Thu 11/19: Add it in the app."]
+    text = coros.push_text(report)
+    assert "On your watch calendar (Week 3):" in text and "can't move them" in text
+
+
+def test_push_with_no_runs_calls_nothing() -> None:
+    api = FakeWatch()
+    report = asyncio.run(coros.push_workouts(api, {**WEEK, "workouts": []}))
+    assert api.asked == [] and api.created == [] and report.sent == []
+
+
+def test_watch_week_needs_a_race_and_a_plan_week(conn: sqlite3.Connection) -> None:
+    with pytest.raises(CorosError, match="No race"):
+        coros.watch_week(conn, "2026-11-16", TUE)
