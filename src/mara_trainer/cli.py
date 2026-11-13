@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import coros_workouts, db, fueling, imports, paces, reports
+from . import coros_workouts, dashboard, db, fueling, imports, paces, reports
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -149,6 +149,33 @@ def summary_cmd(
         _out(reports.summary(_conn(), week, weeks))
     except reports.ReportError as exc:
         _fail(str(exc))
+
+
+@app.command("dashboard")
+def dashboard_cmd(
+    out: Annotated[
+        Path, typer.Option(help="HTML file to write (keep it under data/, which is gitignored)")
+    ] = Path("data/dashboard.html"),
+    weeks: Annotated[int, typer.Option(help="Monday-Sunday weeks to show, ending this week")] = 16,
+    today: Annotated[
+        str | None, typer.Option(help="Build as of this athlete-local date (YYYY-MM-DD)")
+    ] = None,
+) -> None:
+    """Write the local progress dashboard: one offline HTML file, nothing uploaded."""
+    try:
+        data = dashboard.build_data(_conn(), today, weeks)
+    except dashboard.DashboardError as exc:
+        _fail(str(exc))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(dashboard.render_html(data), encoding="utf-8")
+    _out(
+        {
+            "path": str(out),
+            "panels": [{"id": p["id"], "status": p["status"]} for p in data["panels"]],
+            "weeks": data["weeks"],
+            "generated_for": data["generated_for"],
+        }
+    )
 
 
 @app.command("validate-plan")
