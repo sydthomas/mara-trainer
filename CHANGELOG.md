@@ -17,7 +17,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 ### Added
 - Body check / niggle log: `coach body log --status green|yellow|red` (optional context,
   location, swelling, pain 0-10, notes), `coach body show` and `coach body delete`. It stores the
-  runner's own status as given; nothing in code rates an entry or says whether to run (#PR).
+  runner's own status as given; nothing in code rates an entry or says whether to run (#43).
 - Slack: "sync my runs" pulls this week's COROS runs into the database in plain code (no AI, no
   API cost), asks before importing possible duplicates, and replies with the week's total. Also
   `coach coros login` (one-time sign-in, saved in the macOS keychain) and `coach coros sync`.
