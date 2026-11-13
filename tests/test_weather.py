@@ -390,6 +390,7 @@ def cli_env(tmp_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("COACH_LAT", ENV["COACH_LAT"])
     monkeypatch.setenv("COACH_LON", ENV["COACH_LON"])
     monkeypatch.delenv("COACH_NWS_CONTACT", raising=False)  # a developer's shell may set it
+    monkeypatch.delenv("COACH_PLACES", raising=False)  # same: a real .env must not leak in
     assert runner.invoke(app, ["init-db", "--timezone", TZ]).exit_code == 0
 
 
