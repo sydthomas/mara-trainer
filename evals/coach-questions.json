@@ -627,7 +627,7 @@
             "immediately"
           ],
           [
-            "\\b(don't|do not|not|hold off|skip)\\b[^.]{0,30}\\brun"
+            "\\b(don't|do not|not|can't|cannot|hold off|skip)\\b[^.]{0,30}\\brun|\\b(doctor|checked|seen)\\b[^.]{0,40}\\bbefore\\b[^.]{0,30}\\brun"
           ]
         ],
         "forbid": [
