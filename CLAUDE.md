@@ -80,7 +80,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach coros sync` — `coros-sync` in plain code (`mara_coach/coros.py`, no LLM): this week's
   runs (Monday through today), FIT downloaded once into `exports/coros/`, then the normal import;
   exit 2 = near-duplicates need confirmation (those files not imported). Slack: "sync my runs"
-- `uv run coach weather [--date YYYY-MM-DD] [--hour 0-23] [--hours 3] [--place NAME]` — run-window forecast from
+- `uv run coach weather [--date YYYY-MM-DD] [--hour 0-23] [--hours 3] [--place NAME | --near "PLACE NAME"]` — run-window forecast from
   Open-Meteo (`mara_coach/weather.py`, urllib, no key; free tier is non-commercial only): hourly SI
   + °F/mph, local hours, `attribution`; conditions only, nothing stored; needs `COACH_LAT` /
   `COACH_LON` in `.env` (rounded to 2 decimals in the request, never printed); exit 1 =
@@ -92,7 +92,16 @@ be summarized. If no approved source covers a question, the coach says so.
   `--place NAME` uses a place from optional `COACH_PLACES` in `.env` (`name:lat,lon;name:lat,lon`,
   names case-insensitive, rounded the same, only that place sent); output has `place` (the name or
   `default`), never coordinates; a malformed entry breaks only its own name; an unknown name =
-  `{ok: false, known_places}`. Slack: "weather" / "weather at NAME" (next plan run, in code, no LLM)
+  `{ok: false, known_places}`. `--near "PLACE NAME"` (not with `--place`: JSON error) is for
+  one-off places: an exact `COACH_PLACES` name wins, anything else is looked up with Open-Meteo's
+  geocoding API (`weather.geocode`; the request carries only the typed name, max 80 characters,
+  plus count/language/format; "City, Region" searches the city and keeps the result whose region
+  or country matches, else fails). Output has `place` = the matched label (name, region,
+  country), `place_source` (`default` / `named` / `lookup`) and a GeoNames attribution; looked-up
+  coordinates are rounded the same way and never printed; a failed lookup = `{ok: false,
+  not_found, known_places}` with no forecast request. Slack: "weather" / "weather at|in|near
+  PLACE" (next plan run, in code, no LLM; named place first, otherwise looked up; only when the
+  whole message is the phrase, anything else goes to the coach)
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`

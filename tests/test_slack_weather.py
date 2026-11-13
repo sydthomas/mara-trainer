@@ -250,7 +250,8 @@ def test_weather_phrases_are_answered_in_code_for_the_next_plan_run(text: str) -
         f"*Tue 11-10: 5 mi easy, morning (7am)*\n{LINE}\n_{OPEN_METEO}_"
     )
     assert client.deleted == [{"channel": "D1", "ts": "ts1"}]  # the placeholder
-    assert len(forecast.calls) == 1 and forecast.calls[0]["place"] is None
+    assert len(forecast.calls) == 1 and forecast.calls[0]["near"] is None
+    assert len(forecast.fetch.calls) == 1  # the forecast only: nothing is looked up
     assert forecast.calls[0]["date"] == "2026-11-10" and forecast.calls[0]["hour"] == 7
 
 
@@ -265,13 +266,171 @@ def test_weather_at_a_named_place(text: str) -> None:
         assert secret not in client.posted[-1]["text"]
 
 
-def test_unknown_place_replies_with_the_known_names_and_no_request() -> None:
-    forecast = FakeForecast()
-    client, coach = _ask("weather at desert", MONDAY_NOON, forecast)
-    assert coach.calls == [] and forecast.fetch.calls == []
+GEONAMES = "<https://www.geonames.org/|Location data based on GeoNames>"
+
+
+def _geo(*results: dict[str, Any]) -> bytes:
+    return json.dumps({"results": list(results)} if results else {}).encode()
+
+
+RIVERTON = {
+    "name": "Riverton",
+    "latitude": 44.44444,
+    "longitude": -55.55555,
+    "admin1": "Lake <State> & Co",
+    "country": "Testland",
+    "country_code": "TL",
+}
+RIVERTON_EAST = {**RIVERTON, "latitude": 11.11111, "longitude": -22.22222, "admin1": "East Shire"}
+
+
+class Routed:
+    """A fetch that answers the geocoding URL with `geo` and anything else with the forecast."""
+
+    def __init__(self, geo: bytes | Exception) -> None:
+        self.geo = FakeFetch(geo)
+        self.weather = FakeFetch(json.dumps(payload(days=8, first=FIRST)).encode())
+        self.calls: list[tuple[str, float]] = []
+
+    def __call__(self, url: str, timeout: float) -> bytes:
+        self.calls.append((url, timeout))
+        return (self.geo if url.startswith(weather.GEOCODE_URL) else self.weather)(url, timeout)
+
+
+@pytest.mark.parametrize(
+    ("text", "searched"),
+    [
+        ("weather in Riverton", "Riverton"),
+        ("Weather near  riverton?", "riverton"),
+        ("what's the weather for my run at Riverton.", "Riverton"),
+    ],
+)
+def test_weather_at_an_unlisted_place_is_looked_up_and_shows_the_match(
+    text: str, searched: str
+) -> None:
+    forecast = FakeForecast(fetch=Routed(_geo(RIVERTON)))
+    client, coach = _ask(text, MONDAY_NOON, forecast)
+    assert coach.calls == []  # no LLM
     assert client.posted == _answer(
-        'Couldn\'t get the forecast: unknown place "desert"; known places: coast.'
+        "*Tue 11-10: 5 mi easy, morning (7am) at Riverton, Lake &lt;State&gt; &amp; Co, "
+        f"Testland*\n{LINE}\n_{OPEN_METEO} · {GEONAMES}_"
     )
+    geo, forecast_call = forecast.fetch.calls  # one lookup, one forecast
+    assert f"name={searched}&" in geo[0] and geo[1] <= 5
+    assert "latitude=44.44&longitude=-55.56" in forecast_call[0]
+    for secret in ("44.4", "55.5"):
+        assert secret not in client.posted[-1]["text"]
+
+
+def test_multi_word_place_with_a_region_picks_the_matching_result() -> None:
+    forecast = FakeForecast(fetch=Routed(_geo(RIVERTON, RIVERTON_EAST)))
+    client, _ = _ask("weather in Riverton, east shire", MONDAY_NOON, forecast)
+    assert " at Riverton, East Shire, Testland*" in client.posted[-1]["text"]
+    assert "name=Riverton&" in forecast.fetch.calls[0][0]
+    assert "latitude=11.11&longitude=-22.22" in forecast.fetch.calls[1][0]
+    forecast = FakeForecast(fetch=Routed(_geo({**RIVERTON, "name": "Port San Riverton"})))
+    client, _ = _ask("weather near Port San Riverton", MONDAY_NOON, forecast)
+    assert " at Port San Riverton, " in client.posted[-1]["text"]
+    assert "name=Port+San+Riverton&" in forecast.fetch.calls[0][0]
+
+
+def test_a_named_place_is_never_looked_up() -> None:
+    forecast = FakeForecast(fetch=Routed(_geo(RIVERTON)))
+    client, _ = _ask("weather in coast", MONDAY_NOON, forecast)
+    assert " at coast*" in client.posted[-1]["text"] and "GeoNames" not in client.posted[-1]["text"]
+    assert [url.startswith(weather.GEOCODE_URL) for url, _ in forecast.fetch.calls] == [False]
+
+
+@pytest.mark.parametrize(
+    ("geo", "reason"),
+    [
+        (_geo(), 'no place found for "desert"'),
+        (TimeoutError("timed out"), "place lookup timed out after 5 s"),
+        (b"<html>", "unexpected place lookup response: not JSON"),
+    ],
+)
+def test_place_not_found_or_lookup_failed_says_so_and_lists_named_places(
+    geo: bytes | Exception, reason: str
+) -> None:
+    forecast = FakeForecast(fetch=Routed(geo))
+    client, coach = _ask("weather at desert", MONDAY_NOON, forecast)
+    assert coach.calls == [] and len(forecast.fetch.calls) == 1  # no forecast request
+    assert client.posted == _answer(f"Couldn't look up that place: {reason}. Named places: coast.")
+
+
+def test_a_region_that_matches_nothing_is_not_silently_replaced() -> None:
+    forecast = FakeForecast(fetch=Routed(_geo(RIVERTON_EAST)))
+    client, _ = _ask("weather in Riverton, West Shire", MONDAY_NOON, forecast)
+    assert client.posted[-1]["text"] == (
+        'Couldn\'t look up that place: no "Riverton" found in "West Shire" '
+        "(found: Riverton, East Shire, Testland). Named places: coast."
+    )
+    assert len(forecast.fetch.calls) == 1
+
+
+def test_resume_reruns_a_cut_off_lookup() -> None:
+    shared, client, coach = SharedDB(), SlackFake(), FakeCoach([])
+    db.save_plan(shared.conn, PLAN)
+    _leftover(shared, kind="weather", question="Riverton, East Shire", at=MONDAY_NOON.timestamp())
+    bot = _debrief_bot(coach, shared, MONDAY_NOON)
+    bot.forecast = FakeForecast(fetch=Routed(_geo(RIVERTON_EAST)))
+    assert bot.resume(client)
+    assert coach.calls == [] and _inflight(shared) is None
+    assert " at Riverton, East Shire, Testland*" in client.posted[-1]["text"]
+
+
+@pytest.mark.parametrize(
+    ("text", "place"),
+    [
+        ("weather", ""),
+        ("weather for my run", ""),
+        ("weather in Riverton", "Riverton"),
+        ("weather at  Port San   Riverton!", "Port San Riverton"),
+        ("Weather near Riverton, East Shire?", "Riverton, East Shire"),
+        ("weather in St. Riverton-on-Sea.", "St. Riverton-on-Sea"),
+        ("weather in Åre", "Åre"),
+        ("weather in Riverton &amp; Hove", "Riverton & Hove"),
+        ("how does weather in summer affect pace?", None),
+        ("is the weather in Riverton ok for a long run", None),
+        ("weather in Riverton? should I move my long run", None),
+        ("weather in Riverton\nand what should I eat", None),
+        ("weather in the place where I ran my last half marathon", None),  # too many words
+        ("weather at 12.34,56.78", None),
+        ("weather in " + "x" * 81, None),
+        ("weather in &lt;https://example.invalid&gt;", None),
+        # "me" / "here" mean the default location: no lookup
+        ("weather near me", ""),
+        ("Weather near me?", ""),
+        ("weather here", None),  # not the phrase (no at/in/near)
+        ("weather in here", ""),
+        ("weather for my run near my location", ""),
+        # a time or a generic spot is not a place name: the coach gets it, nothing is looked up
+        ("weather in the morning", None),
+        ("weather for my run in the afternoon", None),
+        ("weather at 6am tomorrow", None),
+        ("weather at 6", None),
+        ("weather at 6:30 pm", None),
+        ("weather at noon", None),
+        ("weather at sunrise", None),
+        ("weather in an hour", None),
+        ("weather near my office", None),
+        ("weather in Riverton tomorrow", None),
+        ("weather in Riverton on Saturday", None),
+        ("weather at the track", None),
+        ("weather at the Track.", None),
+        # ... but names that only look like one still are
+        ("weather at The Strand", "The Strand"),
+        ("weather in Sunrise, East Shire", "Sunrise, East Shire"),
+        ("weather near Sun Valley", "Sun Valley"),
+        ("weather in Morningside Park", "Morningside Park"),
+        ("weather in 90210", "90210"),
+        ("weather at home", "home"),  # can be a named place
+    ],
+)
+def test_only_a_whole_message_weather_phrase_is_a_place_request(
+    text: str, place: str | None
+) -> None:
+    assert slack_bot.weather_place(text) == place
 
 
 def test_todays_run_after_the_morning_hour_is_forecast_from_now() -> None:
@@ -371,6 +530,8 @@ def test_a_failed_weather_reply_says_so_without_the_coach(forecast: Any, reply: 
         "weather at 12.34,56.78",
         "should I run in this weather",
         "how do I fuel in hot weather",
+        "how does weather in summer affect pace?",
+        "weather in Riverton? should I move my long run",
     ],
 )
 def test_other_weather_questions_still_go_to_the_coach(text: str) -> None:
@@ -394,3 +555,24 @@ def test_the_live_forecast_gets_only_the_weather_settings(monkeypatch: pytest.Mo
     slack_bot._live_forecast(timezone=TZ, hours=1, nws=False)
     assert seen[0] == {"env": {**ENV, "COACH_NWS_CONTACT": CONTACT}, "timezone": TZ, "hours": 1}
     assert seen[1]["env"] == ENV
+
+
+@pytest.mark.parametrize("text", ["weather near me", "weather in here"])
+def test_weather_near_me_uses_the_default_location_without_a_lookup(text: str) -> None:
+    forecast = FakeForecast()
+    client, coach = _ask(text, MONDAY_NOON, forecast)
+    assert coach.calls == []
+    assert forecast.calls[0]["near"] is None
+    assert len(forecast.fetch.calls) == 1  # the forecast only: no geocoding request
+    assert "geocoding" not in forecast.fetch.calls[0][0]
+    assert client.posted[-1]["text"].startswith("*Tue 11-10: 5 mi easy, morning (7am)*\n")
+
+
+@pytest.mark.parametrize(
+    "text", ["weather in the morning", "weather at 6am tomorrow", "weather at the track"]
+)
+def test_a_time_or_generic_spot_goes_to_the_coach_with_no_lookup(text: str) -> None:
+    forecast = FakeForecast()
+    _, coach = _ask(text, MONDAY_NOON, forecast)
+    assert len(coach.calls) == 1
+    assert forecast.calls == [] and forecast.fetch.calls == []

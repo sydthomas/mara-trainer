@@ -5,6 +5,14 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Added
+- Forecast at any place by name, for one-off run locations: `coach weather --near "PLACE NAME"`
+  and, in Slack, "weather in PLACE" / "weather at PLACE" / "weather near PLACE" (multi-word names
+  and "City, Region" work). A name from `COACH_PLACES` still wins; anything else is looked up
+  with Open-Meteo's geocoding API (only the typed name is sent). The reply shows the matched
+  place's label so a wrong match is visible, coordinates are rounded to 2 decimals before the
+  forecast request and never shown, and nothing is stored. Conditions only, no advice. (#53)
+
 ## [0.3.0] - 2026-11-12
 
 ### Added

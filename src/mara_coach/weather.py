@@ -11,7 +11,19 @@ letters, digits, `_`, `-`). `forecast(place=NAME)` uses that place, rounded the 
 sends only that one location. The output carries the name (or "default"), never coordinates. A
 malformed entry makes only its own name unusable; its reason names the entry, never its text.
 
-`forecast` never raises: every failure is `{"ok": False, "reason": ...}`.
+Looked-up places (`forecast(near=TEXT)`, `geocode`): a one-off place by name. An exact named
+place wins; anything else is searched with Open-Meteo's geocoding API
+(https://open-meteo.com/en/docs/geocoding-api, checked 2026-11-12; location data from GeoNames,
+credited in `attribution` when a lookup was used). That request carries the typed name and
+`count` / `language` / `format`, and nothing else: no coordinates, no key, no custom headers.
+"City, Region" searches the first part and keeps the first result whose region (`admin1`),
+country or country code matches the rest; with no such result it fails rather than take another
+place. The match's coordinates are rounded to 2 decimals before anything else sees them, and the
+output carries its label (name, region, country as returned) with `place_source: "lookup"`, so
+a wrong match is visible. One geocoding request per call, nothing kept. The window's hours stay
+in the athlete's timezone, wherever the place is.
+
+`forecast` and `geocode` never raise: every failure is `{"ok": False, "reason": ...}`.
 
 One response for several windows: a caller that needs more than one window at one location (the
 Slack check-in: one line per run day) passes the same `reuse` dict to each call. Response bodies
@@ -44,6 +56,7 @@ import http.client
 import json
 import math
 import re
+import unicodedata
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
@@ -66,6 +79,35 @@ PLACES_ENV = "COACH_PLACES"  # optional named places: name:lat,lon;name:lat,lon
 DEFAULT_PLACE = "default"  # COACH_LAT / COACH_LON
 PLACE_NAME = re.compile(r"[a-z0-9_-]{1,32}", re.ASCII)  # after lower-casing
 TIME_FORMAT = "%Y-%m-%dT%H:%M"
+
+# Geocoding: endpoint, parameters and response fields confirmed against
+# https://open-meteo.com/en/docs/geocoding-api and one live response on 2026-11-12.
+GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
+GEOCODE_ATTRIBUTION = {
+    "text": "Location data based on GeoNames",
+    "url": "https://www.geonames.org/",
+}
+GEOCODE_TIMEOUT_SECONDS = 5.0
+GEOCODE_COUNT = 100  # the most the API returns; only asked for when a qualifier has to be matched
+MAX_PLACE_TEXT = 80
+MAX_LABEL_PART = 60
+COORDINATES_TEXT = re.compile(r"[-+]?\d+(\.\d+)?\s*[,;\s]\s*[-+]?\d+(\.\d+)?")
+SOURCE_DEFAULT, SOURCE_NAMED, SOURCE_LOOKUP = "default", "named", "lookup"
+# The API returns full region names ("California"); runners type postal abbreviations. Used only
+# for results whose country_code is US.
+US_STATES = {
+    "al": "alabama", "ak": "alaska", "az": "arizona", "ar": "arkansas", "ca": "california",
+    "co": "colorado", "ct": "connecticut", "de": "delaware", "dc": "district of columbia",
+    "fl": "florida", "ga": "georgia", "hi": "hawaii", "id": "idaho", "il": "illinois",
+    "in": "indiana", "ia": "iowa", "ks": "kansas", "ky": "kentucky", "la": "louisiana",
+    "me": "maine", "md": "maryland", "ma": "massachusetts", "mi": "michigan", "mn": "minnesota",
+    "ms": "mississippi", "mo": "missouri", "mt": "montana", "ne": "nebraska", "nv": "nevada",
+    "nh": "new hampshire", "nj": "new jersey", "nm": "new mexico", "ny": "new york",
+    "nc": "north carolina", "nd": "north dakota", "oh": "ohio", "ok": "oklahoma", "or": "oregon",
+    "pa": "pennsylvania", "ri": "rhode island", "sc": "south carolina", "sd": "south dakota",
+    "tn": "tennessee", "tx": "texas", "ut": "utah", "vt": "vermont", "va": "virginia",
+    "wa": "washington", "wv": "west virginia", "wi": "wisconsin", "wy": "wyoming",
+}  # fmt: skip
 TIME_UNIT = "unixtime"
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -248,15 +290,164 @@ def places(env: Mapping[str, str]) -> tuple[dict[str, tuple[str, str]], dict[str
     return usable, problems
 
 
-def _location(env: Mapping[str, str], place: str | None) -> tuple[str, str, str]:
-    """(place name, latitude, longitude) for the request: the default location, or one named
-    place. Only that one location is returned, so only it can be sent."""
+def place_text(text: str) -> str:
+    """Typed place text, tidied for a lookup: trimmed, whitespace collapsed. Raises `_Problem`
+    for text that must not be sent (empty, over `MAX_PLACE_TEXT`, control characters, or
+    something shaped like coordinates)."""
+    tidy = " ".join(text.split())  # tabs and line breaks count as whitespace
+    if any(unicodedata.category(ch).startswith("C") for ch in tidy):
+        raise _Problem("a place name can't have control characters")
+    if not tidy:
+        raise _Problem("no place name given")
+    if len(tidy) > MAX_PLACE_TEXT:
+        raise _Problem(f"a place name can be at most {MAX_PLACE_TEXT} characters")
+    if COORDINATES_TEXT.fullmatch(tidy):
+        raise _Problem("that looks like coordinates; give a place name")
+    return tidy
+
+
+def geocode_url(name: str, count: int) -> str:
+    # urlencode percent-encodes UTF-8, so non-ASCII names go through intact
+    return (
+        GEOCODE_URL
+        + "?"
+        + urlencode({"name": name, "count": count, "language": "en", "format": "json"})
+    )
+
+
+def _label_part(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    tidy = " ".join(value.split())
+    shown = "".join(ch for ch in tidy if not unicodedata.category(ch).startswith("C"))
+    return shown[:MAX_LABEL_PART].strip()
+
+
+def _label(result: Mapping[str, Any]) -> str:
+    """Name, region, country as returned (a missing or repeated part is left out)."""
+    parts: list[str] = []
+    for key in ("name", "admin1", "country"):
+        part = _label_part(result.get(key))
+        if part and part not in parts:
+            parts.append(part)
+    return ", ".join(parts)
+
+
+def _qualifier_names(result: Mapping[str, Any]) -> set[str]:
+    """What a qualifier may say to mean this result: its region, country or country code, and
+    for a US result the state's postal abbreviation."""
+    names = {
+        value.strip().casefold()
+        for value in (result.get(key) for key in ("admin1", "country", "country_code"))
+        if isinstance(value, str) and value.strip()
+    }
+    if "us" in names:
+        names |= {abbr for abbr, state in US_STATES.items() if state in names}
+        names |= {"usa"}
+    return names
+
+
+def _geocode(text: str, fetch: Fetch) -> tuple[str, str, str]:
+    """(label, latitude, longitude) of the best match, coordinates already rounded. One request."""
+    tidy = place_text(text)
+    name, *rest = (part.strip() for part in tidy.split(","))
+    wanted = [part for part in rest if part]
+    if not name:
+        raise _Problem("no place name given")
+    url = geocode_url(name, GEOCODE_COUNT if wanted else 1)
+    body = _fetch(fetch, url, GEOCODE_TIMEOUT_SECONDS, "place lookup")
+    malformed = "unexpected place lookup response"
+    try:
+        data = json.loads(body)
+    except (ValueError, RecursionError, TypeError):
+        raise _Problem(f"{malformed}: not JSON") from None
+    if not isinstance(data, dict):
+        raise _Problem(f"{malformed}: not a JSON object")
+    if data.get("error"):
+        raise _Problem("Open-Meteo rejected the place lookup")
+    results = data.get("results", [])  # no match: the key is left out
+    if not isinstance(results, list):
+        raise _Problem(f"{malformed}: results is not a list")
+    found: list[tuple[str, str, str, set[str]]] = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        point: list[str | None] = []
+        for key, limit in (("latitude", 90.0), ("longitude", 180.0)):
+            value = result.get(key)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                point.append(None)
+            else:
+                point.append(_rounded(repr(float(value)), limit))
+        label = _label(result)
+        if _label_part(result.get("name")) and point[0] and point[1]:
+            found.append((label, point[0], point[1], _qualifier_names(result)))
+    if results and not found:
+        raise _Problem(f"{malformed}: no usable result")
+    if not found:
+        raise _Problem(f'no place found for "{name}"', not_found=True)
+    for label, latitude, longitude, names in found:
+        if all(part.casefold() in names for part in wanted):
+            return label, latitude, longitude
+    others = "; ".join(dict.fromkeys(label for label, *_ in found[:3]))
+    raise _Problem(f'no "{name}" found in "{", ".join(wanted)}" (found: {others})', not_found=True)
+
+
+def geocode(name: str, fetch: Fetch | None = None) -> dict[str, Any]:
+    """The best match for a typed place name from Open-Meteo's geocoding API (one request).
+
+    `{"ok": True, "label", "latitude", "longitude"}`: the label is name, region, country as
+    returned; the coordinates are request strings already rounded to 2 decimals (the unrounded
+    ones never leave this module). Otherwise `{"ok": False, "reason", "not_found"}`:
+    `not_found` is True when the service answered and had no such place, False when the text
+    was refused or the lookup failed. Never raises.
+    """
+    try:
+        label, latitude, longitude = _geocode(name, fetch or http_get)
+    except _Problem as problem:
+        return {"ok": False, "not_found": False, "reason": problem.reason, **problem.extra}
+    except Exception as exc:
+        return {
+            "ok": False,
+            "not_found": False,
+            "reason": f"place lookup failed ({type(exc).__name__})",
+        }
+    return {"ok": True, "label": label, "latitude": latitude, "longitude": longitude}
+
+
+def _near(env: Mapping[str, str], near: str, fetch: Fetch) -> tuple[str, str, str, str]:
+    """Typed text to a location: an exact named place wins, anything else is looked up."""
+    usable, problems = places(env)
+    try:
+        name = place_text(near).lower()
+        if name == DEFAULT_PLACE:
+            return (DEFAULT_PLACE, *_coordinates(env), SOURCE_DEFAULT)
+        if name in usable:
+            return (name, *usable[name], SOURCE_NAMED)
+        if name in problems and PLACE_NAME.fullmatch(name):
+            raise _Problem(problems[name])  # her own name for a place, broken: not ours to guess
+        return (*_geocode(near, fetch), SOURCE_LOOKUP)
+    except _Problem as problem:
+        extra = {"not_found": False, **problem.extra}
+        extra.update(place_source=SOURCE_LOOKUP, known_places=sorted(usable))
+        raise _Problem(problem.reason, **extra) from None
+
+
+def _location(
+    env: Mapping[str, str], place: str | None, near: str | None, fetch: Fetch
+) -> tuple[str, str, str, str]:
+    """(place, latitude, longitude, source) for the request: the default location, one named
+    place, or one looked-up place. Only that one location is returned, so only it can be sent."""
+    if near is not None:
+        if place is not None:
+            raise _Problem("give a named place or a place to look up, not both")
+        return _near(env, near, fetch)
     name = DEFAULT_PLACE if place is None else place.strip().lower()
     if name == DEFAULT_PLACE:
-        return (DEFAULT_PLACE, *_coordinates(env))
+        return (DEFAULT_PLACE, *_coordinates(env), SOURCE_DEFAULT)
     usable, problems = places(env)
     if name in usable:
-        return (name, *usable[name])
+        return (name, *usable[name], SOURCE_NAMED)
     known = sorted(usable)
     if name in problems and PLACE_NAME.fullmatch(name):
         raise _Problem(problems[name], known_places=known)
@@ -288,12 +479,15 @@ def request_url(latitude: str, longitude: str, timezone: str) -> str:
     )
 
 
-def _fetch(fetch: Fetch, url: str) -> bytes:
-    timed_out = f"weather request timed out after {TIMEOUT_SECONDS:g} s"
+def _fetch(
+    fetch: Fetch, url: str, timeout: float = TIMEOUT_SECONDS, what: str = "weather request"
+) -> bytes:
+    """One request. Reasons name `what` and never carry the URL."""
+    timed_out = f"{what} timed out after {timeout:g} s"
     try:
-        return fetch(url, TIMEOUT_SECONDS)
+        return fetch(url, timeout)
     except urllib.error.HTTPError as exc:
-        raise _Problem(f"weather request failed: HTTP {exc.code}") from None
+        raise _Problem(f"{what} failed: HTTP {exc.code}") from None
     except TimeoutError:
         raise _Problem(timed_out) from None
     except (OSError, http.client.HTTPException) as exc:
@@ -302,7 +496,7 @@ def _fetch(fetch: Fetch, url: str) -> bytes:
             raise _Problem(timed_out) from None
         raise _Problem(f"couldn't reach Open-Meteo ({type(exc).__name__})") from None
     except Exception as exc:  # an injected fetch may fail any way; callers must never see it
-        raise _Problem(f"weather request failed ({type(exc).__name__})") from None
+        raise _Problem(f"{what} failed ({type(exc).__name__})") from None
 
 
 def _number(value: Any, what: str = "weather") -> float | None:
@@ -539,6 +733,7 @@ def _forecast(
     hour: int | None,
     hours: int,
     place: str | None,
+    near: str | None,
     env: Mapping[str, str],
     fetch: Fetch,
     nws_fetch: NwsFetch,
@@ -569,7 +764,7 @@ def _forecast(
         labels = [datetime.fromtimestamp(t, zone).strftime(TIME_FORMAT) for t in wanted]
     except (OverflowError, ValueError, OSError):
         raise _Problem("--date is out of range") from None
-    place_name, latitude, longitude = _location(env, place)
+    place_name, latitude, longitude, source = _location(env, place, near, fetch)
 
     times, series = _parse(_fetch(fetch, request_url(latitude, longitude, timezone)))
     index = {t: i for i, t in enumerate(times)}
@@ -592,6 +787,7 @@ def _forecast(
     return {
         "ok": True,
         "place": place_name,
+        "place_source": source,
         "date": day.isoformat(),
         "start_hour": start_hour,
         "timezone": timezone,
@@ -602,7 +798,11 @@ def _forecast(
         "units": UNITS,
         "forecast_through": last,
         "nws": nws,
-        "attribution": [ATTRIBUTION, NWS_ATTRIBUTION] if nws["ok"] else [ATTRIBUTION],
+        "attribution": [
+            ATTRIBUTION,
+            *([GEOCODE_ATTRIBUTION] if source == SOURCE_LOOKUP else []),
+            *([NWS_ATTRIBUTION] if nws["ok"] else []),
+        ],
     }
 
 
@@ -613,6 +813,7 @@ def forecast(
     hour: int | None = None,
     hours: int = 3,
     place: str | None = None,
+    near: str | None = None,
     env: Mapping[str, str],
     fetch: Fetch | None = None,
     nws_fetch: NwsFetch | None = None,
@@ -624,7 +825,11 @@ def forecast(
     Defaults: today and the current local hour. `env` supplies `COACH_LAT` / `COACH_LON` and,
     optionally, `COACH_NWS_CONTACT` (adds `wbgt_c` from NWS; see the module docstring) and
     `COACH_PLACES`. `place` names one of those places (case-insensitive); without it the default
-    location is used. The result's `place` is the name or "default", never coordinates.
+    location is used. `near` is typed text instead (not both): an exact named place wins,
+    anything else is looked up by name (module docstring). The result's `place` is the name,
+    "default" or the looked-up place's label, never coordinates; `place_source` says which
+    ("default", "named", "lookup"). A failed `near` is `ok: False` with `place_source:
+    "lookup"`, `not_found` and `known_places`, and no forecast is requested.
     Returns `{"ok": True, "hours": [...], ...}` or `{"ok": False, "reason": ...}`; never raises.
     An unknown or unusable place is `ok: False` with `known_places`, and nothing is requested.
     `reuse`: a dict shared by several calls so identical requests are made once (module docstring).
@@ -639,6 +844,7 @@ def forecast(
             hour,
             hours,
             place,
+            near,
             env,
             get,
             nws_get,

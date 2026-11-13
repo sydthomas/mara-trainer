@@ -117,9 +117,22 @@ DM the bot **weather** (or **weather for my run**) for the conditions at your ne
 (`COACH_PLACES=name:lat,lon;name:lat,lon`, for example a coast and an inland spot). It answers in
 plain code, with no API cost. On a run day it answers for today's run until a run for today is in
 the database (say **sync my runs** first if you already ran); after that it answers for the next
-one. For today's run once 7am has passed, it shows the current hour instead. An unknown name gets
-the list of names you set. Coordinates are rounded to 2 decimals before the request and never
+one. For today's run once 7am has passed, it shows the current hour instead. Coordinates are rounded to 2 decimals before the request and never
 shown in Slack. If the bot restarts mid-lookup, it finishes the answer on start.
+
+For a one-off place, name it: **weather in PLACE**, **weather at PLACE** or **weather near
+PLACE**, for example "weather in Springfield" or "weather near Springfield, Illinois". A name
+from your `.env` list is used as it is. Anything else is looked up by name with Open-Meteo's
+geocoding API (location data from GeoNames): only the name you typed is sent, and the reply
+starts with the place it matched (name, region, country), so a wrong match is easy to spot. Add
+the region or country after a comma to pick between places with the same name; if none of the
+matches is in that region, the bot says so instead of picking another one. The lookup knows towns,
+cities and postal codes, not trails, parks or shops: for those, add a named place to `.env`. If
+a place isn't found or the lookup fails, the bot says so and lists your named places. The
+forecast hour is still in your own timezone. The message has to be only that phrase: a longer
+question that mentions weather goes to the coach as usual. **weather near me** uses your default
+location. A time or a general spot after at/in/near ("weather in the morning", "weather at 6am
+tomorrow", "weather at the track") is not looked up as a place; it goes to the coach too.
 
 ## Sync your runs from Slack
 
