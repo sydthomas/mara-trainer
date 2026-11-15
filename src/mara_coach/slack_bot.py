@@ -40,8 +40,10 @@
   `CATCH_UP_WINDOW`) in one reply. A stored cursor of the newest handled message means Slack
   retries and catch-up never answer the same message twice. Debrief context comes from the DB
   (plan, ping record, fuel log), so it survives restarts.
-- COROS sync: "sync my runs" (or just "sync") pulls this week's runs in code with `coros`, no
-  coach call. Possible duplicates are imported only if she replies yes.
+- COROS sync: a sync request inside a longer message (`sync_asked`) syncs in code first, then the
+  coach answers with a note that the runs are in. "sync my runs" (or just "sync") pulls this
+  week's runs in code with `coros`, no coach call. Possible duplicates are imported only
+  if she replies yes.
 - Weather: the live Sunday check-in ends with one conditions line per coming run (default
   location, `DEFAULT_MORNING_HOUR`), built in code from `weather.forecast` at send time; a failed
   lookup just leaves the block out, and the week costs one Open-Meteo request (plus two NWS
@@ -341,6 +343,28 @@ def start_hr_pace_line(
 
 SYNC = re.compile(r"^\s*(please\s+)?sync(\s+my)?(\s+runs)?(\s+from\s+coros)?\b[\s.!]*$", re.I)
 SYNCING = "Syncing your runs from COROS..."
+# A sync request inside a longer message ("...you can sync runs to get the latest one"): the bot
+# syncs in code first, then the coach answers with the runs already in. Questions about syncing
+# and "don't sync" are left alone. A false match only costs one read-only, repeat-safe sync.
+SYNC_ASKED = re.compile(
+    r"\bsynce?\s+((my|the|today'?s|latest|lastest|last)\s+)*(runs?|coros|watch)\b", re.I
+)
+SYNC_NOT_ASKED = re.compile(
+    r"\b(should|do|did|does|how|why|when|if)\s+(i|it|we|you)\b[^.?!\n]*\bsync"
+    r"|\b(don'?t|do\s+not|not|never|no\s+need\s+to)\s+synce?\b",
+    re.I,
+)
+SYNC_ASKED_NOTE = "(She asked for a sync. {synced} Get the numbers from the summary tool.)"
+SYNC_ASKED_FAILED = (
+    "(She asked for a sync, but the COROS sync failed just now. Tell her to send "
+    '"sync my runs" as its own message in a few minutes.)'
+)
+
+
+def sync_asked(text: str) -> bool:
+    return bool(SYNC_ASKED.search(text)) and not SYNC_NOT_ASKED.search(text)
+
+
 SKIPPED = "Okay, skipped those."
 YES = re.compile(r"^\s*(y|yes|yep|yeah|yup|sure|ok|okay|save|save it|do it)\b[\s.!]*$", re.I)
 NO = re.compile(r"^\s*(n|no|nope|cancel|don'?t save|do not save)\b[\s.!]*$", re.I)
@@ -783,6 +807,13 @@ class SlackCoach:
                 client.chat_postMessage(channel=channel, text=CANCELLED)
                 return
             question = self._body_tagged(text, event.get("ts"))
+            sync_note = None
+            if sync_asked(text):
+                synced, sync_note = self._weekly_sync()
+                if synced.startswith("("):
+                    question = f"{SYNC_ASKED_FAILED}\n\n{question}"
+                else:
+                    question = f"{SYNC_ASKED_NOTE.format(synced=synced)}\n\n{question}"
             week_start, missed = self._open_weekly()
             if week_start:
                 question = weekly_reply(week_start, question) + self._week_niggles(week_start)
@@ -793,6 +824,8 @@ class SlackCoach:
                     f"{convo.debrief.planned_miles:g} mi long run on the plan.)\n\n{question}"
                 )
             self._reply(channel, convo, client, question)
+            if sync_note:
+                client.chat_postMessage(channel=channel, text=sync_note)
 
     def _reply(
         self,
