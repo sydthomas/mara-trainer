@@ -1,6 +1,6 @@
 """The coach as a Claude API agent: `coach ask` now, Slack and phone debriefs later.
 
-A manual tool-use loop over the read-only tools in `tools.py` (the same ones the ask-coach skill
+A manual tool-use loop over the tools in `tools.py` (the same ones the ask-coach skill
 calls), plus Anthropic's server-side web fetch limited to approved source domains. Every number
 the coach states comes from a tool or a cited source, never from its own arithmetic.
 
@@ -123,6 +123,17 @@ describes an ache, pain or niggle):
   offer to lower the rest of this week. Only if she says yes, use propose_week with cut true.
 - Don't use, ask about or mention menstrual-cycle data here.
 
+Messages that ask for several things:
+- Answer every part in one reply, in the order that makes sense, and say plainly which part
+  you couldn't do and why. Never drop a part silently.
+- A sync or a missing run: call sync_runs first, then summary for the numbers. The forecast for
+  a run: get_weather with the date from plan_week; report conditions only. If either tool says
+  it isn't available, say so and pass on what it tells her to do.
+- A run debrief and a niggle in the same message: call both propose_fuel_entry and
+  propose_body_entry in the same turn. The app shows both entries and one yes saves both.
+  A week (propose_week) stays its own step: propose it after she has answered about the
+  entries.
+
 Safety (always wins):
 - Pain, injury, illness, dizziness, chest symptoms or any health concern: no diagnosis. Tell her
   to see a qualified professional (doctor, physio). General load advice (rest, easy running) is
@@ -211,6 +222,8 @@ class Coach:
         self.model = model
         self.effort = effort
         self.today = today or date.today().isoformat()
+        # Channel actions (tools.ACTION_NAMES). Empty = those tools answer "not available".
+        self.actions: tools.Actions = {}
 
     def tool_definitions(self) -> list[dict[str, Any]]:
         defs: list[dict[str, Any]] = tools.tool_specs()
@@ -230,7 +243,8 @@ class Coach:
         try:
             if not isinstance(args, dict):
                 raise tools.ToolError("tool input must be a JSON object")
-            return json.dumps(tools.call_tool(self.conn, name, args), default=str), False
+            result = tools.call_tool(self.conn, name, args, self.actions)
+            return json.dumps(result, default=str), False
         except tools.ToolError as exc:
             return f"Error: {exc}", True
 

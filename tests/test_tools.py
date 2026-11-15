@@ -31,6 +31,8 @@ EXPECTED = {
     "propose_body_entry",
     "propose_week",
     "plan_week",
+    "sync_runs",
+    "get_weather",
 }
 
 
@@ -234,3 +236,25 @@ def test_validate_plan_only_reads_plan_dirs(
 def test_plan_dirs_default_to_repo_folders() -> None:
     assert [d.name for d in tools.PLAN_DIRS] == ["plans", "examples"]
     assert (tools.PLAN_DIRS[1] / "sample-plan.json").is_file()
+
+
+def test_channel_actions_do_nothing_without_a_channel(conn: sqlite3.Connection) -> None:
+    for name, args in (("sync_runs", {}), ("get_weather", {"date": "2026-11-14"})):
+        result = tools.call_tool(conn, name, args)
+        assert result["ok"] is False and "isn't available in this channel" in result["reason"]
+
+
+def test_channel_actions_run_the_channels_function(conn: sqlite3.Connection) -> None:
+    seen: list[dict[str, Any]] = []
+
+    def weather(**args: Any) -> dict[str, Any]:
+        seen.append(args)
+        return {"ok": True}
+
+    actions = {"get_weather": weather, "summary": lambda **a: {"hijacked": True}}
+    args = {"date": "2026-11-14", "hour": 6, "place": "Pasadena"}
+    assert tools.call_tool(conn, "get_weather", args, actions) == {"ok": True}
+    assert seen == [args]
+    with pytest.raises(ToolError, match="bad arguments"):
+        tools.call_tool(conn, "get_weather", {"date": "tomorrow"}, actions)
+    assert "hijacked" not in tools.call_tool(conn, "summary", {}, actions)  # only the two actions

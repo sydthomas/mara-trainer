@@ -21,9 +21,10 @@
   entry and saves it only on her yes. The saved-entry replies are fixed text: nothing here or
   in the coach rates an entry or clears her to run. Yellow/red entries of the week go into
   the Sunday check-in.
-- One yes, one thing: if the coach proposes more than one thing in a turn (body entry, week,
-  fueling entry), only the first of those is kept to confirm and the reply says which one
-  wasn't (`ONE_AT_A_TIME`).
+- One yes: a body entry and a fueling entry proposed in the same turn wait together
+  (`Conversation.more`); the bot lists both, "yes" saves both, "yes 1" / "yes 2" saves one, "no"
+  saves neither. A week is always its own yes: proposed with anything else, only the first of
+  those is kept to confirm and the reply says which one wasn't (`ONE_AT_A_TIME`).
 - Sunday is one conversation: at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`),
   when the week ending or the next one is in the plan, the bot first syncs the week's runs from
   COROS in code (no separate reminder), then the coach writes a recap of the week and a preview
@@ -41,7 +42,10 @@
   retries and catch-up never answer the same message twice. Debrief context comes from the DB
   (plan, ping record, fuel log), so it survives restarts.
 - COROS sync: "sync my runs" (or just "sync") pulls this week's runs in code with `coros`, no
-  coach call. Possible duplicates are imported only if she replies yes.
+  coach call. Possible duplicates are imported only if she replies yes. A sync or forecast asked
+  for inside a longer message goes to the coach, which has the `sync_runs` and `get_weather`
+  tools; the bot does the work (`_actions`: the same sync and forecast code), adds the weather
+  credit and any sync note in code, and never imports a possible duplicate there.
 - Weather: the live Sunday check-in ends with one conditions line per coming run (default
   location, `DEFAULT_MORNING_HOUR`), built in code from `weather.forecast` at send time; a failed
   lookup just leaves the block out, and the week costs one Open-Meteo request (plus two NWS
@@ -209,6 +213,14 @@ ONE_AT_A_TIME = (
     "saved. Ask me for it again after this and I'll bring it back._"
 )
 BODY_QUESTION = "Reply *yes* to log it, or *no*."
+BOTH_QUESTION = (
+    "Reply *yes* to save both, *yes 1* or *yes 2* to save just that one, or *no* for neither."
+)
+YES_BOTH = re.compile(r"^\s*(?:(?:y|yes|yep|yeah|save)[\s,]*)?(?:to\s+)?both\b[\s.!]*$", re.I)
+YES_ONE = re.compile(r"^\s*(?:y|yes|yep|yeah|save)[\s,]*(?:#|number\s*)?([12])\b[\s.!]*$", re.I)
+_SAVE_IT_ASK = re.compile(r"[ \t]*\**Save it\?\**", re.I)  # anywhere: the bot asks instead
+SYNC_ACTION_FAILED = 'COROS didn\'t answer just now. She can send "sync my runs" in a few minutes.'
+WEATHER_ACTION_HOURS = 3
 BODY_SAVED = "Saved to your body log (entry {id})."
 YELLOW_SAVED = (
     BODY_SAVED + " It'll come up at Sunday's check-in, where the plan can change. If the pain "
@@ -242,6 +254,56 @@ def body_line(entry: dict[str, Any]) -> str:
 def ask_to_log_body(answer: str, entry: body.BodyEntry) -> str:
     """The coach's reply, then the entry and the bot's own yes / no question."""
     return f"{answer.rstrip()}\n\n*Body log entry* {body_line(asdict(entry))}\n{BODY_QUESTION}"
+
+
+def fuel_line(entry: fueling.FuelEntry) -> str:
+    """One proposed fueling entry as she gave it: every field a yes would save. Unset fields
+    are left out, never filled in."""
+    parts = [entry.date]
+    if entry.distance_meters:
+        parts.append(f"{entry.distance_meters / tools.MI_METERS:.2f} mi")
+    if entry.duration_seconds:
+        minutes, seconds = divmod(entry.duration_seconds, 60)
+        parts.append(f"{minutes // 60}:{minutes % 60:02d}:{seconds:02d}")
+    if entry.pre_run:
+        ahead = f" ({entry.pre_run_minutes} min before)" if entry.pre_run_minutes else ""
+        parts.append(f"before: {entry.pre_run}{ahead}")
+    if entry.during:
+        parts.append(f"during: {entry.during}")
+    if entry.carbs_grams is not None:
+        carbs = f"{entry.carbs_grams:g} g carbs"
+        per_hour = fueling.carbs_per_hour(entry.carbs_grams, entry.duration_seconds)
+        parts.append(carbs + (f" ({per_hour:g} g per hour)" if per_hour is not None else ""))
+    if entry.fluid_ml is not None:
+        parts.append(f"{entry.fluid_ml:g} ml fluid")
+    for label, value, top in (
+        ("stomach", entry.stomach, 5),
+        ("energy", entry.energy, 5),
+        ("effort", entry.effort, 10),
+    ):
+        if value is not None:
+            parts.append(f"{label} {value}/{top}")
+    if entry.notes:
+        parts.append(f"notes: {entry.notes}")
+    return ", ".join(parts)
+
+
+def ask_to_log_both(answer: str, niggle: body.BodyEntry, entry: fueling.FuelEntry) -> str:
+    """The coach's reply, then both entries and the bot's own question for the pair."""
+    return (
+        f"{_SAVE_IT_ASK.sub('', answer).rstrip()}\n\n"
+        f"*1. Body log entry* {body_line(asdict(niggle))}\n"
+        f"*2. Fueling entry* {fuel_line(entry)}\n{BOTH_QUESTION}"
+    )
+
+
+def credit_line(results: list[dict[str, Any]]) -> str:
+    """Weather credits as a Markdown line (the coach's reply is converted to Slack's format)."""
+    credits: dict[str, str] = {}
+    for result in results:
+        for credit in result["attribution"]:
+            credits.setdefault(credit["text"], credit["url"])
+    return "_" + " · ".join(f"[{text}]({url})" for text, url in credits.items()) + "_"
 
 
 def body_reply(status: str, day: str, text: str) -> str:
@@ -627,6 +689,8 @@ class Conversation:
     debrief: Debrief | None = None
     # proposed by the coach, saved only on "yes"
     pending: Pending = None
+    # a fueling entry proposed in the same turn as a body entry (`pending`); one yes saves both
+    more: list[Pending] = field(default_factory=list)
     channel: str = ""
 
 
@@ -724,12 +788,16 @@ class SlackCoach:
         with self._guard:
             convo = self.conversations.get(channel)
             if convo is None:
-                turns, pending = self._saved_conversation(channel)
-                convo = Conversation(turns, self.clock(), pending=pending, channel=channel)
+                turns, pending, more = self._saved_conversation(channel)
+                convo = Conversation(
+                    turns, self.clock(), pending=pending, more=more, channel=channel
+                )
                 self.conversations[channel] = convo
         now = self.clock()
         if (convo.turns or convo.pending) and now - convo.last_seen > IDLE_RESET:
-            convo.turns, convo.pending = [], None
+            convo.turns, convo.pending, convo.more = [], None, []
+        if not isinstance(convo.pending, body.BodyEntry):
+            convo.more = []  # a second entry only ever waits beside a body entry
         if convo.debrief and now > convo.debrief.expires:
             convo.debrief = None
         convo.last_seen = now
@@ -766,10 +834,33 @@ class SlackCoach:
             if isinstance(convo.pending, WeekProposal) and SAVE_ONLY.match(text):
                 self._save_week(channel, convo, convo.pending, client, push=False)
                 return
-            if convo.pending is not None and YES.match(text):
+            if not isinstance(convo.pending, body.BodyEntry):
+                convo.more = []  # a sync's duplicate question (or anything else) replaced it
+            one = YES_ONE.match(text) if convo.more else None
+            if one:  # "yes 1" / "yes 2": just that entry, the other is dropped
+                if one.group(1) == "2":
+                    convo.pending = convo.more[0]
+                convo.more = []
                 self._save(channel, convo, client)
                 return
+            if convo.pending is not None and (
+                YES.match(text) or (convo.more and YES_BOTH.match(text))
+            ):
+                rest, convo.more = convo.more, []
+                self._save(channel, convo, client)
+                for item in rest:  # the fueling entry last: its save ends with a coach reply
+                    convo.pending = item
+                    self._save(channel, convo, client)
+                return
             if convo.pending is not None and NO.match(text):
+                also_fuel = any(isinstance(item, fueling.FuelEntry) for item in convo.more)
+                convo.more = []
+                if also_fuel:  # no to both: the debrief is closed, as for a fueling entry alone
+                    if convo.debrief is not None:
+                        self._mark(DEBRIEF_CLOSED, convo.debrief.date)
+                    convo.pending, convo.debrief = None, None
+                    client.chat_postMessage(channel=channel, text=CANCELLED)
+                    return
                 if isinstance(convo.pending, DuplicateRuns):
                     convo.pending = None
                     client.chat_postMessage(channel=channel, text=SKIPPED)
@@ -862,7 +953,9 @@ class SlackCoach:
         finally:
             conn.close()
 
-    def _saved_conversation(self, channel: str) -> tuple[list[dict[str, Any]], Pending]:
+    def _saved_conversation(
+        self, channel: str
+    ) -> tuple[list[dict[str, Any]], Pending, list[Pending]]:
         conn = self.connect()
         try:
             raw = _state(conn, TURNS_KEY)
@@ -871,8 +964,11 @@ class SlackCoach:
         saved = json.loads(raw) if raw else {}
         fresh = self.now().timestamp() - saved.get("at", 0) <= IDLE_RESET
         if saved.get("channel") != channel or not fresh:
-            return [], None
-        return list(saved["turns"]), decode_pending(saved.get("pending"))
+            return [], None, []
+        pending = decode_pending(saved.get("pending"))
+        beside = isinstance(pending, body.BodyEntry)
+        more = [decode_pending(raw) for raw in saved.get("more") or []] if beside else []
+        return list(saved["turns"]), pending, [item for item in more if item is not None]
 
     @contextmanager
     def _saving(self, convo: Conversation) -> Iterator[None]:
@@ -887,6 +983,9 @@ class SlackCoach:
             "channel": convo.channel,
             "turns": convo.turns,
             "pending": encode_pending(convo.pending),
+            "more": [encode_pending(item) for item in convo.more]
+            if isinstance(convo.pending, body.BodyEntry)
+            else [],
             "at": self.now().timestamp(),
         }
         conn = self.connect()
@@ -1005,7 +1104,7 @@ class SlackCoach:
             finally:
                 conn.close()
             if report is not None and report.pending:
-                convo.pending = DuplicateRuns(tuple(report.pending))
+                convo.pending, convo.more = DuplicateRuns(tuple(report.pending)), []
                 text += "\n\n" + coros.duplicate_question(report.pending)
             _finish(client, channel, placeholder, text)
         finally:
@@ -1189,7 +1288,7 @@ class SlackCoach:
             with convo.lock:
                 client.chat_postMessage(channel=channel, text=ping_text(miles))
                 reports.mark_notified(conn, DEBRIEF_KIND, day)
-                convo.turns, convo.pending = [], None
+                convo.turns, convo.pending, convo.more = [], None, []
                 self._save_turns(convo)
                 convo.debrief = Debrief(day, miles, self.clock() + DEBRIEF_TTL)
             return True
@@ -1221,7 +1320,7 @@ class SlackCoach:
         channel = client.conversations_open(users=self.allowed_user)["channel"]["id"]
         convo = self._conversation(channel)
         with convo.lock, self._saving(convo):
-            convo.turns, convo.pending = [], None
+            convo.turns, convo.pending, convo.more = [], None, []
             prompt = weekly_prompt(sunday.isoformat(), synced, missed, niggles)
             answer = self._answer(prompt, convo)
             text = WEEKLY_FAILED if answer == FAILED else to_mrkdwn(answer)
@@ -1539,11 +1638,79 @@ class SlackCoach:
         finally:
             conn.close()
 
+    def _actions(
+        self, conn: sqlite3.Connection, notes: list[str], forecasts: list[dict[str, Any]]
+    ) -> tools.Actions:
+        """The coach's channel actions for one reply (`tools.ACTION_NAMES`): the same read-only
+        sync and forecast the bot runs in code. They never raise. A possible duplicate is never
+        imported here; `notes` gets the lines she should see, `forecasts` what must be credited."""
+
+        def sync_runs() -> dict[str, Any]:
+            try:
+                report = self.sync(conn, self.now())
+            except coros.CorosError as exc:
+                return {"ok": False, "reason": str(exc)}
+            except Exception:  # network or SDK surprises: the coach says it didn't run
+                log.exception("COROS sync asked for by the coach failed")
+                return {"ok": False, "reason": SYNC_ACTION_FAILED}
+            if report.pending:
+                notes.append(SYNC_DUPLICATES)
+            if report.not_downloaded:
+                notes.append(SYNC_LEFT.format(n=report.not_downloaded))
+            return {
+                "ok": True,
+                "from": report.start,
+                "to": report.end,
+                "new_runs": report.imported,
+                "already_imported": report.already_present,
+                "possible_duplicates_not_imported": len(report.pending),
+                "not_downloaded_yet": report.not_downloaded,
+                "error": report.error,
+                "next": "Call summary for the week's totals.",
+            }
+
+        def get_weather(
+            date: str, hour: int | None = None, place: str | None = None
+        ) -> dict[str, Any]:
+            try:
+                result = self.forecast(
+                    timezone=db.athlete_timezone(conn),
+                    date=date,
+                    hour=DEFAULT_MORNING_HOUR if hour is None else hour,
+                    hours=WEATHER_ACTION_HOURS,
+                    near=place or None,
+                    now=self.now(),
+                )
+            except Exception as exc:
+                log.warning("forecast asked for by the coach failed (%s)", type(exc).__name__)
+                return {"ok": False, "reason": WEATHER_FAILED}
+            if not result.get("ok"):
+                failed = {"ok": False, "reason": str(result.get("reason", "no reason given"))}
+                if result.get("known_places") is not None:
+                    failed["known_places"] = result["known_places"]
+                return failed
+            forecasts.append(result)
+            return {
+                "ok": True,
+                "date": date,
+                "place": result["place"],
+                "start_hour_assumed": hour is None,
+                "hours": result["hours"],
+                "note": "Conditions only, local time. The app adds the data credit.",
+            }
+
+        return {"sync_runs": sync_runs, "get_weather": get_weather}
+
     def _answer(self, text: str, convo: Conversation) -> str:
         conn = self.connect()
         history = list(convo.turns)
+        notes: list[str] = []  # sync notes for her, added in code
+        forecasts: list[dict[str, Any]] = []  # forecasts the coach read: credited in code
         try:
-            reply = self.coach_factory(conn).ask(text, history=history)
+            coach = self.coach_factory(conn)
+            if isinstance(coach, Coach):  # fakes in tests have no tools
+                coach.actions = self._actions(conn, notes, forecasts)
+            reply = coach.ask(text, history=history)
             messages = list(getattr(reply, "messages", []))[len(history) :]
             entry = proposed_entry(messages)
             niggle = proposed_body(messages)
@@ -1571,18 +1738,30 @@ class SlackCoach:
             )
             if proposal is not None
         ]
+        both = niggle is not None and entry is not None  # these two wait together
         if proposals:
             convo.pending = proposals[0][1]
+            convo.more = [entry] if both else []
         if answer != FAILED:
             if niggle is not None:
                 if week is not None:  # the week isn't the thing being confirmed now
                     answer = _SAVE_ASK.sub("", answer)
-                answer = ask_to_log_body(answer, niggle)
+                if entry is not None:
+                    answer = ask_to_log_both(answer, niggle, entry)
+                else:
+                    answer = ask_to_log_body(answer, niggle)
             elif week is not None:
                 answer = ask_to_save_week(answer)
-            if len(proposals) > 1:
-                dropped = " and the ".join(name for name, _ in proposals[1:])
-                answer += "\n\n" + ONE_AT_A_TIME.format(kept=proposals[0][0], dropped=dropped)
+            dropped = [name for name, item in proposals[1:] if not (both and item is entry)]
+            if dropped:
+                kept = "body log entry and the fueling entry" if both else proposals[0][0]
+                answer += "\n\n" + ONE_AT_A_TIME.format(
+                    kept=kept, dropped=" and the ".join(dropped)
+                )
+            if forecasts:
+                answer += "\n\n" + credit_line(forecasts)
+            if notes:
+                answer += "\n\n" + "\n".join(dict.fromkeys(notes))
         convo.turns += [
             {"role": "user", "content": text},
             {"role": "assistant", "content": answer},

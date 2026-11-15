@@ -8,6 +8,10 @@ Rules:
   `propose_fuel_entry` checks a debrief entry but never saves it; the Slack channel saves it in
   code after she replies yes. `propose_week` works the same way for one week, and
   `propose_body_entry` for one body check / niggle.
+- Channel actions (`sync_runs`, `get_weather`): the registry only describes them. The work is
+  done by a function the channel passes to `call_tool` (`actions`); the Slack bot does. Without
+  one (the CLI, the evals, tests) they answer "not available here" and touch nothing, so no
+  COROS or weather request can start from this module.
 - No Strava data. The DB has no Strava source, and no tool may fetch or receive it.
 - Sources: only `approved` rows are visible to the coach.
 """
@@ -244,6 +248,28 @@ def propose_week(
     if revised is None:
         return {"ok": False, "problems": problems, "saved": False}
     return {"ok": True, "week": reports.plan_week(revised, start_date), "saved": False}
+
+
+ACTION_NAMES = ("sync_runs", "get_weather")
+Actions = dict[str, Callable[..., dict[str, Any]]]
+
+
+def sync_runs(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Stand-in when the channel gave no sync action: nothing is requested."""
+    return {
+        "ok": False,
+        "reason": "Sync isn't available in this channel. Tell her to run it herself: "
+        '"sync my runs" in Slack, or `coach coros sync` in the terminal.',
+    }
+
+
+def get_weather(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
+    """Stand-in when the channel gave no weather action: nothing is requested."""
+    return {
+        "ok": False,
+        "reason": "The forecast isn't available in this channel. Tell her to ask for it "
+        'herself: "weather" in Slack, or `coach weather` in the terminal.',
+    }
 
 
 def approved_slugs(conn: sqlite3.Connection) -> set[str]:
@@ -520,6 +546,40 @@ TOOLS: tuple[Tool, ...] = (
         propose_week,
     ),
     Tool(
+        "sync_runs",
+        "Pull this week's runs (Monday through today) from her COROS watch into the app, then "
+        "read them with summary. Read-only on COROS. Use it when she asks for a sync or says a "
+        "run is missing. Possible duplicates are never imported here: tell her to send "
+        '"sync my runs" to review them. If ok is false, say the sync didn\'t run and why.',
+        _schema(),
+        sync_runs,
+    ),
+    Tool(
+        "get_weather",
+        "Forecast conditions for one run: hourly temperature, feels-like, dew point, wind, "
+        "rain chance and WBGT when available. Conditions only: report the values, and give "
+        "heat or cold advice only from a cited knowledge section. Leave place out for her "
+        "usual location. If ok is false, say the forecast isn't available and why.",
+        _schema(
+            {
+                "date": {**_DATE, "description": "The run's date, from plan_week"},
+                "hour": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 23,
+                    "description": "Local start hour, only if she gave one; default morning",
+                },
+                "place": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "A place she named (a saved place name or a town)",
+                },
+            },
+            required=["date"],
+        ),
+        get_weather,
+    ),
+    Tool(
         "allowed_domains",
         "Web domains the coach may fetch from at answer time (approved, fetchable sources only).",
         _schema(),
@@ -533,14 +593,19 @@ def tool_specs() -> list[dict[str, Any]]:
     return [t.spec() for t in TOOLS]
 
 
-def call_tool(conn: sqlite3.Connection, name: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Validate `args` against the tool's input schema, then run it."""
+def call_tool(
+    conn: sqlite3.Connection, name: str, args: dict[str, Any], actions: Actions | None = None
+) -> dict[str, Any]:
+    """Validate `args` against the tool's input schema, then run it. `actions`: the channel's
+    own functions for the channel actions (module docstring), called as `fn(**args)`."""
     tool = _BY_NAME.get(name)
     if tool is None:
         raise ToolError(f"unknown tool {name!r}; known: {', '.join(_BY_NAME)}")
     problems = check_args(tool.input_schema, args)
     if problems:
         raise ToolError(f"bad arguments for {name}: " + "; ".join(problems))
+    if actions and name in ACTION_NAMES and name in actions:
+        return actions[name](**args)
     return tool.run(conn, **args)
 
 

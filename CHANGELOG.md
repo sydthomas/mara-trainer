@@ -6,6 +6,14 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 ## [Unreleased]
 
 ### Added
+- Slack: one message can ask for several things. The coach has two new tools, `sync_runs` and
+  `get_weather`, so "log a niggle, sync my run, and what's Tuesday's weather" gets one answer.
+  The Slack bot does the work with its existing read-only sync and forecast code; anywhere else
+  (CLI, evals, tests) the tools answer "not available here" and make no request. A possible
+  duplicate run is never imported this way, and the weather credit is added in code.
+- Slack: a body entry and a fueling entry proposed in the same reply now wait together. The bot
+  lists both; "yes" saves both, "yes 1" or "yes 2" saves one, "no" saves neither. A proposed
+  week still needs its own yes.
 - Forecast at any place by name, for one-off run locations: `coach weather --near "PLACE NAME"`
   and, in Slack, "weather in PLACE" / "weather at PLACE" / "weather near PLACE" (multi-word names
   and "City, Region" work). A name from `COACH_PLACES` still wins; anything else is looked up
