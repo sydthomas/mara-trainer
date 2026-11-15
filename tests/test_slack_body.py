@@ -368,34 +368,6 @@ def test_no_drops_the_body_entry_and_leaves_the_debrief_alone() -> None:
     assert closed is None  # declining a niggle entry is not declining the long-run debrief
 
 
-def test_body_and_fuel_proposed_together_one_is_kept_and_she_is_told() -> None:
-    shared, client = SharedDB(), SlackFake()
-    db.save_plan(shared.conn, PLAN)
-    niggle = {**YELLOW, "date": "2026-11-07"}
-    coach = MultiCoach(
-        ["Run and shin noted. Save it?", "Here's the run again. Save it?", "Nice work."],
-        {"propose_fuel_entry": PROPOSAL, "propose_body_entry": niggle},
-        {"propose_fuel_entry": PROPOSAL},
-    )
-    bot = _debrief_bot(coach, shared, _la(7, 11))  # long-run day, debrief open
-    reports.mark_notified(shared.conn, slack_bot.DEBRIEF_KIND, "2026-11-07")
-    bot.handle(_dm("10 mi in 1:30, 7 chews, and my left shin is sore, 3, no swelling"), client)
-    shown = client.posted[-1]["text"]
-    assert "*Body log entry* 2026-11-07: yellow, left shin" in shown
-    note = slack_bot.ONE_AT_A_TIME.format(kept="body log entry", dropped="fueling entry")
-    assert slack_bot.BODY_QUESTION in shown and shown.endswith(note)
-    assert "isn't saved" in note and "again" in note
-    assert isinstance(bot.conversations["D1"].pending, body.BodyEntry)
-    bot.handle(_dm("yes"), client)
-    assert len(_entries(shared)) == 1
-    assert fueling.list_entries(shared.conn)["count"] == 0  # and she was told so
-    bot.handle(_dm("log my run"), client)  # the coach still has her details in the history
-    assert any(note in turn["content"] for turn in coach.calls[1][1])
-    assert isinstance(bot.conversations["D1"].pending, fueling.FuelEntry)
-    bot.handle(_dm("yes"), client)
-    assert fueling.list_entries(shared.conn)["count"] == 1
-
-
 def test_body_and_week_proposed_together_the_entry_comes_first() -> None:
     shared, proposal, start, today = _week_proposal()
     client = SlackFake()

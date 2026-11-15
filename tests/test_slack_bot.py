@@ -661,50 +661,6 @@ def test_sync_phrases(text: str) -> None:
     assert not slack_bot.SYNC.match("should I sync my runs before the long run?")
 
 
-def test_sync_asked_inside_a_longer_message_syncs_then_asks_the_coach() -> None:
-    shared, client, coach, seen = SharedDB(), FakeClient(), FakeCoach(["Got it."]), []
-
-    def sync(conn: sqlite3.Connection, now: datetime) -> coros.SyncReport:
-        seen.append(now)
-        return coros.SyncReport("2026-11-02", "2026-11-08", imported=["Sat 11/7: 5.00 mi"])
-
-    bot = SlackCoach(SYDNEY, lambda conn: coach, shared, Clock(), lambda: _sun(4), sync)
-    bot.handle(_dm("log a niggle, cut it short today. You can synce runs to get it"), client)
-    assert len(seen) == 1
-    question = coach.calls[0][0]
-    assert "Runs synced from COROS just now: 1 new." in question
-    assert "log a niggle" in question
-    assert client.posted[-1]["text"] == "Got it."
-
-
-def test_sync_asked_but_failed_tells_the_coach() -> None:
-    client, coach = FakeClient(), FakeCoach(["Try later."])
-
-    def sync(conn: sqlite3.Connection, now: datetime) -> coros.SyncReport:
-        raise coros.SignInNeeded
-
-    bot = SlackCoach(SYDNEY, lambda conn: coach, SharedDB(), Clock(), lambda: _sun(4), sync)
-    bot.handle(_dm("My ankle felt off, please sync my runs and tell me the total"), client)
-    assert slack_bot.SYNC_ASKED_FAILED in coach.calls[0][0]
-    assert client.posted[-1]["text"] == f"_{coros.SIGN_IN_AGAIN}_"
-
-
-@pytest.mark.parametrize(
-    ("text", "asked"),
-    [
-        ("you can sync runs to get the latest run", True),
-        ("ankle hurt. Sync my latest run please", True),
-        ("can you sync COROS and tell me my week", True),
-        ("should I sync my runs before the long run?", False),
-        ("don't sync my runs yet", False),
-        ("my watch didn't sync", False),
-        ("how was my fueling?", False),
-    ],
-)
-def test_sync_asked(text: str, asked: bool) -> None:
-    assert slack_bot.sync_asked(text) is asked
-
-
 def test_sync_errors_become_a_reply() -> None:
     client = FakeClient()
 

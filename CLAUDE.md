@@ -123,7 +123,11 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
   read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile, fuel_log,
   body_log, search_sources, read_knowledge, propose_fuel_entry, propose_body_entry, propose_week,
-  plan_week, allowed_domains); exit 1 on bad args or a tool error
+  plan_week, sync_runs, get_weather, allowed_domains); exit 1 on bad args or a tool error.
+  `sync_runs` and `get_weather` are channel actions: only the Slack bot supplies the function
+  that does the work (its own sync, read-only on COROS, which imports non-duplicate runs
+  into the DB, and its forecast code); from the CLI, the evals and
+  tests they answer "not available here" and make no request
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
@@ -145,7 +149,11 @@ be summarized. If no approved source covers a question, the coach says so.
   DMs a body check at 7am local (green / yellow / red, once a day, queued ahead). A bare
   "green" is logged in code (any day, no LLM). Yellow, red or "log a niggle" goes to the coach:
   one question (where, swelling, pain 0-10), then `propose_body_entry` (validates, never saves);
-  the bot shows the entry and saves it on yes. The coach never clears her to run or reads a
+  the bot shows the entry and saves it on yes. A message can ask for several things: the
+  coach can sync runs and read a forecast itself (`sync_runs`, `get_weather`; the bot adds the
+  weather credit in code and never imports a possible duplicate there), and a body entry and a
+  fueling entry proposed together wait together ("yes" saves both, "yes 1" / "yes 2" one, "no"
+  neither); a week is always its own yes. The coach never clears her to run or reads a
   pain number as clearance; red gets a referral and an offer to lower the week (`propose_week`
   cut). The week's yellow/red entries go into the Sunday check-in. Sundays at 6pm local it
   syncs the week's runs from COROS in code, then sends one weekly check-in (last week recap + next week
