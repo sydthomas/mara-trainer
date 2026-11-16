@@ -1371,9 +1371,9 @@
       "license": "open_access",
       "year": 2025,
       "trust_reason": "Peer-reviewed 18-month cohort study in Br J Sports Med 59(17):1203-1210 (doi 10.1136/bjsports-2024-109380); open access, CC BY-NC.",
-      "notes": "Overuse injury rate rose when one run was more than 10% longer than the longest run of the previous 30 days, most for runs more than double it. The week-to-week ratio showed no link and the acute:chronic ratio pointed the other way.",
-      "female_evidence": "sex_reported",
-      "population_note": "5,205 runners, 22% female, mean age 45.8 (SD 10.4); 588,071 sessions. Far from a woman in her early 20s; results by sex not seen in the abstract."
+      "notes": "Overuse injury rate rose when one run was more than 10% longer than the longest run of the previous 30 days, most for runs more than double it. The week-to-week ratio showed no link and the acute:chronic ratio pointed the other way. Injuries were self-reported; Garmin helped recruit and supplied the data.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "5,205 runners, 22% female, mean age 45.8 (SD 10.4); 588,071 sessions. Far from a woman in her early 20s; sex was an adjustment covariate only, with no results by sex."
     },
     {
       "slug": "buist-graded-training-program-2008",
@@ -1424,7 +1424,7 @@
       "license": "copyrighted",
       "year": 2021,
       "trust_reason": "Peer-reviewed clinical commentary in J Orthop Sports Phys Ther 51(7):322-330 by bone and running-injury researchers; abstract read, full text not reviewed.",
-      "notes": "For low-risk shin and foot bone stress injuries, loading should cause no symptoms during, after or the next day, and running returns volume first, then speed. Clinician-managed rehab; supports referral, not self-treatment. Cite and link only.",
+      "notes": "For low-risk shin and foot bone stress injuries, loading should cause no symptoms during, after or the next day, and running returns volume first, then speed. Clinician-managed rehab; supports referral, not self-treatment. Low-risk shaft sites only; not for a foot or shin that hasn't been assessed. Cite and link only.",
       "fetchable": false,
       "female_evidence": "unknown",
       "population_note": "Clinical commentary with no participant sample; sex not discussed in the abstract."
@@ -1458,9 +1458,9 @@
       "license": "cc_by",
       "year": 2021,
       "trust_reason": "Peer-reviewed pilot randomized trial in Pilot Feasibility Stud 7(1):58 (doi 10.1186/s40814-021-00792-5), CC BY 4.0.",
-      "notes": "States the pain-monitoring model: pain up to 5/10 during or right after activity, back to baseline by the next morning. Used here for knee tendon rehab supervised by a physical therapist; a feasibility pilot, not proof the thresholds work for runners.",
-      "female_evidence": "sex_reported",
-      "population_note": "15 participants (5 women), mean age 26.6, mostly recreational athletes with patellar tendinopathy; not a running-specific sample (sports not reported). Too small for results by sex."
+      "notes": "States the pain-monitoring model: pain up to 5/10 during or right after activity, back to baseline by the next morning. Used here for knee tendon rehab supervised by a physical therapist; a feasibility pilot, not proof the thresholds work for runners. Diagnosed tendinopathy under a clinician only; never for undiagnosed pain or a suspected bone injury.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "15 people with patellar tendinopathy, 5 of them women; sex was used for stratification only, with no results by sex."
     },
     {
       "slug": "dejager-wearable-hrv-menstrual-cycle-2026",
@@ -1478,7 +1478,7 @@
       "trust_reason": "Peer-reviewed living systematic review in Sports Med 56(5):1153-1173 (doi 10.1007/s40279-025-02388-y), CC BY.",
       "notes": "Wearable HRV tends to run higher early in the cycle and lower later (about 3-9%), and lower in hormonal contraceptive users, so a dip can be cycle timing and not fatigue. Phase definitions varied, so no pooled estimate.",
       "female_evidence": "female_specific",
-      "population_note": "16 studies of females of any age, including contraceptive users, pregnancy and menopause; participant total not in the abstract. Not athlete-specific."
+      "population_note": "16 studies, 19,322 females of any age, including contraceptive users, pregnancy and menopause; one study supplies most of the participants. Not athlete-specific."
     },
     {
       "slug": "meeusen-overtraining-consensus-2013",
@@ -1511,9 +1511,9 @@
       "license": "cc_by",
       "year": 2022,
       "trust_reason": "Peer-reviewed systematic review with meta-analysis and meta-regression in Sports Med 52(7):1667-1688 (doi 10.1007/s40279-022-01644-9), CC BY.",
-      "notes": "Compared with resting, cold-water immersion after hard exercise helped next-day power, soreness and perceived recovery but not strength. Shorter, colder dips did best.",
-      "female_evidence": "unknown",
-      "population_note": "52 studies of physically active people; sex split not in the abstract and not checked in the full text."
+      "notes": "Compared with resting, cold-water immersion after hard exercise helped next-day power, soreness and perceived recovery but not strength. Shorter, colder dips did better on some measures, not all. About recovery after hard exercise in healthy people, not cold on an injury or swelling.",
+      "female_evidence": "mostly_male",
+      "population_note": "52 studies of physically active people; 8 included women (3 women-only) and there is no analysis by sex."
     },
     {
       "slug": "smyth-marathon-decoupling-2022",
@@ -1564,8 +1564,8 @@
       "year": 2019,
       "trust_reason": "Peer-reviewed analysis of 47 years of Boston Marathon results in PLoS One 14(3):e0212797 (doi 10.1371/journal.pone.0212797), CC BY.",
       "notes": "Warmer air, rain and headwind went with slower Boston times and tailwind with faster ones; each extra degree C cost all finishers far more time than it cost the winners.",
-      "female_evidence": "sex_reported",
-      "population_note": "580,990 results from 382,209 Boston finishers, a qualifying-time field; sex was a model factor, but weather effects by sex were not in the abstract."
+      "female_evidence": "mixed_unreported",
+      "population_note": "580,990 results from 382,209 Boston finishers, a qualifying-time field; sex was a main effect in the models, but weather effects are pooled across sexes."
     }
   ]
 }
