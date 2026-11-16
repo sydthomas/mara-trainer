@@ -900,3 +900,65 @@ def test_no_hr_line_when_the_coach_fails(tmp_path: Path, monkeypatch: pytest.Mon
         client
     )
     assert client.posted[0]["text"] == slack_bot.WEEKLY_FAILED
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "yes",
+        "yes log it",
+        "Yes, log it!",
+        "ok save it please",
+        "yes please",
+        "log it",
+        "yes thanks",
+    ],
+)
+def test_yes_may_carry_a_few_plain_words(text: str) -> None:
+    assert slack_bot.YES.match(text)
+    assert not slack_bot.NO.match(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "yes 1",
+        "yes both",
+        "yes but make it red",
+        "yes log it and write my week",
+        "log a niggle",
+        "ok thanks",
+        "okay thanks!",
+        "sure thanks",
+        "thanks",
+        "yes?",
+        "yes log it?",
+        "no, save it",
+        "yes don't save it",
+        "yes save only",
+    ],
+)
+def test_yes_with_more_to_say_goes_to_the_coach(text: str) -> None:
+    assert not slack_bot.YES.match(text)
+
+
+@pytest.mark.parametrize("text", ["no", "no thanks", "No, don't save it.", "don't log it"])
+def test_no_may_carry_a_few_plain_words(text: str) -> None:
+    assert slack_bot.NO.match(text)
+    assert not slack_bot.YES.match(text)
+
+
+def test_the_coach_is_told_not_to_send_her_to_an_app() -> None:
+    from mara_coach import agent
+
+    assert 'never say "the app" to her' in agent.PROMPT_TEMPLATE
+
+
+def test_save_only_is_not_a_plain_yes() -> None:
+    assert slack_bot.SAVE_ONLY.match("save it only")
+    assert not slack_bot.YES.match("save it only")
+
+
+@pytest.mark.parametrize("text", ["no, log it", "no but change it", "ok thanks", "yes log it"])
+def test_no_with_more_to_say_is_not_a_no(text: str) -> None:
+    assert not slack_bot.NO.match(text)

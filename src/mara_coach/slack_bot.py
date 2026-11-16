@@ -404,8 +404,22 @@ def start_hr_pace_line(
 SYNC = re.compile(r"^\s*(please\s+)?sync(\s+my)?(\s+runs)?(\s+from\s+coros)?\b[\s.!]*$", re.I)
 SYNCING = "Syncing your runs from COROS..."
 SKIPPED = "Okay, skipped those."
-YES = re.compile(r"^\s*(y|yes|yep|yeah|yup|sure|ok|okay|save|save it|do it)\b[\s.!]*$", re.I)
-NO = re.compile(r"^\s*(n|no|nope|cancel|don'?t save|do not save)\b[\s.!]*$", re.I)
+# A yes may carry a few plain words ("yes log it", "ok save it please"); anything longer goes
+# to the coach. "yes 1" and "save only" have their own patterns. A trailing "thanks" counts
+# only after a plain yes: "ok thanks" is an acknowledgement, not a yes to save.
+_YES_VERBS = r"please|log(?:\s+(?:it|that))?|save(?:\s+(?:it|that))?|do\s+it|go\s+ahead"
+YES = re.compile(
+    r"^\s*(?:"
+    rf"(?:y|yes|yep|yeah|yup)\b(?:[\s,]+(?:{_YES_VERBS}|thanks|thank\s+you))*"
+    rf"|(?:sure|ok|okay|save|save it|log it|do it|go ahead)\b(?:[\s,]+(?:{_YES_VERBS}))*"
+    r")[\s.!]*$",
+    re.I,
+)
+NO = re.compile(
+    r"^\s*(n|no|nope|cancel|don'?t save|do not save|(?:don'?t|do not) log(?: it)?)\b"
+    r"(?:[\s,]+(?:thanks|thank\s+you|don'?t\s+(?:save|log)(?:\s+it)?))*[\s.!]*$",
+    re.I,
+)
 CANCELLED = "Okay, not saved."
 SAVE_FOLLOW_UP = (
     "(Saved.) Give me your short coach reply: one or two observations from my fuel log, and "

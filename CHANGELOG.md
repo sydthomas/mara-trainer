@@ -21,6 +21,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   place's label so a wrong match is visible, coordinates are rounded to 2 decimals before the
   forecast request and never shown, and nothing is stored. Conditions only, no advice. (#53)
 
+### Fixed
+- Slack: a yes or no to a waiting save question may carry a few plain words ("yes log it",
+  "ok save it please", "no thanks"). Before, only the bare word counted, so "yes log it" went to
+  the coach and the entry was dropped. Anything longer still goes to the coach.
+- The coach no longer tells the runner to answer "the app"; it says the entry is shown below
+  and she can reply yes or no in the chat.
+
 ## [0.3.0] - 2026-11-12
 
 ### Added
