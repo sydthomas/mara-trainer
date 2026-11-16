@@ -5,6 +5,8 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-15
+
 ### Added
 - Slack: one message can ask for several things. The coach has two new tools, `sync_runs` and
   `get_weather`, so "log a niggle, sync my run, and what's Tuesday's weather" gets one answer.
@@ -170,7 +172,8 @@ First tagged version: a working single-athlete coach.
 ### Removed
 - Strava integration: its 2026-06-01 API policy bars storing data or feeding it to AI apps (#16).
 
-[Unreleased]: https://github.com/sydthomas/mara-trainer/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sydthomas/mara-trainer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sydthomas/mara-trainer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sydthomas/mara-trainer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sydthomas/mara-trainer/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sydthomas/mara-trainer/releases/tag/v0.1.0
