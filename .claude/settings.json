@@ -24,6 +24,7 @@
       "Bash(git push *)",
       "Bash(gh issue *)",
       "Bash(gh pr *)",
+      "Bash(gh release *)",
       "Bash(gh repo view *)"
     ],
     "ask": [
