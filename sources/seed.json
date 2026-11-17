@@ -1566,6 +1566,76 @@
       "notes": "Warmer air, rain and headwind went with slower Boston times and tailwind with faster ones; each extra degree C cost all finishers far more time than it cost the winners.",
       "female_evidence": "mixed_unreported",
       "population_note": "580,990 results from 382,209 Boston finishers, a qualifying-time field; sex was a main effect in the models, but weather effects are pooled across sexes."
+    },
+    {
+      "slug": "kwok-deep-water-running-review-2022",
+      "title": "Effectiveness of Deep Water Running on Improving Cardiorespiratory Fitness, Physical Function and Quality of Life: A Systematic Review",
+      "author": "Kwok MMY, So BCL, Heywood S, Lai MCY, Ng SSM",
+      "kind": "review",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9367787/",
+      "topics": [
+        "cross_training",
+        "injury"
+      ],
+      "license": "cc_by",
+      "year": 2022,
+      "trust_reason": "Peer-reviewed systematic review in Int J Environ Res Public Health 19(15):9434 (doi 10.3390/ijerph19159434), CC BY.",
+      "notes": "Across 11 small trials, deep water running improved aerobic fitness about as much as land-based training; in the three trials of trained male runners, 3 to 6 weeks of it gave similar VO2max and run-test results to land running. No meta-analysis (studies too different, several rated poor quality). It did not study injured runners, so it does not say an injured foot or leg can take it.",
+      "female_evidence": "mixed_unreported",
+      "population_note": "287 people in 11 trials, 193 women and 94 men, but the women were mostly older, sedentary or patient groups; the runner and athlete trials were men only, and there is no analysis by sex."
+    },
+    {
+      "slug": "warden-preventing-bone-stress-workload-2021",
+      "title": "Preventing Bone Stress Injuries in Runners with Optimal Workload",
+      "author": "Warden SJ, Edwards WB, Willy RW",
+      "kind": "review",
+      "url": "https://doi.org/10.1007/s11914-021-00666-y",
+      "topics": [
+        "injury",
+        "training"
+      ],
+      "license": "copyrighted",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed review in Curr Osteoporos Rep 19(3):298-307 (doi 10.1007/s11914-021-00666-y) by bone-loading researchers; Springer copyright, with a free-to-read author manuscript in PMC (PMC8316280) that carries no open licence.",
+      "notes": "Argues bone stress injuries come from load beyond what the bone tolerates and that the right load depends on the runner: build training gradually, intensity above all, and after repeat injuries lower bone loading, for example with a higher cadence. Prevention only; the abstract says nothing on cross-training while injured. Abstract checked, full text not reviewed. Cite and link only.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Narrative review covering children through mature runners; full text not reviewed, so the sex mix of the underlying studies is unconfirmed."
+    },
+    {
+      "slug": "kirby-sauna-sex-differences-runners-2021",
+      "title": "Sex differences in adaptation to intermittent post-exercise sauna bathing in trained middle-distance runners",
+      "author": "Kirby NV, Lucas SJE, Cable TG, Armstrong OJ, Weaver SR, Lucas RAI",
+      "kind": "research",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8302716/",
+      "topics": [
+        "recovery",
+        "training"
+      ],
+      "license": "cc_by",
+      "year": 2021,
+      "trust_reason": "Peer-reviewed controlled training study in Sports Med Open 7(1):51 (doi 10.1186/s40798-021-00342-6), CC BY; one of few sauna studies to report women and men separately.",
+      "notes": "Three weeks of about 30 minutes in a hot dry sauna straight after runs, about three times a week, lowered core temperature and heart rate in a heat test and raised VO2max by about 5% in women and men alike. Weak design: runners chose their own group (not randomised), about half of some 80 recruits dropped out, and it was too small for a full comparison by sex. Healthy runners in training, not sauna use with an injury.",
+      "female_evidence": "sex_reported",
+      "population_note": "26 sauna-group runners (16 women, 10 men) and 15 controls (7 women, 8 men), university club middle-distance runners aged about 19-20; women had mixed menstrual and contraceptive status, with hormone effects not analysed."
+    },
+    {
+      "slug": "racinais-cryotherapy-soft-tissue-review-2024",
+      "title": "Cryotherapy for treating soft tissue injuries in sport medicine: a critical review",
+      "author": "Racinais S, Dablainville V, Rousse Y, Ihsan M, Grant ME, Schobersberger W, Budgett R, Engebretsen L",
+      "kind": "review",
+      "url": "https://doi.org/10.1136/bjsports-2024-108304",
+      "topics": [
+        "injury",
+        "recovery"
+      ],
+      "license": "copyrighted",
+      "year": 2024,
+      "trust_reason": "Peer-reviewed critical review in Br J Sports Med 58(20):1215-1223 (doi 10.1136/bjsports-2024-108304) by sports medicine clinicians and researchers; not open access.",
+      "notes": "Finds that cold on a fresh soft tissue injury eases pain, but no human studies show it limits further damage or speeds healing, and some animal work suggests it could slow repair. Suggests it may be used in the first 6 hours for pain, with caution after 12 hours. About icing an injury, not cold plunges for recovery. Abstract checked, full text not reviewed. Cite and link only.",
+      "fetchable": false,
+      "female_evidence": "unknown",
+      "population_note": "Critical review resting largely on animal studies, with few human injury trials; full text not reviewed, so the sex mix of the human evidence is unconfirmed."
     }
   ]
 }
