@@ -58,7 +58,8 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
 - `uv run coach dashboard [--out data/dashboard.html] [--weeks 16] [--today YYYY-MM-DD] [--fit-dir exports/coros]` — local progress page
   (`mara_trainer/dashboard.py`): one offline HTML file (inline CSS + SVG, no scripts, nothing uploaded) with
-  milestones, weekly distance vs plan, long-run build-up, carbs per hour, heart rate at the usual pace
+  milestones, this week (planned vs done per day, no judgement words), weekly distance vs plan (weeks
+  with yellow or red body checks marked), long-run build-up, carbs per hour, heart rate at the usual pace
   (weekly means from `hr_pace`, band named, trend caveat) and the body check log (one mark per entry by
   date and status, shape + color; location in the table); no advice text; a panel with no data says so;
   prints `{path, panels, weeks, generated_for}`

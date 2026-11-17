@@ -69,6 +69,7 @@ def test_empty_db_every_panel_says_no_data(conn: sqlite3.Connection) -> None:
     assert data["generated_for"] == TODAY and data["weeks"] == 4 and data["unit"] == "mi"
     assert [p["id"] for p in data["panels"]] == [
         "milestones",
+        "this_week",
         "weekly_distance",
         "long_run",
         "fueling",
@@ -195,6 +196,7 @@ def test_cli_writes_the_file(tmp_db: Path, tmp_path: Path) -> None:
     assert got["path"] == str(out) and got["weeks"] == 3 and got["generated_for"] == TODAY
     assert [p["id"] for p in got["panels"]] == [
         "milestones",
+        "this_week",
         "weekly_distance",
         "long_run",
         "fueling",
@@ -324,3 +326,152 @@ def test_new_panels_carry_no_advice(conn: sqlite3.Connection, tmp_path: Path) ->
     for word in ("fitter", "fatigue", "should", "rest day", "see a ", "improv"):
         assert word not in tail
     assert "<script" not in page and "http" not in page
+
+
+# ---------------------------------------------------------------- this week
+
+
+def week_section(data: dict[str, Any]) -> str:
+    return dashboard.render_html(data).split('id="this_week"')[1].split("</section>")[0]
+
+
+def test_this_week_without_a_plan_says_so(conn: sqlite3.Connection) -> None:
+    add_run(conn, "2026-03-10T16:00:00.000Z", 6000)
+    data = dashboard.build_data(conn, TODAY, 4)
+    week = panel(data, "this_week")
+    assert week["status"] == "no_data" and week["rows"] == []
+    assert week["start"] == "2026-03-09" and week["end"] == "2026-03-15"
+    section = week_section(data)
+    assert "No data yet" in section and "No accepted plan yet" in section
+    assert "<table" not in section
+
+
+def test_this_week_outside_the_plan_says_so(full: sqlite3.Connection) -> None:
+    data = dashboard.build_data(full, "2026-02-18", 1)  # the week before plan week 1
+    week = panel(data, "this_week")
+    assert week["status"] == "no_data" and week["rows"] == []
+    assert "This week is not in the accepted plan" in week_section(data)
+
+
+def test_this_week_planned_next_to_done(full: sqlite3.Connection) -> None:
+    data = dashboard.build_data(full, TODAY, 4)
+    week = panel(data, "this_week")
+    assert week["status"] == "ok"
+    rows = week["rows"]
+    assert [r["date"] for r in rows] == [f"2026-03-{d:02d}" for d in range(9, 16)]  # Monday first
+    plan = db.load_accepted_plan(full)
+    assert plan is not None
+    sessions = next(w for w in plan["weeks"] if w["start_date"] == "2026-03-09")["sessions"]
+    by_day = {s["day"]: s for s in sessions}  # 0=Sunday ... 6=Saturday
+    order = [1, 2, 3, 4, 5, 6, 0]
+    assert [r["kind"] for r in rows] == [by_day[d]["kind"] for d in order]
+    assert [r["planned_meters"] for r in rows] == [
+        by_day[d]["distance_meters"] if by_day[d]["kind"] not in ("rest", "strength") else None
+        for d in order
+    ]
+    assert rows[0]["kind"] == "rest" and rows[6]["kind"] == "long"
+    # Done: only the days with an imported run have a distance; the rest stay missing, not zero.
+    assert [r["done_meters"] for r in rows] == [None, 6000, None, None, None, None, 12000]
+    assert [r["run_count"] for r in rows] == [0, 1, 0, 0, 0, 0, 1]
+    assert not any(r["future"] for r in rows)
+
+    section = week_section(data)
+    assert "<svg" not in section and "No data yet" not in section
+    long_miles = f"{by_day[0]['distance_meters'] / 1609.344:.1f} mi"
+    assert f"<td>Sun Mar 15</td><td>Long run {long_miles}</td><td>7.5 mi</td>" in section
+    assert f"<td>Mon Mar 9</td><td>Rest</td><td>{dashboard.MISSING}</td>" in section
+    assert "0.0 mi" not in section
+
+
+def test_this_week_future_days_show_nothing_done(full: sqlite3.Connection) -> None:
+    data = dashboard.build_data(full, "2026-03-11", 4)  # a Wednesday
+    rows = panel(data, "this_week")["rows"]
+    assert [r["future"] for r in rows] == [False, False, False, True, True, True, True]
+    assert [r["done_meters"] for r in rows] == [None, 6000, None, None, None, None, None]
+    assert all(r["kind"] is not None for r in rows)  # the plan still shows for the days ahead
+    section = week_section(data)
+    assert f"<td>Wed Mar 11</td><td>Rest</td><td>{dashboard.MISSING}</td>" in section
+    assert "<td>Fri Mar 13</td><td>Rest</td><td></td>" in section  # ahead: no dash, no zero
+    assert section.count("<td></td>") == 4
+
+
+def test_this_week_two_runs_one_day_and_other_kinds(full: sqlite3.Connection) -> None:
+    add_run(full, "2026-03-11T01:00:00.000Z", 3000)  # 6pm Tuesday in Los Angeles: same local day
+    data = dashboard.build_data(full, TODAY, 4)
+    week = panel(data, "this_week")
+    assert week["rows"][1]["done_meters"] == 9000 and week["rows"][1]["run_count"] == 2
+    week["rows"][2] = {**week["rows"][2], "kind": "strength"}
+    week["rows"][4] = {**week["rows"][4], "kind": None}  # a day the plan has no session for
+    section = week_section(data)
+    assert "<td>5.6 mi (2 runs)</td>" in section
+    assert "<td>Wed Mar 11</td><td>Strength</td>" in section
+    assert f"<td>Fri Mar 13</td><td>{dashboard.MISSING}</td>" in section
+
+
+def test_this_week_km_and_no_judgement_words(full: sqlite3.Connection) -> None:
+    with full:
+        full.execute("UPDATE athlete SET units = 'km' WHERE id = 1")
+    section = week_section(dashboard.build_data(full, "2026-03-13", 4))
+    assert "<td>6.0 km</td>" in section
+    low = section.lower()
+    for word in ("missed", "skipped", "behind", "should", "on track", "great", "well done"):
+        assert word not in low
+
+
+# ---------------------------------------------------------------- body checks on weekly distance
+
+
+def test_weekly_distance_marks_weeks_with_yellow_or_red(full: sqlite3.Connection) -> None:
+    for day, status in [
+        ("2026-02-10", "red"),  # before the window
+        ("2026-02-17", "green"),  # green is not marked
+        ("2026-03-03", "yellow"),
+        ("2026-03-05", "yellow"),
+        ("2026-03-08", "red"),  # Sunday: still the week of 03-02
+        ("2026-03-12", "red"),
+        ("2026-03-20", "red"),  # after today
+    ]:
+        body.add_entry(full, body.BodyEntry(date=day, status=status, location="left <shin>"))
+    data = dashboard.build_data(full, TODAY, 4)
+    weekly = panel(data, "weekly_distance")
+    assert [r["body"] for r in weekly["rows"]] == [{}, {}, {"yellow": 2, "red": 1}, {"red": 1}]
+    assert all("body" not in r for r in panel(data, "long_run")["rows"])
+
+    section = dashboard.render_html(data).split('id="weekly_distance"')[1].split("</section>")[0]
+    chart = section.split('<div class="chart">')[1].split("</div>")[0]
+    assert chart.count('<path class="st-yellow"') == 1  # one mark per week and status
+    assert chart.count('<rect class="st-red"') == 2
+    assert "st-green" not in section
+    assert "body checks: 2 yellow, 1 red</title>" in chart
+    assert "body checks: 1 red</title>" in chart
+    assert chart.count("body checks:") == 2
+    assert "yellow or red body check" in chart.split(">")[0]  # the chart's own description
+    legend = section.split('<div class="legend">')[1].split("</div>")[0]
+    assert "Yellow body check</span>" in legend and "Red body check</span>" in legend
+    assert "<th>Yellow or red body checks</th>" in section
+    assert "<td>2026-03-02</td><td>14.3 mi</td>" in section
+    assert "<td>2 yellow, 1 red</td></tr>" in section and "<td>1 red</td></tr>" in section
+    assert section.count("<td>none</td>") == 2
+    assert "shin" not in section  # where it is stays in the body check log
+    low = section.lower()
+    for word in ("should", "rest", "injur", "see a ", "careful", "risk"):
+        assert word not in low
+
+
+def test_weekly_distance_without_yellow_or_red_has_no_marks(full: sqlite3.Connection) -> None:
+    body.add_entry(full, body.BodyEntry(date="2026-03-12", status="green"))
+    data = dashboard.build_data(full, TODAY, 4)
+    assert all(r["body"] == {} for r in panel(data, "weekly_distance")["rows"])
+    section = dashboard.render_html(data).split('id="weekly_distance"')[1].split("</section>")[0]
+    assert 'class="st-' not in section and "body check" not in section.split("<details>")[0]
+    assert "Yellow body check" not in section
+
+
+def test_only_a_red_entry_legend_names_only_red(conn: sqlite3.Connection) -> None:
+    add_run(conn, "2026-03-10T16:00:00.000Z", 6000)
+    body.add_entry(conn, body.BodyEntry(date="2026-03-12", status="red", pain=7))
+    data = dashboard.build_data(conn, TODAY, 4)
+    assert panel(data, "weekly_distance")["rows"][3]["body"] == {"red": 1}
+    section = dashboard.render_html(data).split('id="weekly_distance"')[1].split("</section>")[0]
+    assert "Red body check</span>" in section and "Yellow body check" not in section
+    assert section.split('<div class="chart">')[1].count('<rect class="st-red"') == 1

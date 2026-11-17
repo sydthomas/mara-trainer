@@ -3,7 +3,8 @@
 Two layers. `build_data` returns a plain dict with a list of panels; every number in it comes
 from the existing rollups (`summaries`), plan readers (`reports`), the fueling log, the
 heart-rate-at-pace report (`hr_pace`, read from FIT files) and the body log (`body`); nothing is
-re-derived here and no panel carries advice. `render_html` turns that dict into one HTML string:
+re-derived here and no panel carries advice (planned next to done, never a verdict).
+`render_html` turns that dict into one HTML string:
 inline CSS, inline SVG, no scripts and no external requests, so it opens offline and nothing
 leaves the laptop.
 
@@ -24,10 +25,11 @@ from zoneinfo import ZoneInfo
 
 from . import body, db, fueling, hr_pace, reports
 from .dates import date_in_timezone, parse_instant
-from .summaries import Summary, summarize_range, week_bounds, weekly_rollups
+from .summaries import Activity, Summary, summarize_range, week_bounds, weekly_rollups
 
 MAX_WEEKS = 104
 METERS = {"mi": 1609.344, "km": 1000.0}
+MARKED_STATUSES = tuple(s for s in body.STATUSES if s != "green")  # weekly-distance marks
 
 
 class DashboardError(ValueError):
@@ -47,6 +49,7 @@ def _columns_panel(
     value_label: str,
     target_label: str | None = None,
     row_label: str = "Week of",
+    marks_label: str | None = None,
     note: str | None = None,
     empty: str,
 ) -> dict[str, Any]:
@@ -61,6 +64,7 @@ def _columns_panel(
         "value_label": value_label,
         "target_label": target_label,
         "row_label": row_label,
+        "marks_label": marks_label,  # set when rows carry `body` (yellow/red counts per week)
         "note": note,
         "empty": empty,
         "rows": rows,
@@ -71,6 +75,63 @@ def _planned_long(week: dict[str, Any] | None) -> int | None:
     if not week:
         return None
     return next((s["distance_meters"] for s in week["sessions"] if s["kind"] == "long"), None)
+
+
+def _this_week(
+    plan: dict[str, Any] | None, activities: list[Activity], tz: str, today: str, now: datetime
+) -> dict[str, Any]:
+    """The Monday-Sunday week containing `today`: each day's planned session (`reports.plan_week`)
+    next to the runs logged that athlete-local day (`summarize_range`). Planned and done only.
+    A day with no run has no done distance (missing, not zero); days after `today` are `future`."""
+    start, end = week_bounds(today)
+    week = reports.plan_week(plan, today)
+    rows: list[dict[str, Any]] = []
+    if week:
+        planned = {s["date"]: s for s in week["sessions"]}
+        for offset in range(7):
+            day = (date.fromisoformat(start) + timedelta(days=offset)).isoformat()
+            session = planned.get(day)
+            kind = session["kind"] if session else None
+            done = summarize_range(activities, [], tz, day, day, now)
+            rows.append(
+                {
+                    "date": day,
+                    "kind": kind,  # None = the plan has no session for this day
+                    "planned_meters": (
+                        session["distance_meters"]
+                        if session and kind not in ("rest", "strength")
+                        else None
+                    ),
+                    "done_meters": done.distance_meters if done.run_count else None,
+                    "run_count": done.run_count,
+                    "future": day > today,
+                }
+            )
+    return {
+        "id": "this_week",
+        "title": "This week",
+        "kind": "week",
+        "status": "ok" if week else "no_data",
+        "subtitle": (
+            f"{_day(start)} to {_day(end)}: each day's session in the accepted plan next to "
+            "the runs logged that day."
+        ),
+        "note": f"A dash means no run logged that day. Days after {_day(today)} are left blank.",
+        "empty": ("This week is not in the accepted plan." if plan else "No accepted plan yet."),
+        "start": start,
+        "end": end,
+        "rows": rows,
+    }
+
+
+def _body_by_week(conn: sqlite3.Connection, start: str, today: str) -> dict[str, dict[str, int]]:
+    """Yellow and red body checks from `start` through `today`, counted per Monday-Sunday week
+    exactly as reported (`body.open_items`). Green entries are not counted here."""
+    out: dict[str, dict[str, int]] = {}
+    for entry in body.open_items(conn, start, today):
+        counts = out.setdefault(week_bounds(entry["date"])[0], {})
+        counts[entry["status"]] = counts.get(entry["status"], 0) + 1
+    return out
 
 
 def _milestones(
@@ -222,6 +283,7 @@ def build_data(
     rollups = weekly_rollups(activities, [], tz, weeks, now)
     plan_weeks = [reports.plan_week(plan, w.start_date) for w in rollups]
     no_plan = None if plan else "No accepted plan yet, so only logged runs are shown."
+    flagged = _body_by_week(conn, rollups[0].start_date, today)
 
     weekly = _columns_panel(
         "weekly_distance",
@@ -232,12 +294,19 @@ def build_data(
                 "date": w.start_date,
                 "value": w.distance_meters if w.run_count else None,
                 "target": p["target_distance_meters"] if p else None,
+                # yellow / red body checks that week, in that order; {} = none
+                "body": {
+                    s: flagged[w.start_date][s]
+                    for s in MARKED_STATUSES
+                    if s in flagged.get(w.start_date, {})
+                },
             }
             for w, p in zip(rollups, plan_weeks, strict=True)
         ],
         measure="distance",
         value_label="Run",
         target_label="Plan target",
+        marks_label="Yellow or red body checks",
         note=no_plan,
         empty="Import runs or accept a plan to see weekly distance.",
     )
@@ -292,6 +361,7 @@ def build_data(
         "race": {"name": race.race_name, "date": race.race_date} if race else None,
         "panels": [
             _milestones(everything, all_weeks, race, today),
+            _this_week(plan, activities, tz, today, now),
             weekly,
             long_run,
             fuel,
@@ -404,11 +474,14 @@ def _svg_columns(panel: dict[str, Any], unit: str) -> str:
     values = [_scaled(r["value"], measure, unit) for r in rows]
     targets = [_scaled(r["target"], measure, unit) for r in rows]
     ticks = _ticks(max([v for v in values + targets if v is not None], default=1.0))
-    left, right, top, bottom = 36, 12, 22, 26
+    # Body-check marks sit in their own strip above the plot, one per status, stacked.
+    marks = [list(r.get("body") or {}) for r in rows]
+    strip = max(map(len, marks)) * 14 + 6 if any(marks) else 0
+    left, right, top, bottom = 36, 12, 22 + strip, 26
     n = len(rows)
     band = max(24.0, (480 - left - right) / n)
     width = left + right + band * n
-    height = 230
+    height = 230 + strip
     floor = height - bottom
     scale = (floor - top) / ticks[-1]
     bar = min(24.0, band - 6)
@@ -418,7 +491,8 @@ def _svg_columns(panel: dict[str, Any], unit: str) -> str:
     min_width = 0 if width <= 480 else width * 0.75  # more weeks than fit: scroll, newest first
     out = [
         f'<svg viewBox="0 0 {width:g} {height}" style="min-width:{min_width:g}px" '
-        f'role="img" aria-label="{escape(panel["title"])}: {escape(panel["subtitle"])}">'
+        f'role="img" aria-label="{escape(panel["title"])}: {escape(panel["subtitle"])}'
+        f'{" Weeks with a yellow or red body check are marked above the bars." if strip else ""}">'
     ]
     axis_unit = unit if measure == "distance" else "g/h"
     out.append(f'<text x="0" y="12">{escape(axis_unit)}</text>')
@@ -465,6 +539,10 @@ def _svg_columns(panel: dict[str, Any], unit: str) -> str:
         )
         if panel["target_label"] and row["target"] is not None:
             tip += f", {panel['target_label']} {_amount(row['target'], measure, unit)}"
+        for k, status in enumerate(marks[i]):
+            out.append(_status_mark(status, mid, 16 + 14 * k))
+        if marks[i]:
+            tip += f", body checks: {_body_counts(row['body'])}"
         out.append(
             f'<rect class="hit" x="{x0:g}" y="{top}" width="{band:g}" height="{floor - top}">'
             f"<title>{escape(tip)}</title></rect>"
@@ -473,12 +551,20 @@ def _svg_columns(panel: dict[str, Any], unit: str) -> str:
     return "".join(out)
 
 
+def _body_counts(counts: dict[str, int]) -> str:
+    """'2 yellow, 1 red': the week's counts as reported, or 'none'."""
+    return ", ".join(f"{n} {status}" for status, n in counts.items()) or "none"
+
+
 def _table(panel: dict[str, Any], unit: str) -> str:
     measure = panel["measure"]
     target_label = panel["target_label"]
+    marks_label = panel.get("marks_label")
     head = f"<th>{escape(panel['row_label'])}</th><th>{escape(panel['value_label'])}</th>"
     if target_label:
         head += f"<th>{escape(target_label)}</th>"
+    if marks_label:
+        head += f"<th>{escape(marks_label)}</th>"
     body = []
     for row in panel["rows"]:
         cells = (
@@ -486,6 +572,8 @@ def _table(panel: dict[str, Any], unit: str) -> str:
         )
         if target_label:
             cells += f"<td>{escape(_amount(row['target'], measure, unit))}</td>"
+        if marks_label:
+            cells += f"<td>{escape(_body_counts(row.get('body') or {}))}</td>"
         body.append(f"<tr>{cells}</tr>")
     return (
         "<details><summary>Show as a table</summary><table><thead><tr>"
@@ -497,11 +585,18 @@ def _render_columns(panel: dict[str, Any], unit: str) -> str:
     parts = [f'<p class="sub">{escape(panel["subtitle"])}</p>']
     if panel["status"] != "ok":
         return parts[0] + _empty(panel)
-    if panel["target_label"]:  # two marks: name both; one series needs no legend
-        parts.append(
-            f'<div class="legend"><span><i class="sw"></i>{escape(panel["value_label"])}</span>'
-            f'<span><i class="tk"></i>{escape(panel["target_label"])}</span></div>'
+    seen = {s for r in panel["rows"] for s in r.get("body") or {}}
+    if panel["target_label"] or seen:  # several marks: name each; one series needs no legend
+        legend = f'<span><i class="sw"></i>{escape(panel["value_label"])}</span>'
+        if panel["target_label"]:
+            legend += f'<span><i class="tk"></i>{escape(panel["target_label"])}</span>'
+        legend += "".join(
+            f'<span><svg viewBox="0 0 14 14" aria-hidden="true">{_status_mark(s, 7, 7)}</svg>'
+            f"{_STATUS_LABELS[s]} body check</span>"
+            for s in MARKED_STATUSES
+            if s in seen
         )
+        parts.append(f'<div class="legend">{legend}</div>')
     parts.append(f'<div class="chart">{_svg_columns(panel, unit)}</div>')
     if panel["note"]:
         parts.append(f'<p class="note">{escape(panel["note"])}</p>')
@@ -710,7 +805,49 @@ def _render_timeline(panel: dict[str, Any], unit: str) -> str:
     return "".join(parts)
 
 
+_KIND_LABELS = {
+    "easy": "Easy run",
+    "workout": "Workout",
+    "long": "Long run",
+    "race": "Race",
+    "strength": "Strength",
+    "rest": "Rest",
+}
+
+
+def _render_week(panel: dict[str, Any], unit: str) -> str:
+    """Planned next to done, one row per day. Past day without a run: a dash; day ahead: blank."""
+    parts = [f'<p class="sub">{escape(panel["subtitle"])}</p>']
+    if panel["status"] != "ok":
+        return parts[0] + _empty(panel)
+    body_rows = []
+    for row in panel["rows"]:
+        if row["kind"] is None:
+            planned = MISSING
+        else:
+            planned = _KIND_LABELS.get(row["kind"], row["kind"])
+            if row["planned_meters"] is not None:
+                planned += f" {_amount(row['planned_meters'], 'distance', unit)}"
+        if row["future"]:
+            done = ""
+        else:
+            done = _amount(row["done_meters"], "distance", unit)
+            if row["run_count"] > 1:
+                done += f" ({row['run_count']} runs)"
+        label = date.fromisoformat(row["date"]).strftime("%a %b %-d")
+        body_rows.append(
+            f"<tr><td>{escape(label)}</td><td>{escape(planned)}</td><td>{escape(done)}</td></tr>"
+        )
+    parts.append(
+        '<table class="txt"><thead><tr><th>Day</th><th>Planned</th><th>Done</th></tr></thead>'
+        f"<tbody>{''.join(body_rows)}</tbody></table>"
+    )
+    parts.append(f'<p class="note">{escape(panel["note"])}</p>')
+    return "".join(parts)
+
+
 _RENDERERS = {
+    "week": _render_week,
     "columns": _render_columns,
     "tiles": _render_tiles,
     "hr_pace": _render_hr_pace,
