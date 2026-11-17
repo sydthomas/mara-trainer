@@ -3,8 +3,8 @@ section: cross-training
 title: Cross-training and concurrent training
 status: approved
 approved_by: Sydney
-approved_on: 2026-10-26
-content_sha256: 96e56626860872cdd5b155da4024147a52f23fee4405e61b52282e9e397909e9
+approved_on: 2026-11-17
+content_sha256: ca14a9c897b6af71652fa9b126904b98b8f0061426a3e548a2f7b6783686086a
 ---
 # Cross-training and concurrent training
 

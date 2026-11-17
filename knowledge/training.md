@@ -3,8 +3,8 @@ section: training
 title: Marathon training
 status: approved
 approved_by: Sydney
-approved_on: 2026-11-16
-content_sha256: d61691209ace31a3ac131be4a0d064a90b556e099884f0b35a2421a6268131ff
+approved_on: 2026-11-17
+content_sha256: 833cac4857b2e2a80e47e25f5a3031b1109ead298a7637c16909f092e12c24bc
 ---
 # Marathon training
 
