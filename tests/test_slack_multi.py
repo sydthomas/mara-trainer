@@ -162,7 +162,8 @@ def test_yes_with_a_number_means_nothing_when_one_thing_waits() -> None:
     bot = _debrief_bot(coach, shared, _la(7, 8))
     bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
     bot.handle(_dm("yes 2"), client)  # not a known reply here: the coach gets it
-    assert _entries(shared) == [] and client.posted[-1]["text"] == "Which one?"
+    assert _entries(shared) == [] and client.posted[-1]["text"].startswith("Which one?")
+    assert client.posted[-1]["text"].endswith(slack_bot.BODY_QUESTION)  # still open, said in code
 
 
 # --- the coach's channel actions
@@ -366,7 +367,9 @@ def test_ok_thanks_after_a_follow_up_does_not_save_or_push_the_waiting_week() ->
     assert coach.calls[1][0] == "why is Thursday so short?"
     bot.handle(_dm("ok thanks"), client)
     assert coach.calls[2][0] == "ok thanks"  # thanks for the answer, not a yes to the week
-    assert client.posted[-1]["text"] == "Anytime."
+    assert client.posted[-1]["text"].startswith("Anytime.")
+    assert client.posted[-1]["text"].endswith(slack_bot.WEEK_QUESTION)  # says it is still open
+    assert "isn't saved yet" in client.posted[-1]["text"]
     assert push.days == [] and _week_details(shared, start) != "Leg press 3x10."
     assert not any(m["text"].startswith("Saved Week") for m in client.posted)
     rows = shared.conn.execute("SELECT status FROM training_plans").fetchall()
@@ -388,3 +391,54 @@ def test_no_thanks_drops_a_waiting_fueling_entry() -> None:
     assert bot.conversations["D1"].pending is None
     bot.handle(_dm("yes"), client)  # nothing waits any more: a late yes saves nothing
     assert _fuel_count(shared) == 0
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["yes and save to coros", "Yes, push it to my watch!", "yes and put them on my COROS watch"],
+)
+def test_yes_with_watch_words_saves_and_pushes_the_week_as_yes_does(reply: str) -> None:
+    assert _week_reply(reply) == _week_reply("yes")
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "yes save only",
+        "yes and no watch",
+        "yes but not on coros",
+        "yes and add a mile",
+        "yes and",
+        "ok and",
+        "yes and...",
+        "yes add",
+        "ok send",
+        "sure sync",
+        "yes sync them",
+        "yes send it",
+        "yes put",
+        "yes and don't push to coros",
+        "yes, save it, not to the watch",
+        "yes send it to my coach",
+        "save it to my notes",
+    ],
+)
+def test_yes_with_other_words_is_not_a_plain_yes(reply: str) -> None:
+    assert not slack_bot.YES.match(reply)
+
+
+def test_ok_save_to_coros_is_a_yes() -> None:
+    assert slack_bot.YES.match("ok save to coros") and slack_bot.YES.match("yes and save it")
+
+
+def test_the_reminder_points_at_the_earlier_proposal_and_stays_out_of_the_history() -> None:
+    shared, proposal, start, today = _week_proposal()
+    client, push = SlackFake(), FakePush()
+    coach = WeekCoach(["Save this week?", "Thursday is easy on purpose."], proposal)
+    bot = _week_bot(coach, shared, today, push)
+    bot.handle(_dm("all good"), client)
+    bot.handle(_dm("why is Thursday so short?"), client)
+    shown = client.posted[-1]["text"]
+    assert "proposed earlier isn't saved yet" in shown and shown.count("isn't saved yet") == 1
+    turns = bot.conversations["D1"].turns
+    assert turns[-1]["content"] == "Thursday is easy on purpose."  # the coach never sees it

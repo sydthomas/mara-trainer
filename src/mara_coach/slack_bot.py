@@ -251,6 +251,27 @@ def body_line(entry: dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
+FUEL_QUESTION = "Reply *yes* to save it, or *no*."
+WEEK_REJECTED = (
+    "That week didn't pass the plan checks, so nothing is waiting to be saved now. "
+    "Ask me for the week again when you're ready."
+)
+
+
+def still_waiting(convo: Conversation) -> str | None:
+    """The open yes/no question again, when a coach reply leaves an earlier proposal waiting.
+    Built in code: the coach can't know whether anything was saved."""
+    if isinstance(convo.pending, WeekProposal):
+        return "The week I proposed earlier isn't saved yet. " + WEEK_QUESTION
+    if isinstance(convo.pending, body.BodyEntry):
+        if convo.more:
+            return "The two entries I showed earlier aren't saved yet. " + BOTH_QUESTION
+        return "The body log entry I showed earlier isn't saved yet. " + BODY_QUESTION
+    if isinstance(convo.pending, fueling.FuelEntry):
+        return "The fueling entry from earlier isn't saved yet. " + FUEL_QUESTION
+    return None
+
+
 def ask_to_log_body(answer: str, entry: body.BodyEntry) -> str:
     """The coach's reply, then the entry and the bot's own yes / no question."""
     return f"{answer.rstrip()}\n\n*Body log entry* {body_line(asdict(entry))}\n{BODY_QUESTION}"
@@ -407,7 +428,17 @@ SKIPPED = "Okay, skipped those."
 # A yes may carry a few plain words ("yes log it", "ok save it please"); anything longer goes
 # to the coach. "yes 1" and "save only" have their own patterns. A trailing "thanks" counts
 # only after a plain yes: "ok thanks" is an acknowledgement, not a yes to save.
-_YES_VERBS = r"please|log(?:\s+(?:it|that))?|save(?:\s+(?:it|that))?|do\s+it|go\s+ahead"
+# "yes and save to coros", "yes push it to my watch": still a plain yes ("save only" is not).
+_YES_OBJECT = r"(?:\s+(?:it|that|them|this|the\s+(?:runs|week)))?"
+_YES_WATCH = r"(?:\s+(?:to|on|onto)\s+(?:my\s+|the\s+)?(?:coros(?:\s+watch)?|watch))?"
+_YES_WATCH_NEEDED = r"\s+(?:to|on|onto)\s+(?:my\s+|the\s+)?(?:coros(?:\s+watch)?|watch)"
+# "and" only joins on a verb ("yes and" alone is an unfinished sentence, not a yes); push, put
+# and send need the watch named ("yes send" could be the start of anything).
+_YES_VERBS = (
+    r"please|do\s+it|go\s+ahead|log(?:\s+(?:it|that))?"
+    rf"|(?:and\s+)?save{_YES_OBJECT}{_YES_WATCH}"
+    rf"|(?:and\s+)?(?:push|put|send){_YES_OBJECT}{_YES_WATCH_NEEDED}"
+)
 YES = re.compile(
     r"^\s*(?:"
     rf"(?:y|yes|yep|yeah|yup)\b(?:[\s,]+(?:{_YES_VERBS}|thanks|thank\s+you))*"
@@ -1742,7 +1773,8 @@ class SlackCoach:
             entry = proposed_entry(messages)
             niggle = proposed_body(messages)
             week = proposed_week(messages)
-            if week is not None and self._revised_week(conn, week)[0] is None:
+            week_rejected = week is not None and self._revised_week(conn, week)[0] is None
+            if week_rejected:
                 week = None
         except CoachError:
             log.warning("coach could not finish a Slack reply")
@@ -1789,13 +1821,22 @@ class SlackCoach:
                 answer += "\n\n" + credit_line(forecasts)
             if notes:
                 answer += "\n\n" + "\n".join(dict.fromkeys(notes))
+        # Said in code and kept out of the coach's history: what is (or isn't) still open.
+        tail = ""
+        if answer != FAILED and not proposals:
+            if week_rejected and isinstance(convo.pending, WeekProposal):
+                # A yes must never save an older week under a reply that describes another.
+                convo.pending = None
+                tail = "\n\n" + WEEK_REJECTED
+            elif waiting := still_waiting(convo):
+                tail = "\n\n" + waiting
         convo.turns += [
             {"role": "user", "content": text},
             {"role": "assistant", "content": answer},
         ]
         convo.turns = convo.turns[-2 * MAX_TURNS :]
         self._save_turns(convo)
-        return answer
+        return answer + tail
 
 
 def _state(conn: sqlite3.Connection, key: str) -> str | None:
