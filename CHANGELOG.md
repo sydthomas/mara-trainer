@@ -11,6 +11,10 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   body checks (same shapes as the body check log, with a legend and table column).
 
 ### Changed
+- Body check: when what she describes matches a reason to get assessed in the approved
+  `health-referrals` section (gradual bone pain, one spot, sore to press, with walking, redness or
+  warmth), the coach refers before more running and offers to lower the week, whatever colour she
+  gave. No diagnosis, her colour is kept, no checklist quiz.
 - Knowledge base: five sections updated from the 11 sources approved 2026-11-15 (single-run
   spikes and the 10% rule in `training`; bone-stress warning signs and clinician-managed return in
   `health-referrals`; cold-water immersion, HRV across the cycle and overtraining in `recovery`

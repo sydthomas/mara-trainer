@@ -156,7 +156,8 @@ be summarized. If no approved source covers a question, the coach says so.
   fueling entry proposed together wait together ("yes" saves both, "yes 1" / "yes 2" one, "no"
   neither); a week is always its own yes. The coach never clears her to run or reads a
   pain number as clearance; red gets a referral and an offer to lower the week (`propose_week`
-  cut). The week's yellow/red entries go into the Sunday check-in. Sundays at 6pm local it
+  cut), and so does anything matching a reason to get assessed in the approved `health-referrals`
+  section (bone-stress signs), whatever colour she gave; never a diagnosis. The week's yellow/red entries go into the Sunday check-in. Sundays at 6pm local it
   syncs the week's runs from COROS in code, then sends one weekly check-in (last week recap + next week
   preview + one question: how the week felt, what's coming up, and the long-run debrief if it was
   missed). Her reply (through Monday) logs a missed debrief first (yes), and is tagged so the
