@@ -174,8 +174,11 @@ def test_system_prompt_restore_needs_a_professional() -> None:
     for phrase in (
         "propose_week with restore true",
         "ONLY when she tells you a qualified professional",
-        "never clear her yourself",
+        "never go beyond them, and never clear her yourself",
+        "your default, not theirs",
         "needs her yes",
-        "restore isn't available",
+        "she hasn't seen anyone, restore isn't available",
+        "can't get the sessions back with a plain propose_week either",
+        "an illness like a cold that has passed, and no pain is involved",
     ):
-        assert phrase in section, phrase
+        assert phrase in " ".join(section.split()), phrase

@@ -1019,17 +1019,19 @@ class SlackCoach:
     def _revised_week(
         self, conn: sqlite3.Connection, week: WeekProposal
     ) -> tuple[dict[str, Any] | None, list[str]]:
-        plan = db.load_accepted_plan(conn)
-        original = None
-        if week.restore:  # looked up again at save time: the plan may have changed since
-            original = reports.lowered_from(db.load_archived_plans(conn), plan, week.start_date)
+        plan, setup = db.load_accepted_plan(conn), db.load_race_setup(conn)
         try:
+            original = None
+            if week.restore:  # looked up again at save time: the plan may have changed since
+                original = reports.lowered_from(
+                    db.load_archived_plans(conn), plan, week.start_date, setup
+                )
             return reports.revise_week(
                 plan,
                 week.start_date,
                 week.sessions,
                 self.today(conn),
-                db.load_race_setup(conn),
+                setup,
                 week.cut,
                 week.restore,
                 original,

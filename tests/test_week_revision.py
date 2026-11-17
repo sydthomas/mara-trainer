@@ -249,25 +249,89 @@ def test_original_week_is_found_in_the_archived_plans(conn: sqlite3.Connection) 
     start, today, sessions = _week(plan)
     db.save_plan(conn, {**plan, "weeks": plan["weeks"][2:]})  # an older plan without this week
     db.save_plan(conn, plan)
-    assert reports.lowered_from(db.load_archived_plans(conn), plan, start) is None  # never lowered
+    assert (
+        reports.lowered_from(db.load_archived_plans(conn), plan, start, None) is None
+    )  # never lowered
     _strength(sessions)["details"] = "Leg press 3x10."
     rewritten, _ = reports.revise_week(plan, start, sessions, today, None)
     assert rewritten is not None
     db.save_plan(conn, rewritten)
-    assert reports.lowered_from(db.load_archived_plans(conn), rewritten, start) is None
+    assert reports.lowered_from(db.load_archived_plans(conn), rewritten, start, None) is None
     once, _ = reports.revise_week(rewritten, start, _half(rewritten), today, None, cut=True)
     assert once is not None
     db.save_plan(conn, once)
-    found = reports.lowered_from(db.load_archived_plans(conn), once, start)
+    found = reports.lowered_from(db.load_archived_plans(conn), once, start, None)
     assert found is not None and found["sessions"] == rewritten["weeks"][1]["sessions"]  # newest
     twice, _ = reports.revise_week(once, start, _ill(sessions), today, None, cut=True)
     assert twice is not None
     db.save_plan(conn, twice)
-    found = reports.lowered_from(db.load_archived_plans(conn), twice, start)
+    found = reports.lowered_from(db.load_archived_plans(conn), twice, start, None)
     assert found is not None and found["sessions"] == rewritten["weeks"][1]["sessions"]
     later = plan["weeks"][2]["start_date"]
-    assert reports.lowered_from(db.load_archived_plans(conn), twice, later) is None
-    assert reports.lowered_from(db.load_archived_plans(conn), twice, "2000-01-03") is None
+    assert reports.lowered_from(db.load_archived_plans(conn), twice, later, None) is None
+    assert reports.lowered_from(db.load_archived_plans(conn), twice, "2000-01-03", None) is None
+
+
+def test_original_is_the_newest_version_that_fits_not_the_biggest(conn: sqlite3.Connection) -> None:
+    plan = _plan()
+    start, today, sessions = _week(plan, 4)  # a week with a workout
+    db.save_plan(conn, plan)
+    workout = next(s for s in sessions if s["kind"] == "workout")
+    workout.update(kind="easy", distance_meters=workout["distance_meters"] - 50, details="Easy.")
+    rewritten, problems = reports.revise_week(plan, start, sessions, today, None)
+    assert problems == [] and rewritten is not None  # a few metres smaller, still on target
+    db.save_plan(conn, rewritten)
+    lowered, problems = reports.revise_week(rewritten, start, _ill(sessions), today, None, cut=True)
+    assert problems == [] and lowered is not None
+    db.save_plan(conn, lowered)
+    found = reports.lowered_from(db.load_archived_plans(conn), lowered, start, None)
+    assert found is not None and found["sessions"] == rewritten["weeks"][4]["sessions"]
+    _, _, with_workout = _week(plan, 4)
+    back, problems = reports.revise_week(
+        lowered, start, with_workout, today, None, restore=True, original_week=found
+    )
+    assert back is None and any("into workout" in p for p in problems)  # the workout stays gone
+    back, problems = reports.revise_week(
+        lowered, start, sessions, today, None, restore=True, original_week=found
+    )
+    assert problems == [] and back is not None
+
+
+def test_an_older_bigger_plan_does_not_block_a_restore(conn: sqlite3.Connection) -> None:
+    plan = _plan()
+    start, today, sessions = _week(plan)
+    older = copy.deepcopy(plan)  # an earlier plan whose week had a higher target
+    next(s for s in older["weeks"][1]["sessions"] if s["kind"] == "easy")["distance_meters"] += 5000
+    db.save_plan(conn, older)
+    db.save_plan(conn, plan)
+    assert reports.lowered_from(db.load_archived_plans(conn), plan, start, None) is None
+    lowered, _ = reports.revise_week(plan, start, _ill(sessions), today, None, cut=True)
+    assert lowered is not None
+    db.save_plan(conn, lowered)
+    found = reports.lowered_from(db.load_archived_plans(conn), lowered, start, None)
+    assert found is not None and found["sessions"] == plan["weeks"][1]["sessions"]
+    back, problems = reports.revise_week(
+        lowered, start, sessions, today, None, restore=True, original_week=found
+    )
+    assert problems == [] and back is not None
+
+
+def test_a_lowered_week_only_comes_back_with_restore() -> None:
+    plan = _plan()
+    lowered, _, start, today = _lowered(plan)
+    _, _, full = _week(plan)
+    back, problems = reports.revise_week(lowered, start, full, today, None)
+    assert back is None and problems == [
+        "this week was lowered; sessions come back only with restore"
+    ]
+    half_plan, problems = reports.revise_week(plan, start, _half(plan), today, None, cut=True)
+    assert problems == [] and half_plan is not None  # partly lowered: the same rule
+    back, problems = reports.revise_week(half_plan, start, full, today, None)
+    assert back is None and "only with restore" in problems[0]
+    later, _, coming = _week(lowered, 2)  # the next, un-lowered week is written as usual
+    _strength(coming)["details"] = "Leg press 3x10."
+    again, problems = reports.revise_week(lowered, later, coming, start, None)
+    assert problems == [] and again is not None
 
 
 def test_archived_plans_load_newest_first(conn: sqlite3.Connection) -> None:
@@ -441,6 +505,21 @@ def test_slack_refuses_a_restore_above_the_original() -> None:
     client = SlackFake()
     bot = _bot(WeekCoach(["Save this week?"], proposal), shared, today)
     bot.handle(_dm("the doctor said I can run again"), client)
+    assert bot.conversations["D1"].pending is None
+    bot.handle(_dm("yes"), client)
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None and not any(s["distance_meters"] for s in stored["sessions"])
+
+
+def test_tool_and_slack_refuse_a_plain_week_that_adds_to_a_lowered_one(monkeypatch: Any) -> None:
+    shared, proposal, start, today = _lowered_db()
+    del proposal["restore"]
+    monkeypatch.setattr(reports, "athlete_today", lambda _: today)
+    out = tools.call_tool(shared.conn, "propose_week", proposal)
+    assert out["ok"] is False and "only with restore" in out["problems"][0]
+    client = SlackFake()
+    bot = _bot(WeekCoach(["Save this week?"], proposal), shared, today)
+    bot.handle(_dm("I feel fine now, give me my runs back"), client)
     assert bot.conversations["D1"].pending is None
     bot.handle(_dm("yes"), client)
     stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)

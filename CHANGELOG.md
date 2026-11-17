@@ -9,7 +9,8 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - Slack: a lowered week can get sessions back. When she reports that a qualified professional
   who assessed her said she may run again, the coach can propose a restore (`propose_week` with
   restore): at most what the week had before it was lowered, never past days, saved on her yes.
-  Without that, a lowered week stays lowered.
+  Without that, a lowered week stays lowered: code now refuses a plain rewrite that adds to it.
+- Evals: a case can ask for a seeded lowered week (`"setup": "lowered_week"`).
 - Dashboard: a "This week" panel (each day's planned session next to what was done; future days
   blank, missing is not zero) and marks on the weekly-distance chart for weeks with yellow or red
   body checks (same shapes as the body check log, with a legend and table column).

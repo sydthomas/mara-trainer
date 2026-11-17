@@ -201,28 +201,50 @@ def dated_plan(plan: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 MIN_RUN_METERS = 1000  # same floor as the plan guardrails
+WEEK_TOLERANCE_METERS = 100  # same tolerance as the plan guardrails' weekly total
 
 
 def _week_meters(week: dict[str, Any]) -> int:
     return sum(int(s["distance_meters"]) for s in week["sessions"])
 
 
+def _fits(
+    plan: dict[str, Any],
+    week: dict[str, Any],
+    sessions: list[dict[str, Any]],
+    saved_setup: RaceSetup | None,
+) -> bool:
+    """Whether `week` with these sessions passes the guardrails inside `plan`."""
+    swapped = {
+        **plan,
+        "weeks": [{**w, "sessions": sessions} if w is week else w for w in plan["weeks"]],
+    }
+    violations = check_plan(swapped, saved_setup).result.violations
+    return not any(v.week in (week["week"], None) for v in violations)
+
+
 def lowered_from(
-    archived: list[dict[str, Any]], plan: dict[str, Any] | None, start_date: str
+    archived: list[dict[str, Any]],
+    plan: dict[str, Any] | None,
+    start_date: str,
+    saved_setup: RaceSetup | None,
 ) -> dict[str, Any] | None:
-    """The week of `start_date` as it was before it was lowered: of its versions in the archived
-    plans (newest first), the most recent one with the largest total. None unless that total is
-    more than the accepted week's, i.e. the week was never lowered."""
+    """The week of `start_date` as it was before it was lowered: its most recent version in the
+    archived plans (newest first) that passes the guardrails inside the accepted plan, so cut
+    and partly restored versions and weeks from an older, different plan are passed over. None
+    unless its total is more than the accepted week's, i.e. the week was never lowered."""
     current = next(
         (w for w in (plan or {}).get("weeks", []) if w.get("start_date") == start_date), None
     )
-    versions = [
-        w for old in archived for w in old.get("weeks", []) if w.get("start_date") == start_date
-    ]
-    if current is None or not versions:
+    if plan is None or current is None:
         return None
-    original = max(versions, key=_week_meters)  # the first of equals: the newest
-    return original if _week_meters(original) > _week_meters(current) else None
+    for old in archived:
+        for w in old.get("weeks", []):
+            if w.get("start_date") == start_date and _fits(
+                plan, current, w["sessions"], saved_setup
+            ):
+                return w if _week_meters(w) > _week_meters(current) else None
+    return None
 
 
 def _cut_problems(
@@ -275,22 +297,11 @@ def revise_week(
         return None, [f"week of {start_date} isn't in the accepted plan"]
     if restore and original_week is None:
         return None, ["this week was never lowered, so there is nothing to give back"]
-    if restore and original_week is not None:
-        # The original must still fit today's plan: after a rebuild with lower targets, an
-        # older, bigger version of the week is not something a restore may go back to.
-        as_before = {
-            **plan,
-            "weeks": [
-                {**w, "sessions": original_week["sessions"]} if w is week else w
-                for w in plan["weeks"]
-            ],
-        }
-        if any(
-            v.week == week["week"] for v in check_plan(as_before, saved_setup).result.violations
-        ):
-            return None, [
-                "the week before it was lowered no longer fits the plan, so it can't come back"
-            ]
+    if restore and not _fits(plan, week, (original_week or week)["sessions"], saved_setup):
+        # A double-check on `lowered_from`: the original must still fit today's plan.
+        return None, [
+            "the week before it was lowered no longer fits the plan, so it can't come back"
+        ]
     monday = date.fromisoformat(start_date)
     planned = {s["day"]: s for s in week["sessions"]}
     revised_sessions = []
@@ -309,12 +320,18 @@ def revise_week(
         **plan,
         "weeks": [{**w, "sessions": revised_sessions} if w is week else w for w in plan["weeks"]],
     }
-    violations = [
-        v
-        for v in check_plan(revised, saved_setup).result.violations
-        if v.week in (week["week"], None)
-    ]
+    check = check_plan(revised, saved_setup)
+    violations = [v for v in check.result.violations if v.week in (week["week"], None)]
     total = sum(s["distance_meters"] for s in revised_sessions)
+    target = next((w for w in check.brief.weeks if w.week == week["week"]), None)
+    lowered = (
+        target is not None
+        and target.phase != "race"
+        and _week_meters(week) < target.target_distance_meters - WEEK_TOLERANCE_METERS
+    )
+    if lowered and not (cut or restore) and total > _week_meters(week):
+        # Otherwise a plain rewrite would be a way around restore and its limits.
+        return None, ["this week was lowered; sessions come back only with restore"]
     if cut:
         problems = _cut_problems(planned, revised_sessions)
         if total >= _week_meters(week):

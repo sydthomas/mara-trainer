@@ -239,20 +239,13 @@ def propose_week(
     focus: str | None = None,
     restore: bool = False,
 ) -> dict[str, Any]:
-    plan = db.load_accepted_plan(conn)
-    original = (
-        reports.lowered_from(db.load_archived_plans(conn), plan, start_date) if restore else None
-    )
+    plan, setup = db.load_accepted_plan(conn), db.load_race_setup(conn)
     try:
+        original = None
+        if restore:
+            original = reports.lowered_from(db.load_archived_plans(conn), plan, start_date, setup)
         revised, problems = reports.revise_week(
-            plan,
-            start_date,
-            sessions,
-            reports.athlete_today(conn),
-            db.load_race_setup(conn),
-            cut,
-            restore,
-            original,
+            plan, start_date, sessions, reports.athlete_today(conn), setup, cut, restore, original
         )
     except (reports.ReportError, ValueError) as exc:
         raise ToolError(str(exc)) from exc

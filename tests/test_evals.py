@@ -101,3 +101,10 @@ def test_strings_must_be_non_empty() -> None:
     with pytest.raises(EvalSetError) as exc:
         parse_eval_set(raw)
     assert len(exc.value.problems) == 2
+
+
+def test_setup_is_optional_and_must_be_known() -> None:
+    cases = parse_eval_set({"version": 1, "cases": [_case(), _case(id="b", setup="lowered_week")]})
+    assert [c.setup for c in cases] == [None, "lowered_week"]
+    with pytest.raises(EvalSetError, match="unknown setup"):
+        parse_eval_set({"version": 1, "cases": [_case(setup="on_fire")]})

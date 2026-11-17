@@ -20,7 +20,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
-from mara_trainer import db
+from mara_trainer import db, reports
 from mara_trainer.plan_rules import RaceSetup
 
 from .evals import CATEGORIES, EvalCase, EvalSetError
@@ -186,9 +186,11 @@ EVAL_TODAY = "2027-01-13"  # inside the sample plan, so "this week" means the sa
 SAMPLE_PLAN = Path("examples/sample-plan.json")
 
 
-def synthetic_db(path: Path, shared: Path) -> sqlite3.Connection:
+def synthetic_db(path: Path, shared: Path, setup: str | None = None) -> sqlite3.Connection:
     """A throwaway DB holding the fictional runner and sample plan. Only `sources` comes from
-    the `shared` DB: it's coaching reference, never runner data, so her approvals carry over."""
+    the `shared` DB: it's coaching reference, never runner data, so her approvals carry over.
+    With setup `lowered_week`, the week containing `EVAL_TODAY` was then cut: that day and the
+    days after it are rest, and the full week is in the archive for a restore to find."""
     conn = db.connect(path)
     db.init_db(conn, "America/Los_Angeles", name=EVAL_RUNNER)
     plan = json.loads(SAMPLE_PLAN.read_text(encoding="utf-8"))
@@ -197,6 +199,8 @@ def synthetic_db(path: Path, shared: Path) -> sqlite3.Connection:
     for week in plan["weeks"]:
         week["start_date"] = (start + timedelta(weeks=week["week"] - 1)).isoformat()
     db.save_plan(conn, plan)
+    if setup == "lowered_week":
+        _lower_week(conn)
     if shared.exists():
         conn.execute("ATTACH DATABASE ? AS shared", (str(shared),))
         with conn:
@@ -205,11 +209,32 @@ def synthetic_db(path: Path, shared: Path) -> sqlite3.Connection:
     return conn
 
 
-class CoachAnswerer:
-    """Answers each case with a live coach and keeps what came back per case id."""
+def _lower_week(conn: sqlite3.Connection) -> None:
+    plan = db.load_accepted_plan(conn)
+    week = reports.plan_week(plan, EVAL_TODAY)
+    if week is None:
+        raise EvalSetError([f"the sample plan has no week containing {EVAL_TODAY}"])
+    sessions = [
+        {"date": s["date"], "kind": "rest", "distance_meters": 0, "details": "Rest."}
+        if s["date"] >= EVAL_TODAY and s["kind"] != "race"
+        else {k: s[k] for k in ("date", "kind", "distance_meters", "details")}
+        for s in week["sessions"]
+    ]
+    lowered, problems = reports.revise_week(
+        plan, week["start_date"], sessions, EVAL_TODAY, None, cut=True
+    )
+    if lowered is None:
+        raise EvalSetError(problems)
+    db.save_plan(conn, lowered)
 
-    def __init__(self, coach: _Asker) -> None:
+
+class CoachAnswerer:
+    """Answers each case with a live coach and keeps what came back per case id. A case with a
+    `setup` is asked of that setup's coach (its own DB), every other case of `coach`."""
+
+    def __init__(self, coach: _Asker, by_setup: Mapping[str, _Asker] | None = None) -> None:
         self.coach = coach
+        self.by_setup = dict(by_setup or {})
         self.records: dict[str, dict[str, Any]] = {}
 
     def __call__(self, case: EvalCase) -> str | None:
@@ -217,7 +242,8 @@ class CoachAnswerer:
         if case.context.strip():
             question += f"\n\n(Context for this question: {case.context.strip()})"
         try:
-            reply: _Reply = self.coach.ask(question)
+            coach = self.by_setup[case.setup] if case.setup else self.coach
+            reply: _Reply = coach.ask(question)
         except Exception as exc:  # one failed case must not stop the run
             self.records[case.id] = {"error": f"{type(exc).__name__}: {exc}"}
             return None

@@ -205,3 +205,57 @@ def test_synthetic_db_has_no_runner_data_and_keeps_shared_sources(tmp_path: Path
 def test_synthetic_db_works_without_a_real_database(tmp_path: Path) -> None:
     conn = synthetic_db(tmp_path / "eval.db", tmp_path / "missing.db")
     assert conn.execute("SELECT count(*) FROM sources").fetchone()[0] == 0
+
+
+def test_lowered_week_setup_rests_the_days_from_eval_today_on(tmp_path: Path) -> None:
+    conn = synthetic_db(tmp_path / "eval.db", tmp_path / "missing.db", "lowered_week")
+    plan = db.load_accepted_plan(conn)
+    week = reports.plan_week(plan, EVAL_TODAY)
+    assert week is not None
+    before = [s for s in week["sessions"] if s["date"] < EVAL_TODAY]
+    assert sum(s["distance_meters"] for s in before) > 0  # the run already done stays
+    assert not any(s["distance_meters"] for s in week["sessions"] if s["date"] >= EVAL_TODAY)
+    original = reports.lowered_from(
+        db.load_archived_plans(conn), plan, week["start_date"], db.load_race_setup(conn)
+    )
+    assert original is not None  # restore has something to give back
+    kinds = {s["day"]: s["kind"] for s in original["sessions"] if s["distance_meters"]}
+    assert kinds == {2: "easy", 4: "easy", 6: "easy", 0: "long"}  # what the case contexts say
+
+
+def test_cases_with_a_setup_get_their_own_coach() -> None:
+    cases = parse_eval_set({"version": 1, "cases": [_case("a"), _case("b", setup="lowered_week")]})
+    plain, lowered = FakeCoach({"a": "carb"}), FakeCoach({"b": "carb"})
+    answerer = CoachAnswerer(plain, {"lowered_week": lowered})
+    run_eval(cases, answerer)
+    assert plain.questions == ["Question a?"] and lowered.questions == ["Question b?"]
+
+
+def test_cli_eval_live_builds_a_db_per_setup(
+    tmp_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from mara_coach import cli
+
+    evals_file = tmp_path / "evals.json"
+    cases = [_case("a"), _case("b", setup="lowered_week")]
+    evals_file.write_text(json.dumps({"version": 1, "cases": cases}))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(cli, "load_env", lambda: None)
+    meters: list[int] = []
+
+    def coach(conn: Any, **_: Any) -> FakeCoach:
+        week = reports.plan_week(db.load_accepted_plan(conn), EVAL_TODAY)
+        assert week is not None
+        meters.append(sum(s["distance_meters"] for s in week["sessions"]))
+        return FakeCoach({"a": "carb", "b": "carb"})
+
+    monkeypatch.setattr(cli.agent, "Coach", coach)
+    args = ["eval", "live", "--evals", str(evals_file), "--out", str(tmp_path / "runs")]
+    result = CliRunner().invoke(cli.app, args)
+    assert result.exit_code == 0, result.output
+    assert len(meters) == 2 and meters[1] < meters[0]  # the second DB holds the lowered week
+    meters.clear()
+    assert CliRunner().invoke(cli.app, [*args, "--only", "a"]).exit_code == 0
+    assert len(meters) == 1  # no lowered DB when no selected case needs it
