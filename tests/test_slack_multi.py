@@ -402,7 +402,43 @@ def test_yes_with_watch_words_saves_and_pushes_the_week_as_yes_does(reply: str) 
 
 
 @pytest.mark.parametrize(
-    "reply", ["yes save only", "yes and no watch", "yes but not on coros", "yes and add a mile"]
+    "reply",
+    [
+        "yes save only",
+        "yes and no watch",
+        "yes but not on coros",
+        "yes and add a mile",
+        "yes and",
+        "ok and",
+        "yes and...",
+        "yes add",
+        "ok send",
+        "sure sync",
+        "yes sync them",
+        "yes send it",
+        "yes put",
+        "yes and don't push to coros",
+        "yes, save it, not to the watch",
+        "yes send it to my coach",
+        "save it to my notes",
+    ],
 )
 def test_yes_with_other_words_is_not_a_plain_yes(reply: str) -> None:
     assert not slack_bot.YES.match(reply)
+
+
+def test_ok_save_to_coros_is_a_yes() -> None:
+    assert slack_bot.YES.match("ok save to coros") and slack_bot.YES.match("yes and save it")
+
+
+def test_the_reminder_points_at_the_earlier_proposal_and_stays_out_of_the_history() -> None:
+    shared, proposal, start, today = _week_proposal()
+    client, push = SlackFake(), FakePush()
+    coach = WeekCoach(["Save this week?", "Thursday is easy on purpose."], proposal)
+    bot = _week_bot(coach, shared, today, push)
+    bot.handle(_dm("all good"), client)
+    bot.handle(_dm("why is Thursday so short?"), client)
+    shown = client.posted[-1]["text"]
+    assert "proposed earlier isn't saved yet" in shown and shown.count("isn't saved yet") == 1
+    turns = bot.conversations["D1"].turns
+    assert turns[-1]["content"] == "Thursday is easy on purpose."  # the coach never sees it
