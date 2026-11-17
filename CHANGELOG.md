@@ -28,6 +28,12 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - Sources: four proposals for gaps (cross-training while injured, sauna, cold on an injury) and
   three eval cases from questions that got "no approved source" answers.
 
+### Fixed
+- Slack: a yes may name the watch ("yes and save to coros", "yes push it to my watch"); it is the
+  same as a plain yes. When her reply to a waiting question goes to the coach instead, the bot
+  now adds in code that the week or entry isn't saved yet and repeats the question, so a coach
+  reply can't leave her thinking it was saved.
+
 ## [0.4.0] - 2026-11-15
 
 ### Added

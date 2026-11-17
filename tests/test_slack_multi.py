@@ -162,7 +162,8 @@ def test_yes_with_a_number_means_nothing_when_one_thing_waits() -> None:
     bot = _debrief_bot(coach, shared, _la(7, 8))
     bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
     bot.handle(_dm("yes 2"), client)  # not a known reply here: the coach gets it
-    assert _entries(shared) == [] and client.posted[-1]["text"] == "Which one?"
+    assert _entries(shared) == [] and client.posted[-1]["text"].startswith("Which one?")
+    assert client.posted[-1]["text"].endswith(slack_bot.BODY_QUESTION)  # still open, said in code
 
 
 # --- the coach's channel actions
@@ -366,7 +367,9 @@ def test_ok_thanks_after_a_follow_up_does_not_save_or_push_the_waiting_week() ->
     assert coach.calls[1][0] == "why is Thursday so short?"
     bot.handle(_dm("ok thanks"), client)
     assert coach.calls[2][0] == "ok thanks"  # thanks for the answer, not a yes to the week
-    assert client.posted[-1]["text"] == "Anytime."
+    assert client.posted[-1]["text"].startswith("Anytime.")
+    assert client.posted[-1]["text"].endswith(slack_bot.WEEK_QUESTION)  # says it is still open
+    assert "isn't saved yet" in client.posted[-1]["text"]
     assert push.days == [] and _week_details(shared, start) != "Leg press 3x10."
     assert not any(m["text"].startswith("Saved Week") for m in client.posted)
     rows = shared.conn.execute("SELECT status FROM training_plans").fetchall()
@@ -388,3 +391,18 @@ def test_no_thanks_drops_a_waiting_fueling_entry() -> None:
     assert bot.conversations["D1"].pending is None
     bot.handle(_dm("yes"), client)  # nothing waits any more: a late yes saves nothing
     assert _fuel_count(shared) == 0
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["yes and save to coros", "Yes, push it to my watch!", "yes and put them on my COROS watch"],
+)
+def test_yes_with_watch_words_saves_and_pushes_the_week_as_yes_does(reply: str) -> None:
+    assert _week_reply(reply) == _week_reply("yes")
+
+
+@pytest.mark.parametrize(
+    "reply", ["yes save only", "yes and no watch", "yes but not on coros", "yes and add a mile"]
+)
+def test_yes_with_other_words_is_not_a_plain_yes(reply: str) -> None:
+    assert not slack_bot.YES.match(reply)

@@ -251,6 +251,20 @@ def body_line(entry: dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
+def still_waiting(convo: Conversation) -> str | None:
+    """The open yes/no question again, when a coach reply leaves an earlier proposal waiting.
+    Built in code: the coach can't know whether anything was saved."""
+    if isinstance(convo.pending, WeekProposal):
+        return "The week above isn't saved yet. " + WEEK_QUESTION
+    if isinstance(convo.pending, body.BodyEntry):
+        if convo.more:
+            return "The two entries above aren't saved yet. " + BOTH_QUESTION
+        return "The body log entry above isn't saved yet. " + BODY_QUESTION
+    if isinstance(convo.pending, fueling.FuelEntry):
+        return "The fueling entry above isn't saved yet. Reply *yes* to save it, or *no*."
+    return None
+
+
 def ask_to_log_body(answer: str, entry: body.BodyEntry) -> str:
     """The coach's reply, then the entry and the bot's own yes / no question."""
     return f"{answer.rstrip()}\n\n*Body log entry* {body_line(asdict(entry))}\n{BODY_QUESTION}"
@@ -407,7 +421,13 @@ SKIPPED = "Okay, skipped those."
 # A yes may carry a few plain words ("yes log it", "ok save it please"); anything longer goes
 # to the coach. "yes 1" and "save only" have their own patterns. A trailing "thanks" counts
 # only after a plain yes: "ok thanks" is an acknowledgement, not a yes to save.
-_YES_VERBS = r"please|log(?:\s+(?:it|that))?|save(?:\s+(?:it|that))?|do\s+it|go\s+ahead"
+# "yes and save to coros", "yes push it to my watch": still a plain yes ("save only" is not).
+_YES_OBJECT = r"(?:\s+(?:it|that|them|this|the\s+(?:runs|week)))?"
+_YES_WATCH = r"(?:\s+(?:to|on|onto)\s+(?:my\s+|the\s+)?(?:coros(?:\s+watch)?|watch))?"
+_YES_VERBS = (
+    r"please|and|do\s+it|go\s+ahead|log(?:\s+(?:it|that))?"
+    rf"|(?:save|push|put|send|sync|add){_YES_OBJECT}{_YES_WATCH}"
+)
 YES = re.compile(
     r"^\s*(?:"
     rf"(?:y|yes|yep|yeah|yup)\b(?:[\s,]+(?:{_YES_VERBS}|thanks|thank\s+you))*"
@@ -1785,6 +1805,8 @@ class SlackCoach:
                 answer += "\n\n" + ONE_AT_A_TIME.format(
                     kept=kept, dropped=" and the ".join(dropped)
                 )
+            if not proposals and (waiting := still_waiting(convo)):
+                answer += "\n\n" + waiting  # her reply wasn't a yes or no: say what's open
             if forecasts:
                 answer += "\n\n" + credit_line(forecasts)
             if notes:
