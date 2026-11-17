@@ -1476,7 +1476,7 @@
       "license": "cc_by",
       "year": 2026,
       "trust_reason": "Peer-reviewed living systematic review in Sports Med 56(5):1153-1173 (doi 10.1007/s40279-025-02388-y), CC BY.",
-      "notes": "Wearable HRV tends to run higher early in the cycle and lower later (about 3-9%), and lower in hormonal contraceptive users, so a dip can be cycle timing and not fatigue. Phase definitions varied, so no pooled estimate.",
+      "notes": "Wearable HRV tends to run higher early in the cycle and lower later, and lower in hormonal contraceptive users, so a dip can be cycle timing and not fatigue. Phase definitions varied, so no pooled estimate.",
       "female_evidence": "female_specific",
       "population_note": "16 studies, 19,322 females of any age, including contraceptive users, pregnancy and menopause; one study supplies most of the participants. Not athlete-specific."
     },
