@@ -61,6 +61,7 @@ session text ("tempo", "threshold", "marathon", "goal-race").
 | Step-back depth | 82% of the trend | Plans step back but the depth wasn't captured in the audit. |
 | Training levels | base-building under 10 mi a week; intermediate under 40 mi; advanced at 40+ mi with 5+ days | Thresholds came from the legacy app. Only the first-marathon (novice) path is source-checked. |
 | Caps for non-novice levels | peak weeks 20 / 55 / 60 mi; long runs 10 / 20 / 22 mi; runs per week 3 / 5 / 6 | *Advanced Marathoning* and *Daniels' Running Formula* couldn't be read in the audit. |
+| Giving sessions back to a lowered week (`propose_week` restore) | only after she reports that a qualified professional who assessed her said she may run; at most what the week had before it was lowered, never a workout added, passed days unchanged, on her yes | No approved source on return after a short stop. The ceiling is the already-guardrailed week, and the professional's limits are the rule; the coach adds none. warden-optimal-load-bone-stress-2021 puts return in the clinician's hands. |
 | Starting long run | larger of the longest recent run and 30% of baseline | Mechanical starting point. |
 | Phase split | base first 25% (min 3 weeks), build to 65%, then marathon-specific | Phases are labels only now (no rule depends on them except taper and race week). Boston uses 3 / 6 / 9 / 2 weeks. |
 | Plan length cap | 24 weeks | Plans run 18 to 25 weeks. |

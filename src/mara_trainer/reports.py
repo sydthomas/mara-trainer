@@ -203,30 +203,51 @@ def dated_plan(plan: dict[str, Any] | None) -> dict[str, Any] | None:
 MIN_RUN_METERS = 1000  # same floor as the plan guardrails
 
 
-def _cut_problems(planned: dict[int, dict[str, Any]], sessions: list[dict[str, Any]]) -> list[str]:
-    """A cut (illness, a warning sign) may only shorten or rest what was planned."""
+def _week_meters(week: dict[str, Any]) -> int:
+    return sum(int(s["distance_meters"]) for s in week["sessions"])
+
+
+def lowered_from(
+    archived: list[dict[str, Any]], plan: dict[str, Any] | None, start_date: str
+) -> dict[str, Any] | None:
+    """The week of `start_date` as it was before it was lowered: of its versions in the archived
+    plans (newest first), the most recent one with the largest total. None unless that total is
+    more than the accepted week's, i.e. the week was never lowered."""
+    current = next(
+        (w for w in (plan or {}).get("weeks", []) if w.get("start_date") == start_date), None
+    )
+    versions = [
+        w for old in archived for w in old.get("weeks", []) if w.get("start_date") == start_date
+    ]
+    if current is None or not versions:
+        return None
+    original = max(versions, key=_week_meters)  # the first of equals: the newest
+    return original if _week_meters(original) > _week_meters(current) else None
+
+
+def _cut_problems(
+    planned: dict[int, dict[str, Any]], sessions: list[dict[str, Any]], what: str = "cut"
+) -> list[str]:
+    """A cut (illness, a warning sign) may only shorten or rest what was planned. A restore is
+    held to the same limits against the week as it was before it was lowered."""
     problems = []
     for s in sessions:
         was = planned[s["day"]]
         name = WEEKDAYS[s["day"]]
         distance = s["distance_meters"]
         if was["kind"] == "race" and s != was:
-            problems.append("a cut can't change the race")
+            problems.append(f"a {what} can't change the race")
         if distance > was["distance_meters"]:
-            problems.append(f"a cut can't add distance on {name}")
+            problems.append(f"a {what} can't add distance on {name}")
         if s["kind"] not in (was["kind"], "rest") and (was["kind"], s["kind"]) != (
             "workout",
             "easy",
         ):
-            problems.append(f"a cut can't turn {name}'s {was['kind']} into {s['kind']}")
+            problems.append(f"a {what} can't turn {name}'s {was['kind']} into {s['kind']}")
         if s["kind"] == "rest" and distance != 0:
             problems.append(f"{name}'s rest must be 0 m")
         if s["kind"] != "rest" and distance and distance < MIN_RUN_METERS:
             problems.append(f"{name}'s run must be at least {MIN_RUN_METERS} m")
-    if sum(s["distance_meters"] for s in sessions) >= sum(
-        s["distance_meters"] for s in planned.values()
-    ):
-        problems.append("a cut must lower the week's total")
     return problems
 
 
@@ -237,15 +258,39 @@ def revise_week(
     today: str,
     saved_setup: RaceSetup | None,
     cut: bool = False,
+    restore: bool = False,
+    original_week: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """The accepted plan with one week's sessions replaced, or None and the problems. Sessions
     carry dates, not day numbers. Days before `today` can't change. The week must pass the plan
-    guardrails, unless `cut` is set: then it may only shorten or rest sessions. Stores nothing."""
+    guardrails, unless `cut` is set: then it may only shorten or rest sessions. With `restore`
+    (after a cut) sessions may come back, up to `original_week`: the week as it was before it
+    was lowered, from `lowered_from`. Stores nothing."""
+    if cut and restore:
+        raise ReportError("cut and restore can't be used together")
     week = next(
         (w for w in (plan or {}).get("weeks", []) if w.get("start_date") == start_date), None
     )
     if plan is None or week is None:
         return None, [f"week of {start_date} isn't in the accepted plan"]
+    if restore and original_week is None:
+        return None, ["this week was never lowered, so there is nothing to give back"]
+    if restore and original_week is not None:
+        # The original must still fit today's plan: after a rebuild with lower targets, an
+        # older, bigger version of the week is not something a restore may go back to.
+        as_before = {
+            **plan,
+            "weeks": [
+                {**w, "sessions": original_week["sessions"]} if w is week else w
+                for w in plan["weeks"]
+            ],
+        }
+        if any(
+            v.week == week["week"] for v in check_plan(as_before, saved_setup).result.violations
+        ):
+            return None, [
+                "the week before it was lowered no longer fits the plan, so it can't come back"
+            ]
     monday = date.fromisoformat(start_date)
     planned = {s["day"]: s for s in week["sessions"]}
     revised_sessions = []
@@ -269,11 +314,20 @@ def revise_week(
         for v in check_plan(revised, saved_setup).result.violations
         if v.week in (week["week"], None)
     ]
+    total = sum(s["distance_meters"] for s in revised_sessions)
     if cut:
         problems = _cut_problems(planned, revised_sessions)
-        problems += [v.message for v in violations if v.code != OUT_OF_BOUNDS]
+        if total >= _week_meters(week):
+            problems.append("a cut must lower the week's total")
+    elif restore and original_week is not None:
+        before = {s["day"]: s for s in original_week["sessions"]}
+        problems = _cut_problems(before, revised_sessions, "restore")
+        if total <= _week_meters(week):
+            problems.append("a restore must give something back; use cut to lower further")
     else:
         problems = [v.message for v in violations]
+    if cut or restore:
+        problems += [v.message for v in violations if v.code != OUT_OF_BOUNDS]
     return (None, problems) if problems else (revised, [])
 
 

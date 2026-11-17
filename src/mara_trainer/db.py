@@ -102,6 +102,12 @@ def load_accepted_plan(conn: sqlite3.Connection) -> dict[str, Any] | None:
     return {**json.loads(row["plan"]), "status": "accepted"} if row else None
 
 
+def load_archived_plans(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every replaced plan, newest first."""
+    rows = conn.execute("SELECT plan FROM training_plans WHERE status='archived' ORDER BY id DESC")
+    return [json.loads(r["plan"]) for r in rows]
+
+
 def load_activities(conn: sqlite3.Connection) -> list[Activity]:
     return [
         Activity(r["started_at"], r["distance_meters"], r["duration_seconds"], r["rpe"])

@@ -237,11 +237,22 @@ def propose_week(
     sessions: list[dict[str, Any]],
     cut: bool = False,
     focus: str | None = None,
+    restore: bool = False,
 ) -> dict[str, Any]:
     plan = db.load_accepted_plan(conn)
+    original = (
+        reports.lowered_from(db.load_archived_plans(conn), plan, start_date) if restore else None
+    )
     try:
         revised, problems = reports.revise_week(
-            plan, start_date, sessions, reports.athlete_today(conn), db.load_race_setup(conn), cut
+            plan,
+            start_date,
+            sessions,
+            reports.athlete_today(conn),
+            db.load_race_setup(conn),
+            cut,
+            restore,
+            original,
         )
     except (reports.ReportError, ValueError) as exc:
         raise ToolError(str(exc)) from exc
@@ -508,12 +519,19 @@ TOOLS: tuple[Tool, ...] = (
         "propose_week",
         "Write the current or a coming week: all 7 sessions with exact details, checked against "
         "the plan guardrails, so the total must match the target. Passed days stay unchanged. "
-        "With cut true (illness or a warning sign) sessions may only be shortened or rested. It "
-        "does NOT save; the app saves it in code after the runner replies yes.",
+        "With cut true (illness or a warning sign) sessions may only be shortened or rested. "
+        "With restore true (a qualified professional has said she may run again, after a week "
+        "was lowered) sessions may come back up to what the week had before it was lowered, "
+        "never more. It does NOT save; the app saves it in code after the runner replies yes.",
         _schema(
             {
                 "start_date": {**_DATE, "description": "The week's Monday, from plan_week"},
                 "cut": {"type": "boolean", "description": "Lower the week: illness, warning sign"},
+                "restore": {
+                    "type": "boolean",
+                    "description": "Give sessions back to a lowered week: only after a "
+                    "qualified professional said she may run again. Never with cut",
+                },
                 "focus": {
                     "type": "string",
                     "maxLength": 300,

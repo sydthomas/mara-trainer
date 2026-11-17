@@ -167,3 +167,15 @@ def test_cli_ask_with_fake(tmp_db: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     r = CliRunner().invoke(app, ["ask", "What today?"])
     assert r.exit_code == 0, r.output
     assert json.loads(r.output)["answer"] == "Easy 3 today."
+
+
+def test_system_prompt_restore_needs_a_professional() -> None:
+    section = agent.SYSTEM_PROMPT.split("Adapting during the week")[1].split("Body check and")[0]
+    for phrase in (
+        "propose_week with restore true",
+        "ONLY when she tells you a qualified professional",
+        "never clear her yourself",
+        "needs her yes",
+        "restore isn't available",
+    ):
+        assert phrase in section, phrase

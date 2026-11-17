@@ -646,6 +646,7 @@ class WeekProposal:
     sessions: list[dict[str, Any]]
     cut: bool = False
     focus: str | None = None
+    restore: bool = False
 
 
 @dataclass(frozen=True)
@@ -743,7 +744,11 @@ def proposed_week(messages: list[dict[str, Any]]) -> WeekProposal | None:
             if not isinstance(args, dict) or tools.check_args(_WEEK_SCHEMA, args):
                 return None
             return WeekProposal(
-                args["start_date"], args["sessions"], args.get("cut", False), args.get("focus")
+                args["start_date"],
+                args["sessions"],
+                args.get("cut", False),
+                args.get("focus"),
+                args.get("restore", False),
             )
     return None
 
@@ -1014,14 +1019,20 @@ class SlackCoach:
     def _revised_week(
         self, conn: sqlite3.Connection, week: WeekProposal
     ) -> tuple[dict[str, Any] | None, list[str]]:
+        plan = db.load_accepted_plan(conn)
+        original = None
+        if week.restore:  # looked up again at save time: the plan may have changed since
+            original = reports.lowered_from(db.load_archived_plans(conn), plan, week.start_date)
         try:
             return reports.revise_week(
-                db.load_accepted_plan(conn),
+                plan,
                 week.start_date,
                 week.sessions,
                 self.today(conn),
                 db.load_race_setup(conn),
                 week.cut,
+                week.restore,
+                original,
             )
         except (reports.ReportError, ValueError) as exc:
             return None, [str(exc)]
