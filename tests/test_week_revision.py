@@ -138,6 +138,209 @@ def test_cut_must_lower_the_total() -> None:
     assert revised is None and "lower the week" in problems[0]
 
 
+def _lowered(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+    """The plan with week 2 rested (a cut), that week as it was, its start and the day before."""
+    start, today, sessions = _week(plan)
+    lowered, problems = reports.revise_week(plan, start, _ill(sessions), today, None, cut=True)
+    assert problems == [] and lowered is not None
+    return lowered, plan["weeks"][1], start, today
+
+
+def test_restore_gives_back_up_to_the_original_week() -> None:
+    plan = _plan()
+    lowered, original, start, today = _lowered(plan)
+    _, _, full = _week(plan)
+    back, problems = reports.revise_week(
+        lowered, start, full, today, None, restore=True, original_week=original
+    )
+    assert problems == [] and back is not None
+    assert reports.plan_week(back, start) == reports.plan_week(plan, start)
+    _, _, part = _week(plan)
+    for s in part:
+        if s["kind"] == "long":
+            s.update(kind="rest", distance_meters=0, details="Rest.")
+    was_workout = copy.deepcopy(original)
+    next(s for s in was_workout["sessions"] if s["kind"] == "easy")["kind"] = "workout"
+    for before in (original, was_workout):  # a workout may come back as an easy run
+        back, problems = reports.revise_week(
+            lowered, start, part, today, None, restore=True, original_week=before
+        )
+        assert problems == [] and back is not None  # less than the original is fine
+
+
+def test_restore_cannot_go_above_the_original_week() -> None:
+    plan = _plan()
+    lowered, original, start, today = _lowered(plan)
+    _, _, more = _week(plan)
+    run = next(s for s in more if s["kind"] == "easy")
+    run["distance_meters"] += 1609
+    back, problems = reports.revise_week(
+        lowered, start, more, today, None, restore=True, original_week=original
+    )
+    assert back is None and "can't add distance" in problems[0]
+    _, _, swapped = _week(plan)
+    next(s for s in swapped if s["kind"] == "easy")["kind"] = "workout"
+    back, problems = reports.revise_week(
+        lowered, start, swapped, today, None, restore=True, original_week=original
+    )
+    assert back is None and any("into workout" in p for p in problems)
+
+
+def test_restore_must_give_something_back() -> None:
+    plan = _plan()
+    lowered, original, start, today = _lowered(plan)
+    _, _, sessions = _week(lowered)
+    back, problems = reports.revise_week(
+        lowered, start, sessions, today, None, restore=True, original_week=original
+    )
+    assert back is None and problems == [
+        "a restore must give something back; use cut to lower further"
+    ]
+
+
+def test_restore_needs_a_lowered_week() -> None:
+    plan = _plan()
+    start, today, sessions = _week(plan)
+    back, problems = reports.revise_week(plan, start, sessions, today, None, restore=True)
+    assert back is None and problems == [
+        "this week was never lowered, so there is nothing to give back"
+    ]
+
+
+def test_restore_leaves_passed_days_as_they_are_now() -> None:
+    plan = _plan()
+    lowered, original, start, _ = _lowered(plan)
+    _, _, full = _week(plan)
+    running = [s["date"] for s in full if s["distance_meters"]]
+    back, problems = reports.revise_week(
+        lowered, start, full, running[1], None, restore=True, original_week=original
+    )
+    assert back is None and "already passed" in problems[0]  # the rested day stays rested
+    _, _, ahead = _week(plan)
+    for s in ahead:
+        if s["date"] < running[1]:
+            s.update(kind="rest", distance_meters=0, details="Rest.")
+    back, problems = reports.revise_week(
+        lowered, start, ahead, running[1], None, restore=True, original_week=original
+    )
+    assert problems == [] and back is not None
+
+
+def test_cut_and_restore_together_is_an_error() -> None:
+    plan = _plan()
+    start, today, sessions = _week(plan)
+    with pytest.raises(reports.ReportError, match="together"):
+        reports.revise_week(plan, start, sessions, today, None, cut=True, restore=True)
+
+
+def _half(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """Week 2's sessions with the long run rested: a first, partial cut."""
+    _, _, sessions = _week(plan)
+    return [
+        {**s, "kind": "rest", "distance_meters": 0, "details": "Rest."}
+        if s["kind"] == "long"
+        else s
+        for s in sessions
+    ]
+
+
+def test_original_week_is_found_in_the_archived_plans(conn: sqlite3.Connection) -> None:
+    plan = _plan()
+    start, today, sessions = _week(plan)
+    db.save_plan(conn, {**plan, "weeks": plan["weeks"][2:]})  # an older plan without this week
+    db.save_plan(conn, plan)
+    assert (
+        reports.lowered_from(db.load_archived_plans(conn), plan, start, None) is None
+    )  # never lowered
+    _strength(sessions)["details"] = "Leg press 3x10."
+    rewritten, _ = reports.revise_week(plan, start, sessions, today, None)
+    assert rewritten is not None
+    db.save_plan(conn, rewritten)
+    assert reports.lowered_from(db.load_archived_plans(conn), rewritten, start, None) is None
+    once, _ = reports.revise_week(rewritten, start, _half(rewritten), today, None, cut=True)
+    assert once is not None
+    db.save_plan(conn, once)
+    found = reports.lowered_from(db.load_archived_plans(conn), once, start, None)
+    assert found is not None and found["sessions"] == rewritten["weeks"][1]["sessions"]  # newest
+    twice, _ = reports.revise_week(once, start, _ill(sessions), today, None, cut=True)
+    assert twice is not None
+    db.save_plan(conn, twice)
+    found = reports.lowered_from(db.load_archived_plans(conn), twice, start, None)
+    assert found is not None and found["sessions"] == rewritten["weeks"][1]["sessions"]
+    later = plan["weeks"][2]["start_date"]
+    assert reports.lowered_from(db.load_archived_plans(conn), twice, later, None) is None
+    assert reports.lowered_from(db.load_archived_plans(conn), twice, "2000-01-03", None) is None
+
+
+def test_original_is_the_newest_version_that_fits_not_the_biggest(conn: sqlite3.Connection) -> None:
+    plan = _plan()
+    start, today, sessions = _week(plan, 4)  # a week with a workout
+    db.save_plan(conn, plan)
+    workout = next(s for s in sessions if s["kind"] == "workout")
+    workout.update(kind="easy", distance_meters=workout["distance_meters"] - 50, details="Easy.")
+    rewritten, problems = reports.revise_week(plan, start, sessions, today, None)
+    assert problems == [] and rewritten is not None  # a few metres smaller, still on target
+    db.save_plan(conn, rewritten)
+    lowered, problems = reports.revise_week(rewritten, start, _ill(sessions), today, None, cut=True)
+    assert problems == [] and lowered is not None
+    db.save_plan(conn, lowered)
+    found = reports.lowered_from(db.load_archived_plans(conn), lowered, start, None)
+    assert found is not None and found["sessions"] == rewritten["weeks"][4]["sessions"]
+    _, _, with_workout = _week(plan, 4)
+    back, problems = reports.revise_week(
+        lowered, start, with_workout, today, None, restore=True, original_week=found
+    )
+    assert back is None and any("into workout" in p for p in problems)  # the workout stays gone
+    back, problems = reports.revise_week(
+        lowered, start, sessions, today, None, restore=True, original_week=found
+    )
+    assert problems == [] and back is not None
+
+
+def test_an_older_bigger_plan_does_not_block_a_restore(conn: sqlite3.Connection) -> None:
+    plan = _plan()
+    start, today, sessions = _week(plan)
+    older = copy.deepcopy(plan)  # an earlier plan whose week had a higher target
+    next(s for s in older["weeks"][1]["sessions"] if s["kind"] == "easy")["distance_meters"] += 5000
+    db.save_plan(conn, older)
+    db.save_plan(conn, plan)
+    assert reports.lowered_from(db.load_archived_plans(conn), plan, start, None) is None
+    lowered, _ = reports.revise_week(plan, start, _ill(sessions), today, None, cut=True)
+    assert lowered is not None
+    db.save_plan(conn, lowered)
+    found = reports.lowered_from(db.load_archived_plans(conn), lowered, start, None)
+    assert found is not None and found["sessions"] == plan["weeks"][1]["sessions"]
+    back, problems = reports.revise_week(
+        lowered, start, sessions, today, None, restore=True, original_week=found
+    )
+    assert problems == [] and back is not None
+
+
+def test_a_lowered_week_only_comes_back_with_restore() -> None:
+    plan = _plan()
+    lowered, _, start, today = _lowered(plan)
+    _, _, full = _week(plan)
+    back, problems = reports.revise_week(lowered, start, full, today, None)
+    assert back is None and problems == [
+        "this week was lowered; sessions come back only with restore"
+    ]
+    half_plan, problems = reports.revise_week(plan, start, _half(plan), today, None, cut=True)
+    assert problems == [] and half_plan is not None  # partly lowered: the same rule
+    back, problems = reports.revise_week(half_plan, start, full, today, None)
+    assert back is None and "only with restore" in problems[0]
+    later, _, coming = _week(lowered, 2)  # the next, un-lowered week is written as usual
+    _strength(coming)["details"] = "Leg press 3x10."
+    again, problems = reports.revise_week(lowered, later, coming, start, None)
+    assert problems == [] and again is not None
+
+
+def test_archived_plans_load_newest_first(conn: sqlite3.Connection) -> None:
+    assert db.load_archived_plans(conn) == []
+    for name in ("first", "second", "third"):
+        db.save_plan(conn, {"name": name, "weeks": []})
+    assert [p["name"] for p in db.load_archived_plans(conn)] == ["second", "first"]
+
+
 def test_week_card_lists_each_day() -> None:
     plan = _plan()
     start, _, _ = _week(plan)
@@ -250,6 +453,92 @@ def test_invalid_week_is_never_pending() -> None:
     assert bot.conversations["D1"].pending is None
 
 
+def _lowered_db() -> tuple[SharedDB, dict[str, Any], str, str]:
+    """A DB where week 2 was lowered to all rest, and a proposal that gives the week back."""
+    shared, plan = SharedDB(), _plan()
+    db.save_plan(shared.conn, plan)
+    lowered, _, start, today = _lowered(plan)
+    db.save_plan(shared.conn, lowered)
+    _, _, sessions = _week(plan)
+    return shared, {"start_date": start, "sessions": sessions, "restore": True}, start, today
+
+
+def test_tool_restores_only_a_lowered_week(monkeypatch: Any) -> None:
+    shared, proposal, start, today = _lowered_db()
+    monkeypatch.setattr(reports, "athlete_today", lambda _: today)
+    out = tools.call_tool(shared.conn, "propose_week", proposal)
+    assert out["ok"] is True and out["saved"] is False
+    assert sum(s["distance_meters"] for s in out["week"]["sessions"]) > 0
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None and not any(s["distance_meters"] for s in stored["sessions"])
+    with pytest.raises(tools.ToolError, match="together"):
+        tools.call_tool(shared.conn, "propose_week", {**proposal, "cut": True})
+    db.save_plan(shared.conn, _plan())  # the full week again: nothing left to give back
+    out = tools.call_tool(shared.conn, "propose_week", proposal)
+    assert out["ok"] is False and "never lowered" in out["problems"][0]
+
+
+def test_slack_restore_saves_on_yes_and_survives_a_restart() -> None:
+    shared, proposal, start, today = _lowered_db()
+    client, push = SlackFake(), FakePush()
+    bot = _bot(WeekCoach(["These runs come back. Save this week?"], proposal), shared, today, push)
+    bot.handle(_dm("the sports doctor said I can run again, easy and pain-free"), client)
+    pending = bot.conversations["D1"].pending
+    assert isinstance(pending, slack_bot.WeekProposal) and pending.restore and not pending.cut
+    raw = json.loads(json.dumps(slack_bot.encode_pending(pending)))
+    assert raw["restore"] is True and slack_bot.decode_pending(raw) == pending
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None and not any(s["distance_meters"] for s in stored["sessions"])
+    bot = _bot(FakeCoach([]), shared, today, push)  # a restart: the waiting week is reloaded
+    bot.handle(_dm("yes"), client)
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None
+    assert [s["distance_meters"] for s in stored["sessions"]] == [
+        s["distance_meters"] for s in proposal["sessions"]
+    ]
+    assert push.days == [start]  # the watch push is the same as for any other week
+
+
+def test_slack_refuses_a_restore_above_the_original() -> None:
+    shared, proposal, start, today = _lowered_db()
+    next(s for s in proposal["sessions"] if s["kind"] == "easy")["distance_meters"] += 1609
+    client = SlackFake()
+    bot = _bot(WeekCoach(["Save this week?"], proposal), shared, today)
+    bot.handle(_dm("the doctor said I can run again"), client)
+    assert bot.conversations["D1"].pending is None
+    bot.handle(_dm("yes"), client)
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None and not any(s["distance_meters"] for s in stored["sessions"])
+
+
+def test_tool_and_slack_refuse_a_plain_week_that_adds_to_a_lowered_one(monkeypatch: Any) -> None:
+    shared, proposal, start, today = _lowered_db()
+    del proposal["restore"]
+    monkeypatch.setattr(reports, "athlete_today", lambda _: today)
+    out = tools.call_tool(shared.conn, "propose_week", proposal)
+    assert out["ok"] is False and "only with restore" in out["problems"][0]
+    client = SlackFake()
+    bot = _bot(WeekCoach(["Save this week?"], proposal), shared, today)
+    bot.handle(_dm("I feel fine now, give me my runs back"), client)
+    assert bot.conversations["D1"].pending is None
+    bot.handle(_dm("yes"), client)
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None and not any(s["distance_meters"] for s in stored["sessions"])
+
+
+def test_restore_is_rechecked_when_saved() -> None:
+    shared, proposal, start, today = _lowered_db()
+    client = SlackFake()
+    bot = _bot(WeekCoach(["Save this week?"], proposal), shared, today)
+    bot.handle(_dm("the doctor said I can run again"), client)
+    running = [s["date"] for s in proposal["sessions"] if s["distance_meters"]]
+    bot.today = lambda conn: running[1]  # type: ignore[method-assign]  # a rested day has passed
+    bot.handle(_dm("yes"), client)
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None and not any(s["distance_meters"] for s in stored["sessions"])
+    assert "Couldn't save" in client.posted[-1]["text"]
+
+
 def test_week_is_rechecked_when_saved() -> None:
     shared, proposal, start, today = _proposal()
     client = SlackFake()
@@ -345,3 +634,15 @@ def test_resume_reruns_a_cut_off_push() -> None:
     client, push = SlackFake(), FakePush()
     assert _bot(FakeCoach([]), shared, today, push).resume(client)
     assert push.days == [start] and client.deleted == [{"channel": "D1", "ts": "P1"}]
+
+
+def test_restore_cannot_go_back_to_a_week_that_no_longer_fits_the_plan() -> None:
+    plan = _plan()
+    lowered, original, start, today = _lowered(plan)
+    bigger = copy.deepcopy(original)  # e.g. from an older plan with a higher weekly target
+    next(s for s in bigger["sessions"] if s["kind"] == "easy")["distance_meters"] += 5000
+    _, _, full = _week(plan)
+    back, problems = reports.revise_week(
+        lowered, start, full, today, None, restore=True, original_week=bigger
+    )
+    assert back is None and "no longer fits the plan" in problems[0]

@@ -258,3 +258,13 @@ def test_channel_actions_run_the_channels_function(conn: sqlite3.Connection) -> 
     with pytest.raises(ToolError, match="bad arguments"):
         tools.call_tool(conn, "get_weather", {"date": "tomorrow"}, actions)
     assert "hijacked" not in tools.call_tool(conn, "summary", {}, actions)  # only the two actions
+
+
+def test_propose_week_schema_has_cut_and_restore() -> None:
+    spec = next(s for s in tools.tool_specs() if s["name"] == "propose_week")
+    props = spec["input_schema"]["properties"]
+    assert props["cut"]["type"] == props["restore"]["type"] == "boolean"
+    assert "restore" not in spec["input_schema"]["required"]
+    assert "never more" in spec["description"]
+    args = {"start_date": "2026-11-16", "sessions": [], "restore": "yes"}
+    assert tools.check_args(spec["input_schema"], args)  # a non-boolean restore is refused

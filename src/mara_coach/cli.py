@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -335,19 +336,25 @@ def eval_live(
     if not os.environ.get("ANTHROPIC_API_KEY"):
         _fail("ANTHROPIC_API_KEY is not set; add it to .env (see .env.example)")
     with tempfile.TemporaryDirectory() as scratch:
-        conn = evals_runner.synthetic_db(Path(scratch) / "eval.db", db.db_path())
-        answerer = evals_runner.CoachAnswerer(
-            agent.Coach(
-                conn,
+        conns: list[sqlite3.Connection] = []
+
+        def coach(setup: str | None = None) -> agent.Coach:
+            name = f"eval-{setup}.db" if setup else "eval.db"
+            conns.append(evals_runner.synthetic_db(Path(scratch) / name, db.db_path(), setup))
+            return agent.Coach(
+                conns[-1],
                 model=model,
                 effort=effort,
                 today=evals_runner.EVAL_TODAY,
                 channel="eval",
                 runner=evals_runner.EVAL_RUNNER,
             )
-        )
+
+        setups = sorted({c.setup for c in cases if c.setup})
+        answerer = evals_runner.CoachAnswerer(coach(), {s: coach(s) for s in setups})
         report = evals_runner.live_report(evals_runner.run_eval(cases, answerer), answerer)
-        conn.close()
+        for conn in conns:
+            conn.close()
     report["run"] = {"effort": effort, "model": model, "cases": [c.id for c in cases]}
     path = evals_runner.save_run(report, out, datetime.now().strftime("%Y%m%d-%H%M%S"))
     previous = evals_runner.latest_run(out, before=path)

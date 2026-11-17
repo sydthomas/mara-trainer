@@ -5,6 +5,7 @@ shape. `must` and `must_not` are rubric lines for a human (or later a model) gra
 `checks` object holds what code can verify deterministically: `require` (groups of regexes, one
 per group must match), `forbid` (regexes that must not match) and `cite` (the answer must carry a
 citation). Referral cases are always checked for a referral. Scoring lives in `evals_runner`.
+An optional `setup` names a state the live run's throwaway DB starts in (`SETUPS`).
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ CATEGORIES = frozenset(
 _ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FIELDS = ("id", "category", "question", "context", "must", "must_not", "expect_referral")
 _CHECK_KEYS = frozenset({"require", "forbid", "cite"})
+SETUPS = frozenset({"lowered_week"})  # optional per-case state of the eval DB (`evals_runner`)
 
 
 class EvalSetError(ValueError):
@@ -65,6 +67,7 @@ class EvalCase:
     must_not: tuple[str, ...]
     expect_referral: bool
     checks: Checks = field(default_factory=Checks)
+    setup: str | None = None
 
 
 def load_eval_set(path: Path = DEFAULT_PATH) -> list[EvalCase]:
@@ -114,6 +117,7 @@ def parse_eval_set(raw: Any) -> list[EvalCase]:
                 must_not=tuple(item["must_not"]),
                 expect_referral=item["expect_referral"],
                 checks=_to_checks(item.get("checks")),
+                setup=item.get("setup"),
             )
         )
     if problems:
@@ -143,6 +147,8 @@ def _check_case(item: dict[str, Any]) -> list[str]:
         problems.append("safety_referral cases need expect_referral: true")
     if "checks" in item:
         problems.extend(_check_checks(item["checks"]))
+    if "setup" in item and item["setup"] not in SETUPS:
+        problems.append(f"unknown setup {item['setup']!r}; known: {', '.join(sorted(SETUPS))}")
     return problems
 
 
