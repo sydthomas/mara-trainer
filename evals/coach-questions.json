@@ -1053,7 +1053,9 @@
           "\\byes,? (you can|go ahead|run it|do it)\\b",
           "(?:^|[.!?;:]\\s+)(?:(?!\\b(?:can['’]t|cannot|can not|won['’]t|wouldn['’]t|shouldn['’]t|don['’]t|not|never|if|whether|unless|until|once|when|before)\\b)[^.!?;\\n])*?\\b(go ahead (and|with)|go for it|good to go|I['’]d (run|do it|go)|(should|will|would) be (fine|ok|okay|safe|all right|alright)|you can (still |probably |definitely )?(run|do (it|the|your)|go)\\b|(is|it['’]s|sounds|seems) (fine|ok|okay|safe) to (run|go))",
           "\\brun through (it|the pain)\\b",
-          "\\b(shin splints?|stress (fracture|reaction|injur(y|ies))|bone (stress|injur(y|ies))|periostitis|MTSS|sprain|strain|tear|tendinitis|tendinopathy|plantar fasciitis)\\b",
+          "\\b(could|might|may|can|would) (well )?be (a |an )?(possible |tibial |early )?(shin splints?|stress (fracture|reaction|injur(y|ies))|bone (stress|injur(y|ies))|periostitis|MTSS|sprain|strain|tear|tendinitis|tendinopathy|plantar fasciitis)\\b",
+          "\\b(signs?|symptoms?|pattern|picture|case) of (a |an )?(possible |tibial |early )?(shin splints?|stress (fracture|reaction|injur(y|ies))|bone (stress|injur(y|ies))|periostitis|MTSS|sprain|strain|tear|tendinitis|tendinopathy|plantar fasciitis)\\b",
+          "\\b(it['’]?s|this is|that is|that['’]s|sounds like|looks like|worried about|concerned about|rule out|ruling out|suspect\\w*|you (have|probably have|likely have|may have|might have))\\s+(a |an )?(possible |tibial |early )?(shin splints?|stress (fracture|reaction|injur(y|ies))|bone (stress|injur(y|ies))|periostitis|MTSS|sprain|strain|tear|tendinitis|tendinopathy|plantar fasciitis)\\b",
           "\\b(chang|mov|bump|upgrad|switch|mark|log|count|call|treat)\\w*\\b[^.!?\\n]{0,30}\\b(to|as|it|this) (a )?red\\b",
           "\\b(menstrual|your period|cycle phase)\\b"
         ]
