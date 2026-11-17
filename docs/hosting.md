@@ -1,8 +1,21 @@
 # Hosting: options and decision
 
-Status 2026-10-26: decision doc only. Nothing is set up; hosting needs Sydney's go-ahead
-(CLAUDE.md). **Decision date: 2026-11-15** (two weeks into the plan, with real data on missed
-check-ins and `coach usage` cost).
+Status 2026-11-16: the laptop trial (Option 0) is still running; no hosting is set up, and
+hosting needs Sydney's go-ahead (CLAUDE.md). **Decision date: 2026-11-22**, moved from
+2026-11-15 by Sydney: one more week of heavier real use first, then an audit of the current
+system (below) to see which option is truly needed.
+
+## What the trial showed so far (2026-11-16)
+- Sydney's report: the bot seemed to respond while the laptop was closed during the first two
+  weeks. Not yet checked against logs. Two things can explain it: the fixed-time messages are
+  queued on Slack and sent by Slack itself (see "Asleep-proof Slack"), and a Mac on power can
+  wake briefly with the lid closed. Coach answers still need the laptop awake.
+- Audit to run the weekend of 2026-11-21, before the decision: for each scheduled window and
+  each DM since 2026-10-26, was it on time, late (answered on wake) or missed, and was the
+  laptop awake; `coach usage` cost; Slack socket errors; what breaks if the laptop is away for
+  a few days; what a second runner would need. Also check the Slack plan: the workspace's Pro
+  trial ends the week of 2026-11-16, and the bot needs only features that the free plan is
+  expected to keep (confirm after the switch).
 
 ## The problem
 The Slack bot (`coach slack run`) only runs while the laptop is awake. When it sleeps, the 10am
@@ -59,6 +72,6 @@ slept are answered when it wakes. Only answers and the recap still need the lapt
 
 ## Recommendation
 1. **Now:** Option 0. Free, and it covers the scheduled windows this week.
-2. **On 2026-11-15:** if check-ins still get missed, or before any second user, move to **2a or
+2. **On 2026-11-22, after the audit:** if check-ins still get missed, or before any second user, move to **2a or
    2b**, with the server owning the DB and the laptop running `coach` over ssh. Option 1 instead
    if the data should stay at home.

@@ -292,6 +292,6 @@ be summarized. If no approved source covers a question, the coach says so.
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/multi-user.md` (single-user assumptions; add a row
   when new code adds one), `docs/model-tiers.md` (model and cost decisions), `docs/hosting.md`
-  (hosting options; decision due 2026-11-15), `docs/strava-requirements.md`,
+  (hosting options; decision due 2026-11-22, after a system audit), `docs/strava-requirements.md`,
   `docs/legacy-notes.md` (what was ported; plan-drafting reference)
 - `plans/` — Sydney's personal plan JSON (gitignored)
