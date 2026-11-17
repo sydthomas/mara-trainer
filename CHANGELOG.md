@@ -10,6 +10,14 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   blank, missing is not zero) and marks on the weekly-distance chart for weeks with yellow or red
   body checks (same shapes as the body check log, with a legend and table column).
 
+### Changed
+- Knowledge base: five sections updated from the 11 sources approved 2026-11-15 (single-run
+  spikes and the 10% rule in `training`; bone-stress warning signs and clinician-managed return in
+  `health-referrals`; cold-water immersion, HRV across the cycle and overtraining in `recovery`
+  and `women`; weather and heart-rate drift in `race-week`). They wait for re-approval.
+- Sources: four proposals for gaps (cross-training while injured, sauna, cold on an injury) and
+  three eval cases from questions that got "no approved source" answers.
+
 ## [0.4.0] - 2026-11-15
 
 ### Added
