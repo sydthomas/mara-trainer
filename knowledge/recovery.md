@@ -3,8 +3,8 @@ section: recovery
 title: Recovery, sleep and rest
 status: approved
 approved_by: Sydney
-approved_on: 2026-11-16
-content_sha256: ae2d89251a159d1b91425d1fd87abfc958164fea31c1527e88075b513ca7dbf5
+approved_on: 2026-11-17
+content_sha256: 13bac98bd56f7dc0e3440d7fd15652a0e2d22149cf2c46c6570674d92106a4e6
 ---
 # Recovery, sleep and rest
 
