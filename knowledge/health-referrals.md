@@ -3,8 +3,8 @@ section: health-referrals
 title: Warning signs and referrals
 status: approved
 approved_by: Sydney
-approved_on: 2026-10-26
-content_sha256: ab4d016ef0ce31b9fdd93da80762108a0c63b665171f024b7d441da62c569ae3
+approved_on: 2026-11-16
+content_sha256: 13d3bf0485f3e362aa1ec2446404523a3ca6075609f0155fc6b20500d55f5c04
 ---
 # Warning signs and referrals
 
