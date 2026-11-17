@@ -116,7 +116,11 @@ def _this_week(
             f"{_day(start)} to {_day(end)}: each day's session in the accepted plan next to "
             "the runs logged that day."
         ),
-        "note": f"A dash means no run logged that day. Days after {_day(today)} are left blank.",
+        "note": (
+            "A dash under Planned means the plan has no session that day; under Done, no run "
+            "logged that day."
+            + (f" Days after {_day(today)} are left blank." if today < end else "")
+        ),
         "empty": ("This week is not in the accepted plan." if plan else "No accepted plan yet."),
         "start": start,
         "end": end,
@@ -474,9 +478,10 @@ def _svg_columns(panel: dict[str, Any], unit: str) -> str:
     values = [_scaled(r["value"], measure, unit) for r in rows]
     targets = [_scaled(r["target"], measure, unit) for r in rows]
     ticks = _ticks(max([v for v in values + targets if v is not None], default=1.0))
-    # Body-check marks sit in their own strip above the plot, one per status, stacked.
-    marks = [list(r.get("body") or {}) for r in rows]
-    strip = max(map(len, marks)) * 14 + 6 if any(marks) else 0
+    # Body-check marks sit in their own strip above the plot: one fixed row per marked status,
+    # so a status keeps its height from week to week.
+    marks = [[s for s in MARKED_STATUSES if s in (r.get("body") or {})] for r in rows]
+    strip = len(MARKED_STATUSES) * 14 + 6 if any(marks) else 0
     left, right, top, bottom = 36, 12, 22 + strip, 26
     n = len(rows)
     band = max(24.0, (480 - left - right) / n)
@@ -539,14 +544,20 @@ def _svg_columns(panel: dict[str, Any], unit: str) -> str:
         )
         if panel["target_label"] and row["target"] is not None:
             tip += f", {panel['target_label']} {_amount(row['target'], measure, unit)}"
-        for k, status in enumerate(marks[i]):
-            out.append(_status_mark(status, mid, 16 + 14 * k))
         if marks[i]:
-            tip += f", body checks: {_body_counts(row['body'])}"
+            counts = {s: row["body"][s] for s in marks[i]}
+            tip += f", body checks: {_body_counts(counts)}"
         out.append(
             f'<rect class="hit" x="{x0:g}" y="{top}" width="{band:g}" height="{floor - top}">'
             f"<title>{escape(tip)}</title></rect>"
         )
+        if marks[i]:  # after the hit area, so the marks' own hover text is on top
+            noun = "body check" if sum(counts.values()) == 1 else "body checks"
+            mark_tip = f"{_body_counts(counts)} {noun}, week of {_day(row['date'])}"
+            drawn = "".join(
+                _status_mark(s, mid, 16 + 14 * MARKED_STATUSES.index(s)) for s in marks[i]
+            )
+            out.append(f"<g><title>{escape(mark_tip)}</title>{drawn}</g>")
     out.append("</svg>")
     return "".join(out)
 

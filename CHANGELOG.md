@@ -9,6 +9,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - Dashboard: a "This week" panel (each day's planned session next to what was done; future days
   blank, missing is not zero) and marks on the weekly-distance chart for weeks with yellow or red
   body checks (same shapes as the body check log, with a legend and table column).
+  Each colour has its own row and the marks have hover text.
 
 ### Changed
 - Body check: when what she describes matches a reason to get assessed in the approved

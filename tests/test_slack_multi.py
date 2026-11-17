@@ -15,7 +15,20 @@ from mara_coach.slack_bot import SlackCoach
 from mara_trainer import body, db, fueling, reports
 
 from .test_slack_body import PLAN, YELLOW, MultiCoach, _entries, _la
-from .test_slack_bot import PROPOSAL, SYDNEY, Clock, SharedDB, SlackFake, _debrief_bot, _dm
+from .test_slack_bot import (
+    PROPOSAL,
+    SYDNEY,
+    Clock,
+    ProposingCoach,
+    SharedDB,
+    SlackFake,
+    _debrief_bot,
+    _dm,
+    _sat,
+)
+from .test_week_revision import FakePush, WeekCoach, _strength
+from .test_week_revision import _bot as _week_bot
+from .test_week_revision import _proposal as _week_proposal
 
 NIGGLE = {**YELLOW, "date": "2026-11-07"}
 BOTH = {"propose_fuel_entry": PROPOSAL, "propose_body_entry": NIGGLE}
@@ -283,3 +296,95 @@ def test_without_a_channel_the_coach_is_told_the_actions_are_not_available(
     )
     agent.Coach(conn, api, today="2026-11-07").ask("sync my runs and log a niggle")
     assert "isn't available in this channel" in _tool_results(api)[0]
+
+
+# --- yes / no with a few more words, through the real handler
+
+
+def _week_details(shared: SharedDB, start: str) -> str:
+    stored = reports.plan_week(db.load_accepted_plan(shared.conn), start)
+    assert stored is not None
+    return str(_strength(stored["sessions"])["details"])
+
+
+def test_yes_log_it_saves_a_waiting_body_entry_without_the_coach() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    coach = MultiCoach(["Got it. Save it?"], {"propose_body_entry": NIGGLE})
+    bot = _debrief_bot(coach, shared, _la(7, 8))
+    bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
+    assert _entries(shared) == []  # proposed, not saved
+    assert isinstance(bot.conversations["D1"].pending, body.BodyEntry)
+    bot.handle(_dm("yes log it"), client)
+    [entry] = _entries(shared)
+    assert (entry["date"], entry["status"], entry["location"]) == (
+        "2026-11-07",
+        "yellow",
+        "left shin",
+    )
+    assert len(coach.calls) == 1  # the yes never reached the coach (no answer was left for it)
+    assert client.posted[-1]["text"].startswith("Saved to your body log")
+    assert bot.conversations["D1"].pending is None
+
+
+def _week_reply(reply: str) -> tuple[list[str], list[str], str, int]:
+    """A waiting week, then `reply`: what was posted, what was pushed, what is stored."""
+    shared, proposal, start, today = _week_proposal()
+    client, push = SlackFake(), FakePush()
+    coach = WeekCoach(["Save this week?"], proposal)
+    bot = _week_bot(coach, shared, today, push)
+    bot.handle(_dm("all good"), client)
+    assert push.days == [] and _week_details(shared, start) != "Leg press 3x10."
+    bot.handle(_dm(reply), client)
+    assert bot.conversations["D1"].pending is None
+    assert push.days in ([], [start])
+    return (
+        [m["text"] for m in client.posted],
+        push.days,
+        _week_details(shared, start),
+        len(coach.calls),
+    )
+
+
+def test_yes_please_saves_and_pushes_the_week_exactly_as_yes_does() -> None:
+    texts, pushed, details, asked = _week_reply("yes please")
+    assert details == "Leg press 3x10." and len(pushed) == 1
+    assert asked == 1  # only the turn that proposed the week
+    assert texts[-3].startswith("Saved Week") and texts[-2] == slack_bot.PUSHING
+    assert texts[-1].startswith("On your watch calendar")
+    assert (texts, pushed, details, asked) == _week_reply("yes")
+
+
+def test_ok_thanks_after_a_follow_up_does_not_save_or_push_the_waiting_week() -> None:
+    shared, proposal, start, today = _week_proposal()
+    client, push = SlackFake(), FakePush()
+    coach = WeekCoach(["Save this week?", "Thursday is easy on purpose.", "Anytime."], proposal)
+    bot = _week_bot(coach, shared, today, push)
+    bot.handle(_dm("all good"), client)
+    assert isinstance(bot.conversations["D1"].pending, slack_bot.WeekProposal)
+    bot.handle(_dm("why is Thursday so short?"), client)
+    assert coach.calls[1][0] == "why is Thursday so short?"
+    bot.handle(_dm("ok thanks"), client)
+    assert coach.calls[2][0] == "ok thanks"  # thanks for the answer, not a yes to the week
+    assert client.posted[-1]["text"] == "Anytime."
+    assert push.days == [] and _week_details(shared, start) != "Leg press 3x10."
+    assert not any(m["text"].startswith("Saved Week") for m in client.posted)
+    rows = shared.conn.execute("SELECT status FROM training_plans").fetchall()
+    assert [r["status"] for r in rows] == ["accepted"]  # nothing archived, nothing new
+    assert isinstance(bot.conversations["D1"].pending, slack_bot.WeekProposal)  # still waiting
+    bot.handle(_dm("yes"), client)  # and a plain yes still saves and pushes it
+    assert push.days == [start] and _week_details(shared, start) == "Leg press 3x10."
+
+
+def test_no_thanks_drops_a_waiting_fueling_entry() -> None:
+    shared, client = SharedDB(), SlackFake()
+    coach = ProposingCoach(["10 mi in 1:30. Save it?", "Yes to what?"], PROPOSAL)
+    bot = _debrief_bot(coach, shared, _sat(18))
+    bot.handle(_dm("10 miles 1:30, 7 chews"), client)
+    assert bot.conversations["D1"].pending is not None
+    bot.handle(_dm("no thanks"), client)
+    assert _fuel_count(shared) == 0 and len(coach.calls) == 1
+    assert client.posted[-1]["text"] == slack_bot.CANCELLED
+    assert bot.conversations["D1"].pending is None
+    bot.handle(_dm("yes"), client)  # nothing waits any more: a late yes saves nothing
+    assert _fuel_count(shared) == 0

@@ -475,3 +475,94 @@ def test_only_a_red_entry_legend_names_only_red(conn: sqlite3.Connection) -> Non
     section = dashboard.render_html(data).split('id="weekly_distance"')[1].split("</section>")[0]
     assert "Red body check</span>" in section and "Yellow body check" not in section
     assert section.split('<div class="chart">')[1].count('<rect class="st-red"') == 1
+
+
+# ---------------------------------------------------------------- polish: strip, hover, notes
+
+
+def weekly_chart(data: dict[str, Any]) -> str:
+    section = dashboard.render_html(data).split('id="weekly_distance"')[1].split("</section>")[0]
+    return section.split('<div class="chart">')[1].split("</div>")[0]
+
+
+def svg_height(chart: str) -> float:
+    return float(chart.split('viewBox="0 0 ')[1].split('"')[0].split()[1])
+
+
+def test_mark_strip_adds_one_fixed_row_per_status(full: sqlite3.Connection) -> None:
+    plain = svg_height(weekly_chart(dashboard.build_data(full, TODAY, 4)))
+    assert dashboard.MARKED_STATUSES == ("yellow", "red")
+    body.add_entry(full, body.BodyEntry(date="2026-03-12", status="red"))  # red only, week 03-09
+    one = weekly_chart(dashboard.build_data(full, TODAY, 4))
+    body.add_entry(full, body.BodyEntry(date="2026-03-03", status="yellow"))
+    body.add_entry(full, body.BodyEntry(date="2026-03-04", status="red"))
+    two = weekly_chart(dashboard.build_data(full, TODAY, 4))
+    # The strip is as tall with one status as with both: a row per marked status, 14 units each.
+    assert svg_height(one) == svg_height(two) == plain + 14 * len(dashboard.MARKED_STATUSES) + 6
+    # y comes from the status, not from how many marks that week has: yellow row y=16, red y=30.
+    reds = [m.split('y="')[1].split('"')[0] for m in two.split('<rect class="st-red"')[1:]]
+    assert reds == ["25", "25"]  # a 10-unit square centred on y=30, in both weeks
+    assert one.split('<rect class="st-red"')[1].split('y="')[1].split('"')[0] == "25"
+    yellow = two.split('<path class="st-yellow" d="M')[1].split("L")[0]
+    assert yellow.split(",")[1] == "9.5"  # triangle tip, 6.5 above y=16
+
+
+def test_marks_carry_their_own_hover_text(full: sqlite3.Connection) -> None:
+    for day, status in [
+        ("2026-03-03", "yellow"),
+        ("2026-03-05", "yellow"),
+        ("2026-03-08", "red"),
+        ("2026-03-12", "red"),
+    ]:
+        body.add_entry(full, body.BodyEntry(date=day, status=status, location="left shin"))
+    chart = weekly_chart(dashboard.build_data(full, TODAY, 4))
+    both = "<g><title>2 yellow, 1 red body checks, week of Mar 2</title>"
+    assert both in chart and "<g><title>1 red body check, week of Mar 9</title>" in chart
+    group = chart.split(both)[1].split("</g>")[0]  # the title sits with that week's marks
+    assert group.count('class="st-yellow"') == 1 and group.count('class="st-red"') == 1
+    assert chart.count("<g>") == 2  # weeks without yellow or red get no group
+    low = chart.lower()
+    for word in ("should", "rest", "injur", "see a ", "careful", "risk", "shin"):
+        assert word not in low
+
+
+def test_this_week_note_names_blank_days_only_when_some_are_ahead(
+    full: sqlite3.Connection,
+) -> None:
+    sunday = panel(dashboard.build_data(full, TODAY, 4), "this_week")  # last day of its week
+    assert "left blank" not in sunday["note"] and "Mar 15" not in sunday["note"]
+    midweek = panel(dashboard.build_data(full, "2026-03-11", 4), "this_week")
+    assert midweek["note"].endswith("Days after Mar 11 are left blank.")
+    for note in (sunday["note"], midweek["note"]):  # the dash is explained for both columns
+        assert "Planned" in note and "Done" in note
+    assert sunday["note"] in week_section(dashboard.build_data(full, TODAY, 4))
+
+
+def test_this_week_default_today_is_the_athlete_local_date(
+    full: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> Frozen:
+            return cls(2026, 3, 12, 2, 0, tzinfo=UTC)  # still Wed Mar 11, 7pm in Los Angeles
+
+    monkeypatch.setattr(dashboard, "datetime", Frozen)
+    data = dashboard.build_data(full, None, 4)
+    assert data["generated_for"] == "2026-03-11"
+    week = panel(data, "this_week")
+    assert week["status"] == "ok"
+    assert (week["start"], week["end"]) == ("2026-03-09", "2026-03-15")
+    assert [r["future"] for r in week["rows"]] == [False, False, False, True, True, True, True]
+    assert [r["done_meters"] for r in week["rows"]] == [None, 6000, None, None, None, None, None]
+    assert week == panel(dashboard.build_data(full, "2026-03-11", 4), "this_week")
+
+
+def test_this_week_race_week_row_label(full: sqlite3.Connection) -> None:
+    data = dashboard.build_data(full, SETUP.race_date, 1)  # race day, a Sunday
+    week = panel(data, "this_week")
+    assert week["status"] == "ok" and week["start"] == "2026-06-08"
+    race = week["rows"][6]
+    assert (race["date"], race["kind"], race["planned_meters"]) == ("2026-06-14", "race", 42195)
+    assert not any(r["kind"] == "long" for r in week["rows"])
+    section = week_section(data)
+    assert f"<td>Sun Jun 14</td><td>Race 26.2 mi</td><td>{dashboard.MISSING}</td>" in section
