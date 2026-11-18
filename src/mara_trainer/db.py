@@ -122,3 +122,10 @@ def load_check_ins(conn: sqlite3.Connection) -> list[CheckIn]:
         CheckIn(r["date"], r["sleep_hours"], r["hrv_ms"], r["resting_hr"])
         for r in conn.execute("SELECT date, sleep_hours, hrv_ms, resting_hr FROM daily_check_ins")
     ]
+
+
+def last_import_at(conn: sqlite3.Connection) -> str | None:
+    """When the newest import batch was written (UTC ISO instant), or None if nothing was ever
+    imported. A replayed file keeps its first time."""
+    row = conn.execute("SELECT MAX(created_at) AS at FROM import_batches").fetchone()
+    return str(row["at"]) if row and row["at"] else None

@@ -72,3 +72,14 @@ def test_uninitialized_db_raises() -> None:
     db.migrate(c)
     with pytest.raises(LookupError):
         db.athlete_timezone(c)
+
+
+def test_last_import_at_is_the_newest_batch(conn: sqlite3.Connection) -> None:
+    assert db.last_import_at(conn) is None
+    for n, at in enumerate(["2026-03-12T02:02:00.000Z", "2026-03-15T15:42:00.000Z"]):
+        conn.execute(
+            "INSERT INTO import_batches(file_hash, filename, source, result, created_at) "
+            "VALUES (?, 'run.fit', 'fit', '{}', ?)",
+            (f"{n}" * 64, at),
+        )
+    assert db.last_import_at(conn) == "2026-03-15T15:42:00.000Z"
