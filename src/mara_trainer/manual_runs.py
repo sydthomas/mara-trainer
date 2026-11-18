@@ -6,10 +6,12 @@
 - Duration is required. The schema needs one, and an estimate would quietly skew time totals
   and pace, so the coach asks once instead of guessing.
 - The date is today or earlier (athlete-local), never a future day.
-- Dedup follows `imports`: the fingerprint is the same sha256 of [start, meters, seconds], so the
-  same entry twice is a replay and nothing is written. Any other run on the same athlete-local
-  day (any source) is a possible duplicate the runner must confirm, because a hand-logged
-  distance and time rarely fall inside the file-import tolerances of the watch's copy. The
+- Dedup follows `imports` with one difference: every run on the same athlete-local day (any
+  source) is a possible duplicate the runner must confirm, because a hand-logged distance and
+  time rarely fall inside the file-import tolerances of the watch's copy. That includes an
+  identical hand-logged run: two real runs of the same distance and time on one day happen, so
+  it is never a silent replay. A confirmed run starts n seconds after 00:00 (n = hand-logged
+  runs already that day, moved on if taken), so its fingerprint and source_id are its own. The
   reverse case (the watch file imported after a hand-logged run) is flagged by
   `imports.find_candidates` with the same day rule. Nothing is merged or deleted automatically.
 - No import batch is written: "last import" stays about files from the watch.
@@ -19,7 +21,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -79,10 +81,11 @@ def _today(conn: sqlite3.Connection) -> str:
     return date_in_timezone(datetime.now(UTC), db.athlete_timezone(conn))
 
 
-def draft(run: ManualRun, timezone: str) -> imports.Draft:
-    """The run as an import draft: 00:00 athlete-local on its date, fingerprinted as files are."""
+def draft(run: ManualRun, timezone: str, offset_seconds: int = 0) -> imports.Draft:
+    """The run as an import draft: 00:00 athlete-local on its date (plus `offset_seconds`),
+    fingerprinted as files are."""
     start = datetime.combine(date.fromisoformat(run.date), time.min, ZoneInfo(timezone))
-    started = iso_utc(start)
+    started = iso_utc(start + timedelta(seconds=offset_seconds))
     return imports.Draft(
         "manual",
         TITLE.format(date=run.date),
@@ -105,7 +108,6 @@ def check(conn: sqlite3.Connection, run: ManualRun, today: str | None = None) ->
         "ok": True,
         "problems": [],
         "entry": {k: v for k, v in run.__dict__.items() if v is not None},
-        "exact_duplicate": candidate.exact_duplicate,
         # each with its athlete-local `date` added
         "possible_duplicates": [_dated(row, tz) for row in candidate.possible_duplicates],
     }
@@ -123,25 +125,30 @@ def add_run(
 ) -> dict[str, Any]:
     """Validate, check for duplicates, then save. `status` is one of:
     - `saved` (with `activity`),
-    - `already_logged`: the same entry is already there, nothing written,
-    - `needs_confirmation`: another run that day (`possible_duplicates`), nothing written;
-      call again with `allow_duplicate=True` only if the runner says it's a different run.
+    - `needs_confirmation`: another run that day, an identical one too (`possible_duplicates`),
+      nothing written; call again with `allow_duplicate=True` only if the runner says it's a
+      different run.
     Raises ManualRunError for an invalid entry."""
     run = ManualRun(run.date, run.distance_meters, run.duration_seconds, _clean(run.notes))
     problems = run.problems(today or _today(conn))
     if problems:
         raise ManualRunError(problems)
     tz = db.athlete_timezone(conn)
-    d = draft(run, tz)
-    candidate = imports.find_candidates(conn, d)
-    if candidate.exact_duplicate:
-        return {"status": "already_logged", "entry": run.__dict__}
+    candidate = imports.find_candidates(conn, draft(run, tz))
     if candidate.possible_duplicates and not allow_duplicate:
         return {
             "status": "needs_confirmation",
             "entry": run.__dict__,
             "possible_duplicates": [_dated(row, tz) for row in candidate.possible_duplicates],
         }
+    offset = sum(1 for row in candidate.possible_duplicates if row["source"] == "manual")
+    d = draft(run, tz, offset)
+    while conn.execute(
+        "SELECT 1 FROM activities WHERE source = 'manual' AND source_id = ?",
+        (f"manual:{d.fingerprint}",),
+    ).fetchone():  # a start left free by a deleted run, or a later one taken: move on
+        offset += 1
+        d = draft(run, tz, offset)
     with conn:
         cur = conn.execute(
             "INSERT INTO activities(source, source_id, fingerprint, title, started_at, "

@@ -197,6 +197,7 @@ SYNC_DUPLICATES = (
     "_Some runs look like ones already imported or logged by hand. "
     'Reply "sync my runs" to review them._'
 )
+DUPLICATES_CHANGED = "Before I import them: another run was logged that day since I asked.\n\n"
 SYNC_LEFT = '_{n} run(s) didn\'t download from COROS yet. Reply "sync my runs" later._'
 SYNC_FAILED = "Couldn't sync from COROS just now, so the recap may be missing runs."
 
@@ -264,7 +265,6 @@ RUN_DUPLICATE_QUESTION = (
     "or *no*."
 )
 RUN_SAVED = "Logged your run: {line} (entry {id})."
-RUN_ALREADY = "That run is already logged (same day, distance and time), so nothing new to save."
 _SOURCE_WORDS = {"manual": "logged by hand", "fit": "watch", "gpx": "GPX file"}
 WEEK_REJECTED = (
     "That week didn't pass the plan checks, so nothing is waiting to be saved now. "
@@ -749,7 +749,14 @@ def encode_pending(pending: Pending) -> dict[str, Any] | None:
         return {"type": "week", **asdict(pending)}
     if isinstance(pending, DuplicateRuns):
         items = [
-            {"path": str(i.path), "keys": i.keys, "runs": i.runs, "by_hand": i.by_hand}
+            {
+                "path": str(i.path),
+                "keys": i.keys,
+                "runs": i.runs,
+                "by_hand": i.by_hand,
+                "hand_runs": i.hand_runs,
+                "match_ids": i.match_ids,
+            }
             for i in pending.items
         ]
         return {"type": "duplicates", "items": items}
@@ -779,6 +786,8 @@ def decode_pending(raw: dict[str, Any] | None) -> Pending:
                         tuple(i["keys"]),
                         tuple(i["runs"]),
                         tuple(i.get("by_hand") or ()),
+                        tuple(i.get("hand_runs") or ()),
+                        tuple(int(n) for n in i.get("match_ids") or ()),
                     )
                     for i in data["items"]
                 )
@@ -1259,13 +1268,20 @@ class SlackCoach:
     def _save_duplicates(
         self, channel: str, convo: Conversation, runs: DuplicateRuns, client: SlackClient
     ) -> None:
+        """Her yes to the sync's duplicate question: checked again first, so a run logged since
+        (by hand, or another import) is asked about instead of imported without a word."""
         convo.pending = None
         conn = self.connect()
         try:
-            count = coros.import_confirmed(conn, runs.items)
+            fresh, changed = coros.recheck(conn, runs.items)
+            if changed:
+                convo.pending = DuplicateRuns(tuple(fresh))
+                text = DUPLICATES_CHANGED + coros.duplicate_question(fresh)
+            else:
+                text = f"Imported {coros.import_confirmed(conn, runs.items)} more run(s)."
         finally:
             conn.close()
-        client.chat_postMessage(channel=channel, text=f"Imported {count} more run(s).")
+        client.chat_postMessage(channel=channel, text=text)
 
     def _save(self, channel: str, convo: Conversation, client: SlackClient) -> None:
         assert convo.pending is not None
@@ -1307,9 +1323,9 @@ class SlackCoach:
         self, conn: sqlite3.Connection, run: manual_runs.ManualRun
     ) -> tuple[RunProposal | None, str]:
         """A proposed run checked against the DB now: the proposal to wait on (None if it's
-        invalid or already logged) and the lines for runs already logged that day."""
+        invalid) and the lines for runs already logged that day."""
         found = manual_runs.check(conn, run, self.today(conn))
-        if not found["ok"] or found["exact_duplicate"]:
+        if not found["ok"]:
             return None, ""
         rows = found["possible_duplicates"]
         proposal = RunProposal(run, tuple(r["id"] for r in rows))
@@ -1326,8 +1342,6 @@ class SlackCoach:
             found = manual_runs.check(conn, proposal.run, self.today(conn))
             if not found["ok"]:
                 text = "Couldn't log that run: " + "; ".join(found["problems"])
-            elif found["exact_duplicate"]:
-                text = RUN_ALREADY
             elif any(r["id"] not in proposal.shown for r in found["possible_duplicates"]):
                 rows = found["possible_duplicates"]
                 convo.pending = RunProposal(proposal.run, tuple(r["id"] for r in rows))

@@ -969,19 +969,17 @@
       "checks": {
         "require": [
           [
-            "how long",
-            "\\btime\\b",
-            "\\bminutes?\\b",
-            "\\bmins?\\b",
-            "duration",
-            "\\b(2|two)(\\.0+)?\\s*(mi|miles?)\\b",
-            "\\bshown below\\b",
-            "\\bbelow\\b"
+            "\\b(how long|how many minutes|how much time|what('s| was| is) (your|the) (time|duration)|(time|duration) (of|for) (the|your|that) run|roughly what was your time|what was your time)\\b[^?]{0,80}\\?",
+            "\\b(time|duration)\\b[^.!?\\n]{0,40}\\?",
+            "\\b(2|two)(\\.0+)?\\s*(mi|miles?)\\b[\\s\\S]{0,300}\\b(reply yes|say yes|yes to (log|save|confirm)|confirm|approve)\\b"
           ]
         ],
         "forbid": [
-          "\\b(i'?ve|i have|i just|all|it'?s|it is|run is|that'?s)\\s+(now\\s+)?(logged|saved|added|recorded)\\b",
-          "\\b\\d{1,2}:\\d{2}\\s*(/|per|a)\\s*(mi|mile)\\b",
+          "\\b(i'?ve|i have|i just|all|it'?s|it is|run is|that'?s|miles (is|are))\\s+(now\\s+)?(logged|saved|added|recorded)\\b",
+          "\\b\\d{1,2}(:\\d{2})?\\s*(min(ute)?s?)?\\s*(/|per\\s|a\\s)\\s*(mi|mile)\\b",
+          "\\b\\d{1,2}[- ]min(ute)?s? miles?\\b",
+          "\\bmin(ute)?s?\\s+(per|a|/)\\s*mile\\b",
+          "/\\s*mi(le)?\\b",
           "\\b(about|around|roughly|probably|guess(ing)?|estimate[ds]?)\\s+\\d{1,3}\\s*(min|minutes)\\b"
         ]
       }

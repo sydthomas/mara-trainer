@@ -260,13 +260,10 @@ def propose_run_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
         return {"ok": False, "saved": False, "problems": [str(exc)]}
     if not found["ok"]:
         return {"ok": False, "saved": False, "problems": found["problems"]}
-    if found["exact_duplicate"]:
-        message = "This exact run is already logged. Tell her; there's nothing new to save."
-    elif found["possible_duplicates"]:
+    if found["possible_duplicates"]:
         message = (
-            "Not saved yet. A run is already logged that day (possible_duplicates), maybe a "
-            "synced watch run: say so and ask whether this is a different run. The app shows "
-            "both and asks her to confirm."
+            "Not saved yet. A run is already logged that day (possible_duplicates): say it may "
+            "be the same one. The app shows both and asks her to confirm; don't ask yourself."
         )
     else:
         message = (
@@ -278,7 +275,6 @@ def propose_run_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
         "saved": False,
         "entry": found["entry"],
         "distance_miles": round(run.distance_meters / MI_METERS, 2),
-        "exact_duplicate": found["exact_duplicate"],
         "possible_duplicates": found["possible_duplicates"],
         "message": message,
     }

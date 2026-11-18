@@ -152,6 +152,22 @@ class Pending:
     keys: tuple[str, ...]
     runs: tuple[str, ...]  # display lines for the question
     by_hand: tuple[str, ...] = ()  # runs she logged by hand that day that these may repeat
+    hand_runs: tuple[str, ...] = ()  # the lines of `runs` that fall on such a day
+    match_ids: tuple[int, ...] = ()  # ids of every run shown as a possible duplicate
+
+
+def _pending(path: Path, candidates: Sequence[imports.Candidate], tz: str) -> Pending:
+    """The question for one file: its flagged runs, grouped by what they may repeat."""
+    flagged = [c for c in candidates if c.possible_duplicates and not c.exact_duplicate]
+    manual = [[r for r in c.possible_duplicates if r["source"] == "manual"] for c in flagged]
+    return Pending(
+        path,
+        tuple(c.draft.key for c in flagged),
+        tuple(_line(c.draft, tz) for c in flagged),
+        tuple(dict.fromkeys(activity_line(r, tz) for rows in manual for r in rows)),
+        tuple(_line(c.draft, tz) for c, rows in zip(flagged, manual, strict=True) if rows),
+        tuple(sorted({r["id"] for c in flagged for r in c.possible_duplicates})),
+    )
 
 
 @dataclass
@@ -189,25 +205,31 @@ async def sync_runs(
         candidates = imports.preview(conn, decoded)
         result = imports.commit(conn, decoded, path.name)
         if result.needs_confirmation:
-            report.pending.append(
-                Pending(
-                    path,
-                    tuple(result.needs_confirmation),
-                    tuple(_line(c.draft, tz) for c in candidates if c.possible_duplicates),
-                    tuple(
-                        dict.fromkeys(
-                            activity_line(row, tz)
-                            for c in candidates
-                            for row in c.possible_duplicates
-                            if row["source"] == "manual"
-                        )
-                    ),
-                )
-            )
+            report.pending.append(_pending(path, candidates, tz))
             continue
         report.already_present += result.already_present
         report.imported += [_line(c.draft, tz) for c in candidates if not c.exact_duplicate]
     return report
+
+
+def recheck(conn: sqlite3.Connection, pending: Sequence[Pending]) -> tuple[list[Pending], bool]:
+    """The duplicate question rebuilt from the DB now, and whether it changed in a way her yes
+    didn't cover: a run matched that wasn't shown, or a run newly flagged. A file that can't be
+    read is kept as it was (the import itself will say so)."""
+    tz, fresh, changed = db.athlete_timezone(conn), [], False
+    for item in pending:
+        try:
+            decoded = imports.decode_file(item.path, tz)
+        except (imports.ImportError_, OSError):
+            fresh.append(item)
+            continue
+        now = _pending(item.path, imports.preview(conn, decoded), tz)
+        if not now.keys:
+            continue  # nothing in this file looks like a duplicate any more
+        fresh.append(now)
+        if set(now.match_ids) - set(item.match_ids) or set(now.keys) - set(item.keys):
+            changed = True
+    return fresh, changed
 
 
 def import_confirmed(conn: sqlite3.Connection, pending: Sequence[Pending]) -> int:
@@ -344,20 +366,39 @@ def report_text(conn: sqlite3.Connection, report: SyncReport) -> str:
 
 
 def duplicate_question(pending: Sequence[Pending]) -> str:
-    runs = "\n".join(f"• {line}" for item in pending for line in item.runs)
+    """Watch runs that may repeat an imported run, and watch runs on a day with a run she logged
+    by hand, each group under its own label; one yes or no covers all of them."""
+    near: list[str] = []
+    hand: list[str] = []
+    for item in pending:
+        # saved before `hand_runs` existed: a file with by-hand matches was all one group
+        on_hand_day = set(item.hand_runs or (item.runs if item.by_hand else ()))
+        for line in item.runs:
+            (hand if line in on_hand_day else near).append(line)
     by_hand = list(dict.fromkeys(line for item in pending for line in item.by_hand))
-    if by_hand:  # the watch copy of a run she logged by hand: keeping both counts it twice
-        logged = "\n".join(f"• {line}" for line in by_hand)
-        return (
-            f"These watch runs fall on a day with a run you logged by hand:\n{runs}\n"
-            f"Logged by hand:\n{logged}\n"
-            "If they're the same run, keeping both counts it twice. Reply *yes* to import the "
-            "watch runs and keep both, or *no* to skip the watch copy."
+    parts = []
+    if near:
+        parts.append(
+            "These look like runs already imported (often an Apple Health copy):\n"
+            + "\n".join(f"• {line}" for line in near)
         )
-    return (
-        f"These look like runs already imported (often an Apple Health copy):\n{runs}\n"
-        "Reply *yes* to import them as separate runs, or *no* to skip them."
-    )
+    if hand:
+        parts.append(
+            "These watch runs fall on a day with a run you logged by hand:\n"
+            + "\n".join(f"• {line}" for line in hand)
+            + "\nLogged by hand:\n"
+            + "\n".join(f"• {line}" for line in by_hand)
+            + "\nIf they're the same run, keeping both counts it twice."
+        )
+    if hand and near:
+        ask = (
+            "Reply *yes* to import all of these watch runs as separate runs, or *no* to skip them."
+        )
+    elif hand:
+        ask = "Reply *yes* to import the watch runs and keep both, or *no* to skip the watch copy."
+    else:
+        ask = "Reply *yes* to import them as separate runs, or *no* to skip them."
+    return "\n".join(parts) + "\n" + ask
 
 
 # ------------------------------------------------------------------ MCP client + keychain

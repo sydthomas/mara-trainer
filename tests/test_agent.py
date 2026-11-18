@@ -182,3 +182,10 @@ def test_system_prompt_restore_needs_a_professional() -> None:
         "an illness like a cold that has passed, and no pain is involved",
     ):
         assert phrase in " ".join(section.split()), phrase
+
+
+def test_run_entry_bullet_leaves_the_question_to_the_bot() -> None:
+    prompt = agent.system_prompt()
+    assert "a run already logged that day may be the same one" in prompt
+    assert "already looks like it and ask" not in prompt
+    assert all(len(line) <= 100 for line in prompt.splitlines())

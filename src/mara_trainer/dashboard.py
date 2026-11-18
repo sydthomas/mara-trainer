@@ -458,7 +458,7 @@ def build_data(
         empty="Import runs or accept a plan to see the long-run build-up.",
     )
 
-    entries = fueling.entries_between(conn, rollups[0].start_date, today)
+    entries = fueling.entries_between(conn, charted[0].start_date, today)
     rated = [e for e in entries if e["carbs_per_hour"] is not None]
     fuel = _columns_panel(
         "fueling",
@@ -509,8 +509,10 @@ def build_data(
             [
                 long_run,
                 fuel,
+                # Heart rate keeps the full `weeks`: its 4-weeks-vs-4-before trend needs the
+                # whole window, and FIT records don't depend on a plan or logged runs.
                 _hr_panel(fit_dir, tz, today, weeks, unit),
-                _body_panel(conn, rollups[0].start_date, today),
+                _body_panel(conn, charted[0].start_date, today),
             ]
             if include_extra
             else []

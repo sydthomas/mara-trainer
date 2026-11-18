@@ -299,7 +299,7 @@ def test_propose_run_entry_validates_and_never_saves(conn: sqlite3.Connection) -
         "notes": "forgot my watch",
     }
     assert out["distance_miles"] == 2.0
-    assert out["possible_duplicates"] == [] and out["exact_duplicate"] is False
+    assert out["possible_duplicates"] == [] and "exact_duplicate" not in out
     assert "Not saved" in out["message"]
     assert _activities(conn) == 0
 
@@ -345,5 +345,6 @@ def test_propose_run_entry_reports_a_run_already_that_day(conn: sqlite3.Connecti
     same = tools.call_tool(
         conn, "propose_run_entry", {"date": today, "distance": 3300 / 1609.344, "duration": "20:50"}
     )
-    assert same["exact_duplicate"] is True and "already logged" in same["message"]
+    assert same["ok"] is True and len(same["possible_duplicates"]) == 1  # ask, never skip
+    assert "already" in same["message"]
     assert _activities(conn) == 1

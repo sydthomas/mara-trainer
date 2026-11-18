@@ -143,6 +143,41 @@ def test_a_run_logged_by_hand_is_named_in_the_duplicate_question(
     assert conn.execute("SELECT count(*) FROM activities").fetchone()[0] == 2
 
 
+def test_mixed_duplicates_are_labelled_by_group(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    from mara_trainer import manual_runs
+
+    manual_runs.add_run(conn, manual_runs.ManualRun("2026-11-03", 5000, 1800), today="2026-11-08")
+    draft = imports.make_draft("apple_health", SAT, 16050, 5410, SAT)
+    imports.commit(conn, imports.DecodedFile("apple_health", "h" * 64, [draft]), "export.zip")
+    report = _sync(conn, FakeApi({"1": _fit(TUE, 5423, 1785), "2": _fit(SAT)}, RUNS), tmp_path)
+    assert len(report.pending) == 2
+    question = coros.duplicate_question(report.pending)
+    imported, by_hand = question.split("logged by hand:")[0], question.split("logged by hand:")[1]
+    assert "Apple Health copy" in imported and "Sat 11/7: 10.00 mi, 1:30:00" in imported
+    assert "Tue 11/3" not in imported  # the watch run on the hand-logged day is in its own group
+    assert "Tue 11/3: 3.37 mi, 29:45" in by_hand and "Tue 11/3: 3.11 mi, 30:00" in by_hand
+    assert "Sat 11/7" not in by_hand
+    assert "*yes*" in question and "*no*" in question
+
+
+def test_recheck_spots_a_run_logged_after_the_question(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    from mara_trainer import manual_runs
+
+    draft = imports.make_draft("apple_health", SAT, 16050, 5410, SAT)
+    imports.commit(conn, imports.DecodedFile("apple_health", "h" * 64, [draft]), "export.zip")
+    report = _sync(conn, FakeApi({"2": _fit(SAT)}, RUNS[1:]), tmp_path)
+    fresh, changed = coros.recheck(conn, report.pending)
+    assert changed is False and fresh == report.pending
+    manual_runs.add_run(  # she confirmed it beside the Apple Health run that day
+        conn, manual_runs.ManualRun("2026-11-07", 16000, 5600), True, today="2026-11-08"
+    )
+    fresh, changed = coros.recheck(conn, report.pending)
+    assert changed is True and fresh[0].by_hand == ("Sat 11/7: 9.94 mi, 1:33:20",)
+    assert fresh[0].keys == report.pending[0].keys
+
+
 def test_duplicate_question_without_hand_logged_runs_is_unchanged() -> None:
     pending = coros.Pending(Path("x.fit"), ("k1",), ("Sat 11/7: 10.00 mi, 1:30:00",))
     question = coros.duplicate_question([pending])

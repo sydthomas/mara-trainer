@@ -96,11 +96,34 @@ def test_invalid_entry_raises_and_saves_nothing(conn: sqlite3.Connection) -> Non
     assert rows(conn) == []
 
 
-def test_same_entry_twice_is_a_replay(conn: sqlite3.Connection) -> None:
-    manual_runs.add_run(conn, two_miles(), today=TODAY)
+def test_same_entry_twice_needs_confirmation_then_both_are_kept(
+    conn: sqlite3.Connection,
+) -> None:
+    """Two real runs with the same distance and time on one day: never a silent replay."""
+    first = manual_runs.add_run(conn, two_miles(), today=TODAY)["activity"]
     again = manual_runs.add_run(conn, two_miles(), today=TODAY)
-    assert again["status"] == "already_logged"
+    assert again["status"] == "needs_confirmation"
+    assert [d["id"] for d in again["possible_duplicates"]] == [first["id"]]
     assert len(rows(conn)) == 1
+    second = manual_runs.add_run(conn, two_miles(), allow_duplicate=True, today=TODAY)
+    assert second["status"] == "saved"
+    a, b = rows(conn)
+    assert a["started_at"] == "2026-03-04T08:00:00.000Z"
+    assert b["started_at"] == "2026-03-04T08:00:01.000Z"  # 1 s later: its own fingerprint
+    assert a["fingerprint"] != b["fingerprint"] and a["source_id"] != b["source_id"]
+    third = manual_runs.add_run(conn, two_miles(), allow_duplicate=True, today=TODAY)
+    assert third["status"] == "saved" and len(rows(conn)) == 3
+    assert rows(conn)[2]["started_at"] == "2026-03-04T08:00:02.000Z"
+
+
+def test_offset_skips_a_start_left_by_a_deleted_run(conn: sqlite3.Connection) -> None:
+    ids = [
+        manual_runs.add_run(conn, two_miles(), allow_duplicate=True, today=TODAY)["activity"]["id"]
+        for _ in range(3)
+    ]
+    manual_runs.delete_run(conn, ids[0])  # two left, at +1 s and +2 s
+    saved = manual_runs.add_run(conn, two_miles(), allow_duplicate=True, today=TODAY)
+    assert saved["status"] == "saved" and len(rows(conn)) == 3
 
 
 def test_another_run_that_day_needs_confirmation(conn: sqlite3.Connection) -> None:
@@ -123,7 +146,7 @@ def test_runs_on_other_days_are_not_duplicates(conn: sqlite3.Connection) -> None
 
 def test_check_never_saves(conn: sqlite3.Connection) -> None:
     out = manual_runs.check(conn, two_miles(), today=TODAY)
-    assert out["ok"] and out["exact_duplicate"] is False and out["possible_duplicates"] == []
+    assert out["ok"] and out["possible_duplicates"] == [] and "exact_duplicate" not in out
     assert out["entry"] == {
         "date": TODAY,
         "distance_meters": 3219,
@@ -187,8 +210,11 @@ def test_cli_logs_a_run(tmp_db: Path) -> None:
     code, out = run_cli("run", "log", "--date", today, "--distance", "2", "--duration", "0:20:00")
     assert code == 0 and out["status"] == "saved"
     assert out["activity"]["distance_meters"] == 3219
-    code, again = run_cli("run", "log", "--date", today, "--distance", "2", "--duration", "0:20:00")
-    assert code == 0 and again["status"] == "already_logged"
+    args = ["run", "log", "--date", today, "--distance", "2", "--duration", "0:20:00"]
+    code, again = run_cli(*args)
+    assert code == 2 and again["status"] == "needs_confirmation"  # the same run again? ask
+    code, kept = run_cli(*args, "--allow-duplicate")
+    assert code == 0 and kept["status"] == "saved"
 
 
 def test_cli_km_and_duplicates_exit_2(tmp_db: Path) -> None:

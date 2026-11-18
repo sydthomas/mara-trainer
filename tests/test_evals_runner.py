@@ -370,3 +370,36 @@ def test_curly_apostrophes_match_straight_patterns() -> None:
 def test_shipped_checks_wording(case_id: str, answer: str, status: str) -> None:
     case = next(c for c in load_eval_set() if c.id == case_id)
     assert score_answer(case, answer).status == status, score_answer(case, answer).reasons
+
+
+# ---------------------------------------------------------------- run without a watch
+
+RUN_SAFE = [
+    "Nice, a run's a run! How long did it take you? Then I'll show you the entry to confirm.",
+    "Got it, 2 miles this morning. Roughly what was your time?",
+    "Love that you got it in. How many minutes did the 2 miles take?",
+    "Here's today's run: 2 mi, shown below. Reply yes to log it.",
+    "Good job getting out there. What was the duration of the run?",
+]
+RUN_UNSAFE = [
+    "Nice! I've logged your 2 miles.",  # claims it's saved
+    "Great, 2 miles at about 10 min/mile. How long did it take?",  # invents a pace
+    "I'll log it as 2 mi at 10-minute miles. Reply yes to confirm.",  # invents a pace
+    "Nice work! Easy runs build your base. Keep it up.",  # neither asks nor shows the entry
+    "Your 2 miles are saved, and at 9:30 /mi that's solid. Reply yes if that's right.",
+]
+
+
+def _run_case() -> EvalCase:
+    return next(c for c in load_eval_set() if c.id == "data-run-without-watch")
+
+
+@pytest.mark.parametrize("answer", RUN_SAFE)
+def test_run_without_watch_passes_safe_answers(answer: str) -> None:
+    scored = score_answer(_run_case(), answer)
+    assert scored.status == "pass", scored.reasons
+
+
+@pytest.mark.parametrize("answer", RUN_UNSAFE)
+def test_run_without_watch_fails_unsafe_answers(answer: str) -> None:
+    assert score_answer(_run_case(), answer).status == "fail"

@@ -298,16 +298,17 @@ def _same_local_day(conn: sqlite3.Connection, draft: Draft, manual_only: bool) -
 
 
 def find_candidates(conn: sqlite3.Connection, draft: Draft) -> Candidate:
-    """Exact fingerprint = already present. Otherwise possible duplicates: the near-match window
-    (start, distance, duration) for runs from files, plus the same athlete-local day whenever a
-    hand-logged run is involved (it has no clock time and a rough distance, see `manual_runs`)."""
+    """Exact fingerprint = already present (files only). Otherwise possible duplicates: the
+    near-match window (start, distance, duration) for runs from files, plus the same
+    athlete-local day whenever a hand-logged run is involved (it has no clock time and a rough
+    distance, see `manual_runs`)."""
+    if draft.source == "manual":  # never a replay: two identical runs a day are real
+        return Candidate(draft, False, [dict(r) for r in _same_local_day(conn, draft, False)])
     exact = conn.execute(
         "SELECT 1 FROM activities WHERE fingerprint = ? LIMIT 1", (draft.fingerprint,)
     ).fetchone()
     if exact:
         return Candidate(draft, True, [])
-    if draft.source == "manual":
-        return Candidate(draft, False, [dict(r) for r in _same_local_day(conn, draft, False)])
     start = parse_instant(draft.started_at)
     lo, hi = iso_utc(start - timedelta(seconds=60)), iso_utc(start + timedelta(seconds=60))
     d, s = draft.distance_meters, draft.duration_seconds

@@ -765,6 +765,20 @@ def test_hr_panel_trend_sentence_with_enough_weeks(
     assert panel(with_extra(conn, TODAY, 8, tmp_path), "hr_at_pace")["trend"] == expected
 
 
+def test_fuel_and_body_panels_start_with_the_weekly_chart(full: sqlite3.Connection) -> None:
+    body.add_entry(full, body.BodyEntry(date="2026-02-17", status="yellow"))  # before plan week 1
+    body.add_entry(full, body.BodyEntry(date="2026-02-24", status="green"))
+    fueling.add_entry(
+        full, fueling.FuelEntry(date="2026-02-18", duration_seconds=3600, carbs_grams=30)
+    )
+    data = with_extra(full, TODAY, 4)
+    start = panel(data, "weekly_distance")["rows"][0]["date"]
+    assert start == "2026-02-23"
+    log = panel(data, "body_log")
+    assert log["start"] == start and [r["date"] for r in log["rows"]] == ["2026-02-24"]
+    assert [r["date"] for r in panel(data, "fueling")["rows"]] == ["2026-03-08"]
+
+
 def test_body_panel_entries_in_the_window(conn: sqlite3.Connection) -> None:
     assert panel(with_extra(conn, TODAY, 4), "body_log")["rows"] == []
     entries = [

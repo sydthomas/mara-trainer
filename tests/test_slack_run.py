@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from mara_coach import coros, slack_bot
-from mara_trainer import manual_runs
+from mara_trainer import imports, manual_runs
 from mara_trainer.imports import commit, decode_fit
 
 from .fit_builder import build_fit
@@ -143,14 +143,21 @@ def test_a_run_logged_after_she_was_shown_is_asked_about_first() -> None:
     assert len(_runs(shared)) == 2
 
 
-def test_an_exact_repeat_is_not_pending() -> None:
+def test_two_identical_runs_both_save_after_confirmation() -> None:
     shared = SharedDB()
-    manual_runs.add_run(
-        shared.conn, manual_runs.ManualRun(TODAY, 3219, 1200, "forgot my watch"), today=TODAY
-    )
     bot, client = _propose(shared)
-    assert bot.conversations["D1"].pending is None
+    bot.handle(_dm("yes"), client)
+    coach = MultiCoach(["Two today, nice."], {"propose_run_entry": RUN})
+    bot.coach_factory = lambda conn: coach
+    bot.handle(_dm("did a second 2 mi in 20 min this evening, also no watch"), client)
+    shown = client.posted[-1]["text"]
+    assert "Already logged that day:\n• Tue 11/17: 2.00 mi, 20:00 (logged by hand)" in shown
+    assert shown.endswith(slack_bot.RUN_DUPLICATE_QUESTION)
     assert len(_runs(shared)) == 1
+    bot.handle(_dm("yes"), client)
+    assert [r["distance_meters"] for r in _runs(shared)] == [3219, 3219]
+    bot.handle(_dm("yes"), client)  # a repeated yes saves nothing more: pending was cleared
+    assert len(_runs(shared)) == 2
 
 
 def test_a_run_waits_alone() -> None:
@@ -177,6 +184,36 @@ def test_still_waiting_names_the_run() -> None:
 
 
 # ------------------------------------------------------------------ the watch file comes later
+
+
+def test_sync_yes_asks_again_when_a_run_was_logged_by_hand_since(tmp_path: Path) -> None:
+    import asyncio
+    from datetime import date
+
+    from .test_coros import FakeApi
+
+    shared = SharedDB()
+    start = datetime(2026, 11, 17, 16, 0, tzinfo=UTC)
+    draft = imports.make_draft("apple_health", start, 3320, 1240, NOW)
+    commit(shared.conn, imports.DecodedFile("apple_health", "h" * 64, [draft]), "export.zip")
+    fit = build_fit([{"start": start, "meters": 3330, "seconds": 1241, "sport": "running"}])
+    api = FakeApi({"9": fit}, [coros.CorosRun("9", 100, TODAY)])
+
+    def sync(conn: sqlite3.Connection, now: datetime) -> coros.SyncReport:
+        day = date(2026, 11, 17)
+        return asyncio.run(coros.sync_runs(conn, api, day, day, tmp_path))
+
+    bot, client = _debrief_bot(FakeCoach([]), shared, NOW, sync=sync), SlackFake()
+    bot.handle(_dm("sync my runs"), client)
+    assert "Apple Health copy" in client.posted[-1]["text"]
+    manual_runs.add_run(shared.conn, manual_runs.ManualRun(TODAY, 3219, 1200), True, today=TODAY)
+    bot.handle(_dm("yes"), client)
+    assert len(_runs(shared)) == 2  # not imported: the set of matches changed
+    said = client.posted[-1]["text"]
+    assert "since I asked" in said and "Tue 11/17: 2.00 mi, 20:00" in said
+    assert isinstance(bot.conversations["D1"].pending, slack_bot.DuplicateRuns)
+    bot.handle(_dm("yes"), client)
+    assert [r["source"] for r in _runs(shared)] == ["apple_health", "manual", "fit"]
 
 
 def test_sync_duplicate_question_names_the_hand_logged_run_and_survives_restart(
