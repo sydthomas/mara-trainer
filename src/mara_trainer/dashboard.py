@@ -75,6 +75,31 @@ def _columns_panel(
     }
 
 
+def _first_week(
+    activities: list[Activity], plan: dict[str, Any] | None, tz: str, now: datetime
+) -> str | None:
+    """Monday of the earliest week with a logged run (up to `now`) or a plan week, else None."""
+    mondays = [
+        week_bounds(date_in_timezone(parse_instant(a.started_at), tz))[0]
+        for a in activities
+        if parse_instant(a.started_at) <= now
+    ]
+    mondays += [
+        week_bounds(w["start_date"])[0]
+        for w in (plan or {}).get("weeks", [])
+        if w.get("start_date")
+    ]
+    return min(mondays, default=None)
+
+
+def _chart_weeks(rollups: list[Summary], first: str | None) -> list[Summary]:
+    """The weeks the charts show: from the later of the window start and `first`, so a runner
+    who started recently doesn't get a long empty left side. The current week always stays."""
+    if first is None:
+        return rollups
+    return [w for w in rollups if w.start_date >= first] or rollups[-1:]
+
+
 def _planned_long(week: dict[str, Any] | None) -> int | None:
     if not week:
         return None
@@ -387,9 +412,11 @@ def build_data(
     plan = db.load_accepted_plan(conn)
     race = db.load_race_setup(conn)
     rollups = weekly_rollups(activities, [], tz, weeks, now)
-    plan_weeks = [reports.plan_week(plan, w.start_date) for w in rollups]
+    # `weeks` is the most the charts show; they start at the first week with a run or plan.
+    charted = _chart_weeks(rollups, _first_week(activities, plan, tz, now))
+    plan_weeks = [reports.plan_week(plan, w.start_date) for w in charted]
     no_plan = None if plan else "No accepted plan yet, so only logged runs are shown."
-    flagged = _body_by_week(conn, rollups[0].start_date, today)
+    flagged = _body_by_week(conn, charted[0].start_date, today)
 
     weekly = _columns_panel(
         "weekly_distance",
@@ -407,7 +434,7 @@ def build_data(
                     if s in flagged.get(w.start_date, {})
                 },
             }
-            for w, p in zip(rollups, plan_weeks, strict=True)
+            for w, p in zip(charted, plan_weeks, strict=True)
         ],
         measure="distance",
         value_label="Done",
@@ -422,7 +449,7 @@ def build_data(
         "Longest run each week against the plan's long run.",
         [
             {"date": w.start_date, "value": w.longest_run_meters, "target": _planned_long(p)}
-            for w, p in zip(rollups, plan_weeks, strict=True)
+            for w, p in zip(charted, plan_weeks, strict=True)
         ],
         measure="distance",
         value_label="Longest run",

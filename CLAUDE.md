@@ -103,6 +103,11 @@ be summarized. If no approved source covers a question, the coach says so.
   not_found, known_places}` with no forecast request. Slack: "weather" / "weather at|in|near
   PLACE" (next plan run, in code, no LLM; named place first, otherwise looked up; only when the
   whole message is the phrase, anything else goes to the coach)
+- `uv run coach run log --distance 2 --duration 0:20:00 [--date YYYY-MM-DD] [--unit mi|km] [--notes ...] [--allow-duplicate]`
+  — log a run the watch didn't record (`mara_trainer/manual_runs.py`, source `manual`, stored at 00:00 local on its
+  date, today or earlier; duration required, never estimated); exit 2 = another run is logged that day, nothing
+  saved. `coach run delete ID` removes hand-logged runs only. Slack: "did today's run, 2 mi in 20 min" → the coach
+  proposes it (`propose_run_entry`, never saves) and the bot saves it on her yes
 - `uv run coach fuel log [--date YYYY-MM-DD] [--activity-id N | --distance 10 --duration 1:40:00] [--pre-run ... --pre-run-minutes 90] [--during ...] [--carbs G] [--fluid ML] [--stomach 1-5] [--energy 1-5] [--effort 1-10] [--notes ...]`
   — fueling log for one run; carbs per hour computed; no calorie/weight fields by design
 - `uv run coach fuel show [--last N] [--since YYYY-MM-DD]` / `coach fuel delete ID`
@@ -123,7 +128,7 @@ be summarized. If no approved source covers a question, the coach says so.
   body hash (edits send a section back to review). Only Sydney approves.
 - `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
   read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile, fuel_log,
-  body_log, search_sources, read_knowledge, propose_fuel_entry, propose_body_entry, propose_week,
+  body_log, search_sources, read_knowledge, propose_fuel_entry, propose_body_entry, propose_run_entry, propose_week,
   plan_week, sync_runs, get_weather, allowed_domains); exit 1 on bad args or a tool error.
   `sync_runs` and `get_weather` are channel actions: only the Slack bot supplies the function
   that does the work (its own sync, read-only on COROS, which imports non-duplicate runs

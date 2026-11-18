@@ -5,6 +5,13 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Added
+- Runs the watch didn't record: `coach run log` / `coach run delete`, and in Slack "did today's
+  run, 2 mi in 20 min" (the coach proposes it with `propose_run_entry`, the bot saves it on her yes).
+  A hand-logged run is checked against any run that day, and a watch file against any hand-logged
+  run that day; she confirms before both are kept.
+- Dashboard: the weekly chart starts at the first week with a run or a plan week.
+
 ### Changed
 - Dashboard redesigned: dark, phone first, opens on Today (today's session and whether it's done,
   last sync, the week strip, weeks to race, weekly miles, milestones) with a switch to a Week view

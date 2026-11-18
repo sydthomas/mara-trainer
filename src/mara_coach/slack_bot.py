@@ -21,6 +21,11 @@
   entry and saves it only on her yes. The saved-entry replies are fixed text: nothing here or
   in the coach rates an entry or clears her to run. Yellow/red entries of the week go into
   the Sunday check-in.
+- A run the watch didn't record ("did today's run, 2 mi, 20 min"): the coach asks once for what's
+  missing and calls `propose_run_entry` (validates only). The bot shows the run, plus any run
+  already logged that day, and saves it as a hand-logged run (`manual_runs`) only on her yes,
+  checked again at save time; a run logged that day since she was shown it is asked about first.
+  "no" drops it. It waits alone, like a week.
 - One yes: a body entry and a fueling entry proposed in the same turn wait together
   (`Conversation.more`); the bot lists both, "yes" saves both, "yes 1" / "yes 2" saves one, "no"
   saves neither. A week is always its own yes: proposed with anything else, only the first of
@@ -87,7 +92,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
-from mara_trainer import body, db, fueling, hr_pace, reports
+from mara_trainer import body, db, fueling, hr_pace, manual_runs, reports
 from mara_trainer.dates import date_in_timezone, parse_instant
 
 from . import coros, slack_schedule, tools, weather
@@ -189,7 +194,8 @@ def ask_to_save_week(answer: str) -> str:
 
 WEEKLY_KEY = "weekly_reply"  # Monday of the week her check-in reply should write
 SYNC_DUPLICATES = (
-    '_Some runs look like ones already imported. Reply "sync my runs" to review them._'
+    "_Some runs look like ones already imported or logged by hand. "
+    'Reply "sync my runs" to review them._'
 )
 SYNC_LEFT = '_{n} run(s) didn\'t download from COROS yet. Reply "sync my runs" later._'
 SYNC_FAILED = "Couldn't sync from COROS just now, so the recap may be missing runs."
@@ -252,6 +258,14 @@ def body_line(entry: dict[str, Any]) -> str:
 
 
 FUEL_QUESTION = "Reply *yes* to save it, or *no*."
+RUN_QUESTION = "Reply *yes* to log it, or *no*."
+RUN_DUPLICATE_QUESTION = (
+    "If it's the same run, logging it counts it twice. Reply *yes* to log it as a separate run, "
+    "or *no*."
+)
+RUN_SAVED = "Logged your run: {line} (entry {id})."
+RUN_ALREADY = "That run is already logged (same day, distance and time), so nothing new to save."
+_SOURCE_WORDS = {"manual": "logged by hand", "fit": "watch", "gpx": "GPX file"}
 WEEK_REJECTED = (
     "That week didn't pass the plan checks, so nothing is waiting to be saved now. "
     "Ask me for the week again when you're ready."
@@ -269,6 +283,9 @@ def still_waiting(convo: Conversation) -> str | None:
         return "The body log entry I showed earlier isn't saved yet. " + BODY_QUESTION
     if isinstance(convo.pending, fueling.FuelEntry):
         return "The fueling entry from earlier isn't saved yet. " + FUEL_QUESTION
+    if isinstance(convo.pending, RunProposal):
+        question = RUN_DUPLICATE_QUESTION if convo.pending.shown else RUN_QUESTION
+        return "The run I showed earlier isn't logged yet. " + question
     return None
 
 
@@ -307,6 +324,31 @@ def fuel_line(entry: fueling.FuelEntry) -> str:
     if entry.notes:
         parts.append(f"notes: {entry.notes}")
     return ", ".join(parts)
+
+
+def run_line(run: manual_runs.ManualRun) -> str:
+    """One hand-logged run as she gave it: every field a yes would save."""
+    parts = [f"{run.distance_meters / tools.MI_METERS:.2f} mi", coros.clock(run.duration_seconds)]
+    if run.notes:
+        parts.append(f"notes: {run.notes}")
+    return f"{run.date}: " + ", ".join(parts)
+
+
+def duplicate_lines(rows: list[dict[str, Any]], timezone: str) -> str:
+    """Runs already logged that day, one line each, with where they came from."""
+    return "\n".join(
+        f"• {coros.activity_line(r, timezone)} ({_SOURCE_WORDS.get(r['source'], r['source'])})"
+        for r in rows
+    )
+
+
+def ask_to_log_run(answer: str, run: manual_runs.ManualRun, already: str) -> str:
+    """The coach's reply, then the run, any run already logged that day, and the bot's own
+    question. `already` is `duplicate_lines` output, or "" for none."""
+    text = f"{_SAVE_IT_ASK.sub('', answer).rstrip()}\n\n*Run to log* {run_line(run)}\n"
+    if already:
+        return text + f"Already logged that day:\n{already}\n{RUN_DUPLICATE_QUESTION}"
+    return text + RUN_QUESTION
 
 
 def ask_to_log_both(answer: str, niggle: body.BodyEntry, entry: fueling.FuelEntry) -> str:
@@ -685,7 +727,16 @@ class DuplicateRuns:
     items: tuple[coros.Pending, ...]
 
 
-Pending = fueling.FuelEntry | body.BodyEntry | WeekProposal | DuplicateRuns | None
+@dataclass(frozen=True)
+class RunProposal:
+    """A hand-logged run waiting for her yes. `shown`: ids of the runs already logged that day
+    that she was shown with it; her yes keeps both only for those."""
+
+    run: manual_runs.ManualRun
+    shown: tuple[int, ...] = ()
+
+
+Pending = fueling.FuelEntry | body.BodyEntry | WeekProposal | DuplicateRuns | RunProposal | None
 
 
 def encode_pending(pending: Pending) -> dict[str, Any] | None:
@@ -697,8 +748,13 @@ def encode_pending(pending: Pending) -> dict[str, Any] | None:
     if isinstance(pending, WeekProposal):
         return {"type": "week", **asdict(pending)}
     if isinstance(pending, DuplicateRuns):
-        items = [{"path": str(i.path), "keys": i.keys, "runs": i.runs} for i in pending.items]
+        items = [
+            {"path": str(i.path), "keys": i.keys, "runs": i.runs, "by_hand": i.by_hand}
+            for i in pending.items
+        ]
         return {"type": "duplicates", "items": items}
+    if isinstance(pending, RunProposal):
+        return {"type": "run", **asdict(pending.run), "shown": list(pending.shown)}
     return None
 
 
@@ -718,10 +774,22 @@ def decode_pending(raw: dict[str, Any] | None) -> Pending:
         if raw.get("type") == "duplicates":
             return DuplicateRuns(
                 tuple(
-                    coros.Pending(Path(i["path"]), tuple(i["keys"]), tuple(i["runs"]))
+                    coros.Pending(
+                        Path(i["path"]),
+                        tuple(i["keys"]),
+                        tuple(i["runs"]),
+                        tuple(i.get("by_hand") or ()),
+                    )
                     for i in data["items"]
                 )
             )
+        if raw.get("type") == "run":
+            shown = data.pop("shown", [])
+            run = manual_runs.ManualRun(**data)
+            # Shape only here; the date (not future) and duplicates are checked again on yes.
+            if run.problems("9999-12-31") or not all(isinstance(i, int) for i in shown):
+                return None
+            return RunProposal(run, tuple(shown))
     except (TypeError, KeyError):
         log.warning("dropped an unreadable saved proposal")
     return None
@@ -784,6 +852,25 @@ def proposed_week(messages: list[dict[str, Any]]) -> WeekProposal | None:
     return None
 
 
+def proposed_run(messages: list[dict[str, Any]]) -> manual_runs.ManualRun | None:
+    """The last well-formed `propose_run_entry` call in these messages. The date and duplicate
+    checks run in the bot, against the DB."""
+    for message in reversed(messages):
+        if message.get("role") != "assistant" or not isinstance(message.get("content"), list):
+            continue
+        for block in reversed(message["content"]):
+            if _get(block, "type") != "tool_use" or _get(block, "name") != "propose_run_entry":
+                continue
+            args = _get(block, "input")
+            if not isinstance(args, dict) or tools.check_args(_RUN_SCHEMA, args):
+                return None
+            try:
+                return tools.build_run_entry(args)
+            except (tools.ToolError, TypeError, ValueError):
+                return None
+    return None
+
+
 def _checked_body(args: dict[str, Any]) -> body.BodyEntry | None:
     """A body entry only if every field has the right type and passes validation."""
     try:
@@ -811,6 +898,7 @@ def proposed_body(messages: list[dict[str, Any]]) -> body.BodyEntry | None:
 _BODY_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_body_entry")
 _PROPOSE_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_fuel_entry")
 _WEEK_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_week")
+_RUN_SCHEMA = next(t.input_schema for t in tools.TOOLS if t.name == "propose_run_entry")
 
 
 class SlackCoach:
@@ -915,7 +1003,7 @@ class SlackCoach:
                     convo.pending = None
                     client.chat_postMessage(channel=channel, text=SKIPPED)
                     return
-                if isinstance(convo.pending, WeekProposal | body.BodyEntry):
+                if isinstance(convo.pending, WeekProposal | body.BodyEntry | RunProposal):
                     convo.pending = None
                 else:
                     if convo.debrief is not None:
@@ -1190,6 +1278,9 @@ class SlackCoach:
         if isinstance(convo.pending, body.BodyEntry):
             self._save_body(channel, convo, convo.pending, client)
             return
+        if isinstance(convo.pending, RunProposal):
+            self._save_run(channel, convo, convo.pending, client)
+            return
         conn = self.connect()
         try:
             saved = fueling.add_entry(conn, convo.pending)
@@ -1211,6 +1302,56 @@ class SlackCoach:
         week_start, _ = self._open_weekly()
         follow_up = week_after_debrief(week_start) if week_start else SAVE_FOLLOW_UP
         self._reply(channel, convo, client, follow_up)
+
+    def _checked_run(
+        self, conn: sqlite3.Connection, run: manual_runs.ManualRun
+    ) -> tuple[RunProposal | None, str]:
+        """A proposed run checked against the DB now: the proposal to wait on (None if it's
+        invalid or already logged) and the lines for runs already logged that day."""
+        found = manual_runs.check(conn, run, self.today(conn))
+        if not found["ok"] or found["exact_duplicate"]:
+            return None, ""
+        rows = found["possible_duplicates"]
+        proposal = RunProposal(run, tuple(r["id"] for r in rows))
+        return proposal, duplicate_lines(rows, db.athlete_timezone(conn))
+
+    def _save_run(
+        self, channel: str, convo: Conversation, proposal: RunProposal, client: SlackClient
+    ) -> None:
+        """Her yes to a hand-logged run: checked again, then saved. Runs already logged that
+        day are kept beside it only if she was shown them; a new one is asked about first."""
+        convo.pending = None
+        conn = self.connect()
+        try:
+            found = manual_runs.check(conn, proposal.run, self.today(conn))
+            if not found["ok"]:
+                text = "Couldn't log that run: " + "; ".join(found["problems"])
+            elif found["exact_duplicate"]:
+                text = RUN_ALREADY
+            elif any(r["id"] not in proposal.shown for r in found["possible_duplicates"]):
+                rows = found["possible_duplicates"]
+                convo.pending = RunProposal(proposal.run, tuple(r["id"] for r in rows))
+                text = (
+                    f"Before I log it: a run was logged that day since I showed you this one.\n"
+                    f"*Run to log* {run_line(proposal.run)}\nAlready logged that day:\n"
+                    f"{duplicate_lines(rows, db.athlete_timezone(conn))}\n{RUN_DUPLICATE_QUESTION}"
+                )
+            else:
+                saved = manual_runs.add_run(
+                    conn, proposal.run, allow_duplicate=True, today=self.today(conn)
+                )
+                text = RUN_SAVED.format(line=run_line(proposal.run), id=saved["activity"]["id"])
+        except manual_runs.ManualRunError as exc:
+            text = "Couldn't log that run: " + "; ".join(exc.problems)
+        finally:
+            conn.close()
+        client.chat_postMessage(channel=channel, text=text)
+        if convo.turns:  # so the coach sees what she agreed to
+            convo.turns += [
+                {"role": "user", "content": "yes"},
+                {"role": "assistant", "content": text},
+            ]
+            convo.turns = convo.turns[-2 * MAX_TURNS :]
 
     def _sent_day(self, conn: sqlite3.Connection, ts: Any) -> str:
         """The athlete-local date a DM was sent, from Slack's `ts`: catch-up answers messages
@@ -1722,6 +1863,10 @@ class SlackCoach:
                 "new_runs": report.imported,
                 "already_imported": report.already_present,
                 "possible_duplicates_not_imported": len(report.pending),
+                # her hand-logged runs those may repeat: the review question names them
+                "runs_logged_by_hand_that_day": [
+                    line for item in report.pending for line in item.by_hand
+                ],
                 "not_downloaded_yet": report.not_downloaded,
                 "error": report.error,
                 "next": "Call summary for the week's totals.",
@@ -1776,6 +1921,8 @@ class SlackCoach:
             week_rejected = week is not None and self._revised_week(conn, week)[0] is None
             if week_rejected:
                 week = None
+            ran = proposed_run(messages)
+            run, already = self._checked_run(conn, ran) if ran is not None else (None, "")
         except CoachError:
             log.warning("coach could not finish a Slack reply")
             return FAILED
@@ -1787,6 +1934,7 @@ class SlackCoach:
         answer = reply.text or FAILED
         if answer == FAILED:
             niggle = None  # the bot shows a body entry before it can be saved: not shown, not kept
+            run = None  # the same for a run
         # One yes can save one thing. The first of these is kept; she is told about the rest.
         proposals: list[tuple[str, Pending]] = [
             (name, proposal)
@@ -1794,6 +1942,7 @@ class SlackCoach:
                 ("body log entry", niggle),
                 ("week", week),
                 ("fueling entry", entry),
+                ("run", run),
             )
             if proposal is not None
         ]
@@ -1811,6 +1960,8 @@ class SlackCoach:
                     answer = ask_to_log_body(answer, niggle)
             elif week is not None:
                 answer = ask_to_save_week(answer)
+            elif run is not None and proposals[0][1] is run:
+                answer = ask_to_log_run(answer, run.run, already)
             dropped = [name for name, item in proposals[1:] if not (both and item is entry)]
             if dropped:
                 kept = "body log entry and the fueling entry" if both else proposals[0][0]

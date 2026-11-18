@@ -151,6 +151,7 @@ class Pending:
     path: Path
     keys: tuple[str, ...]
     runs: tuple[str, ...]  # display lines for the question
+    by_hand: tuple[str, ...] = ()  # runs she logged by hand that day that these may repeat
 
 
 @dataclass
@@ -193,6 +194,14 @@ async def sync_runs(
                     path,
                     tuple(result.needs_confirmation),
                     tuple(_line(c.draft, tz) for c in candidates if c.possible_duplicates),
+                    tuple(
+                        dict.fromkeys(
+                            activity_line(row, tz)
+                            for c in candidates
+                            for row in c.possible_duplicates
+                            if row["source"] == "manual"
+                        )
+                    ),
                 )
             )
             continue
@@ -297,10 +306,19 @@ def _line(draft: imports.Draft, tz: str) -> str:
     started = datetime.fromisoformat(draft.started_at.replace("Z", "+00:00"))
     local = started.astimezone(ZoneInfo(tz))
     miles = draft.distance_meters / MI_METERS
-    return f"{local:%a %-m/%-d}: {miles:.2f} mi, {_clock(draft.duration_seconds)}"
+    return f"{local:%a %-m/%-d}: {miles:.2f} mi, {clock(draft.duration_seconds)}"
 
 
-def _clock(seconds: int) -> str:
+def activity_line(row: dict[str, Any], tz: str) -> str:
+    """A stored activity (a `find_candidates` row) as the same kind of display line."""
+    local = datetime.fromisoformat(row["started_at"].replace("Z", "+00:00")).astimezone(
+        ZoneInfo(tz)
+    )
+    miles = row["distance_meters"] / MI_METERS
+    return f"{local:%a %-m/%-d}: {miles:.2f} mi, {clock(row['duration_seconds'])}"
+
+
+def clock(seconds: int) -> str:
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
     return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
@@ -320,13 +338,22 @@ def report_text(conn: sqlite3.Connection, report: SyncReport) -> str:
     week = reports.summary(conn, week=report.end)["summary"]
     lines.append(
         f"*This week: {week['run_count']} runs, {week['distance_meters'] / MI_METERS:.2f} mi, "
-        f"{_clock(week['duration_seconds'])}.*"
+        f"{clock(week['duration_seconds'])}.*"
     )
     return "\n".join(lines)
 
 
 def duplicate_question(pending: Sequence[Pending]) -> str:
     runs = "\n".join(f"• {line}" for item in pending for line in item.runs)
+    by_hand = list(dict.fromkeys(line for item in pending for line in item.by_hand))
+    if by_hand:  # the watch copy of a run she logged by hand: keeping both counts it twice
+        logged = "\n".join(f"• {line}" for line in by_hand)
+        return (
+            f"These watch runs fall on a day with a run you logged by hand:\n{runs}\n"
+            f"Logged by hand:\n{logged}\n"
+            "If they're the same run, keeping both counts it twice. Reply *yes* to import the "
+            "watch runs and keep both, or *no* to skip the watch copy."
+        )
     return (
         f"These look like runs already imported (often an Apple Health copy):\n{runs}\n"
         "Reply *yes* to import them as separate runs, or *no* to skip them."

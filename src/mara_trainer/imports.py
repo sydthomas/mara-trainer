@@ -5,6 +5,8 @@ Ported from legacy apps/api/src/fit.ts (decodeFit) and packages/db/src/imports.t
   skipped
 - near match (start ±60 s, distance ±max(100 m, 2%), duration ±max(60 s, 2%)) across ALL sources
   -> a *candidate* the user must confirm. Nothing is ever auto-deleted or silently merged.
+- a run logged by hand (source `manual`, see `manual_runs`) has no clock time, so any run on the
+  same athlete-local day as one is a candidate too, in both directions.
 """
 
 from __future__ import annotations
@@ -17,9 +19,10 @@ import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .dates import date_in_timezone, iso_utc, js_round, parse_instant
 
@@ -273,22 +276,51 @@ class Candidate:
         }
 
 
+_CANDIDATE_COLUMNS = "id, source, title, started_at, distance_meters, duration_seconds"
+
+
+def _athlete_timezone(conn: sqlite3.Connection) -> str:
+    row = conn.execute("SELECT timezone FROM athlete WHERE id = 1").fetchone()
+    return str(row[0]) if row else "UTC"
+
+
+def _same_local_day(conn: sqlite3.Connection, draft: Draft, manual_only: bool) -> list[sqlite3.Row]:
+    """Runs on the draft's athlete-local day (only hand-logged ones if `manual_only`)."""
+    tz = ZoneInfo(_athlete_timezone(conn))
+    day = parse_instant(draft.started_at).astimezone(tz).date()
+    lo = iso_utc(datetime.combine(day, time.min, tz))
+    hi = iso_utc(datetime.combine(day + timedelta(days=1), time.min, tz))
+    return conn.execute(
+        f"SELECT {_CANDIDATE_COLUMNS} FROM activities WHERE started_at >= ? AND started_at < ? "
+        "AND (? = 0 OR source = 'manual') ORDER BY started_at LIMIT 10",
+        (lo, hi, int(manual_only)),
+    ).fetchall()
+
+
 def find_candidates(conn: sqlite3.Connection, draft: Draft) -> Candidate:
+    """Exact fingerprint = already present. Otherwise possible duplicates: the near-match window
+    (start, distance, duration) for runs from files, plus the same athlete-local day whenever a
+    hand-logged run is involved (it has no clock time and a rough distance, see `manual_runs`)."""
     exact = conn.execute(
         "SELECT 1 FROM activities WHERE fingerprint = ? LIMIT 1", (draft.fingerprint,)
     ).fetchone()
     if exact:
         return Candidate(draft, True, [])
+    if draft.source == "manual":
+        return Candidate(draft, False, [dict(r) for r in _same_local_day(conn, draft, False)])
     start = parse_instant(draft.started_at)
     lo, hi = iso_utc(start - timedelta(seconds=60)), iso_utc(start + timedelta(seconds=60))
     d, s = draft.distance_meters, draft.duration_seconds
     rows = conn.execute(
-        "SELECT id, source, title, started_at, distance_meters, duration_seconds FROM activities "
+        f"SELECT {_CANDIDATE_COLUMNS} FROM activities "
         "WHERE started_at BETWEEN ? AND ? AND abs(distance_meters - ?) <= max(100, ? * 0.02) "
         "AND abs(duration_seconds - ?) <= max(60, ? * 0.02) ORDER BY started_at LIMIT 10",
         (lo, hi, d, d, s, s),
     ).fetchall()
-    return Candidate(draft, False, [dict(r) for r in rows])
+    found = {r["id"]: dict(r) for r in rows}
+    for r in _same_local_day(conn, draft, True):
+        found.setdefault(r["id"], dict(r))
+    return Candidate(draft, False, sorted(found.values(), key=lambda r: r["started_at"])[:10])
 
 
 @dataclass

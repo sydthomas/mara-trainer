@@ -11,7 +11,18 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import body, coros_workouts, dashboard, db, fueling, hr_pace, imports, paces, reports
+from . import (
+    body,
+    coros_workouts,
+    dashboard,
+    db,
+    fueling,
+    hr_pace,
+    imports,
+    manual_runs,
+    paces,
+    reports,
+)
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -42,6 +53,10 @@ app.add_typer(plan_app, name="plan")
 app.add_typer(fuel_app, name="fuel")
 app.add_typer(body_app, name="body")
 app.add_typer(coros_app, name="coros")
+run_app = typer.Typer(
+    help="Runs logged by hand, for days the watch didn't record.", no_args_is_help=True
+)
+app.add_typer(run_app, name="run")
 
 KM = 1000.0
 MI = 1609.344
@@ -541,6 +556,64 @@ def body_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> No
     if not body.delete_entry(_conn(), entry_id):
         _fail(f"no body entry with id {entry_id}")
     _out({"ok": True, "deleted": entry_id})
+
+
+@run_app.command("log")
+def run_log(
+    distance: Annotated[float, typer.Option(help="Distance (see --unit)")],
+    duration: Annotated[str, typer.Option(help="Run time H:MM:SS or MM:SS (required)")],
+    date_: Annotated[
+        str | None,
+        typer.Option("--date", help="Date YYYY-MM-DD, today or earlier (default: today)"),
+    ] = None,
+    unit: Annotated[str, typer.Option(help="Unit for --distance: km or mi")] = "mi",
+    notes: Annotated[str | None, typer.Option(help="Anything else, e.g. 'forgot my watch'")] = None,
+    allow_duplicate: Annotated[
+        bool,
+        typer.Option(
+            "--allow-duplicate", help="Confirmed: a different run from the others that day"
+        ),
+    ] = False,
+) -> None:
+    """Log a run the watch didn't record (source manual). Exit 2 = another run that day may be
+    the same one; nothing saved until confirmed with --allow-duplicate."""
+    if unit not in ("km", "mi"):
+        _fail("--unit must be km or mi")
+    try:
+        seconds = _parse_hms(duration)
+    except (ValueError, typer.BadParameter):
+        _fail(f"--duration must be H:MM:SS or MM:SS, got {duration!r}")
+    conn = _conn()
+    try:
+        day = date_ or reports.athlete_today(conn)
+    except reports.ReportError as exc:
+        _fail(str(exc))
+    run = manual_runs.ManualRun(
+        date=day,
+        distance_meters=round(distance * (KM if unit == "km" else MI)),
+        duration_seconds=seconds,
+        notes=notes,
+    )
+    try:
+        result = manual_runs.add_run(conn, run, allow_duplicate)
+    except manual_runs.ManualRunError as exc:
+        _fail("invalid run", problems=exc.problems)
+    if result["status"] == "needs_confirmation":
+        result["message"] = (
+            "Another run is logged that day; nothing was saved. Confirm with the runner, then "
+            "re-run with --allow-duplicate only if it is a different run."
+        )
+        typer.echo(json.dumps(result, indent=2, default=str))
+        raise typer.Exit(2)
+    _out(result)
+
+
+@run_app.command("delete")
+def run_delete(activity_id: Annotated[int, typer.Argument(help="Activity id")]) -> None:
+    """Delete one hand-logged run (runs imported from files are never deleted here)."""
+    if not manual_runs.delete_run(_conn(), activity_id):
+        _fail(f"no hand-logged run with id {activity_id}")
+    _out({"ok": True, "deleted": activity_id})
 
 
 def main() -> None:  # pragma: no cover

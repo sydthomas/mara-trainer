@@ -394,28 +394,59 @@ def test_where_with_a_race_but_no_plan(conn: sqlite3.Connection) -> None:
 def test_weekly_distance_matches_rollups_and_plan(full: sqlite3.Connection) -> None:
     data = dashboard.build_data(full, TODAY, 4)
     rows = panel(data, "weekly_distance")["rows"]
-    assert [r["date"] for r in rows] == ["2026-02-16", "2026-02-23", "2026-03-02", "2026-03-09"]
-    assert [r["value"] for r in rows] == [None, None, 23000, 18000]
+    # The plan starts the week of 02-23 and no run is earlier, so the chart starts there.
+    assert [r["date"] for r in rows] == ["2026-02-23", "2026-03-02", "2026-03-09"]
+    assert [r["value"] for r in rows] == [None, 23000, 18000]
     plan = db.load_accepted_plan(full)
     assert plan is not None
     targets = {w["start_date"]: w["target_distance_meters"] for w in plan["weeks"]}
-    assert rows[0]["target"] is None  # before the plan starts
-    assert [r["target"] for r in rows[1:]] == [targets[r["date"]] for r in rows[1:]]
+    assert [r["target"] for r in rows] == [targets[r["date"]] for r in rows]
     assert panel(data, "weekly_distance")["status"] == "ok"
 
 
 def test_weekly_chart_render(full: sqlite3.Connection) -> None:
     page = dashboard.render_html(dashboard.build_data(full, TODAY, 4))
     chart = section(page, "weekly_distance")
-    assert chart.count("<title>Week of ") == 4  # one hover text per bar
+    assert chart.count("<title>Week of ") == 3  # one hover text per bar
     assert "<title>Week of Mar 2: 14.3 mi, plan " in chart
-    assert "<title>Week of Feb 16: no runs logged</title>" in chart
+    assert "<title>Week of Feb 23: no runs logged" in chart
     assert 'role="img"' in chart and "aria-labelledby" in chart
     assert "Show as a table" in chart
     assert "<td>Mar 2</td>" in chart and "<td>14.3</td>" in chart
-    assert f"<td>Feb 16</td><td>{dashboard.MISSING}</td><td>{dashboard.MISSING}</td>" in chart
+    feb23 = chart.split("<td>Feb 23</td>")[1].split("</tr>")[0]
+    assert feb23.endswith(f"<td>{dashboard.MISSING}</td>")  # planned, nothing done: a dash
     assert "<td>0.0</td>" not in chart
     assert "Done</span>" in chart and "Plan</span>" in chart
+
+
+def test_weekly_chart_starts_at_the_first_run_without_a_plan(conn: sqlite3.Connection) -> None:
+    add_run(conn, "2026-03-03T16:00:00.000Z", 8000)  # week of 03-02
+    add_run(conn, "2026-03-20T16:00:00.000Z", 9000)  # after today: not counted
+    rows = panel(dashboard.build_data(conn, TODAY, 12), "weekly_distance")["rows"]
+    assert [r["date"] for r in rows] == ["2026-03-02", "2026-03-09"]
+    assert [r["value"] for r in rows] == [8000, None]
+
+
+def test_weekly_chart_keeps_the_max_when_runs_are_older(full: sqlite3.Connection) -> None:
+    add_run(full, "2026-01-06T16:00:00.000Z", 5000)  # long before the 4-week window
+    rows = panel(dashboard.build_data(full, TODAY, 4), "weekly_distance")["rows"]
+    assert [r["date"] for r in rows] == ["2026-02-16", "2026-02-23", "2026-03-02", "2026-03-09"]
+
+
+def test_weekly_chart_an_earlier_run_beats_a_later_plan(full: sqlite3.Connection) -> None:
+    add_run(full, "2026-02-18T16:00:00.000Z", 5000)  # week of 02-16, before plan week 1
+    rows = panel(dashboard.build_data(full, TODAY, 12), "weekly_distance")["rows"]
+    assert rows[0]["date"] == "2026-02-16" and rows[0]["value"] == 5000
+    assert rows[0]["target"] is None  # before the plan starts
+    assert len(rows) == 4
+
+
+def test_weekly_chart_plan_starting_later_keeps_this_week(conn: sqlite3.Connection) -> None:
+    db.save_race_setup(conn, SETUP)
+    brief = build_schedule_brief(SETUP, "2026-03-23")  # plan starts after today
+    db.save_plan(conn, validate_schedule(build_valid_plan(SETUP, brief), SETUP, brief))
+    rows = panel(dashboard.build_data(conn, TODAY, 12), "weekly_distance")["rows"]
+    assert [r["date"] for r in rows] == ["2026-03-09"]
 
 
 def test_today_hides_later_runs(full: sqlite3.Connection) -> None:
@@ -579,7 +610,7 @@ def test_weekly_distance_marks_weeks_with_yellow_or_red(full: sqlite3.Connection
         body.add_entry(full, body.BodyEntry(date=day, status=status, location="left <shin>"))
     data = dashboard.build_data(full, TODAY, 4)
     weekly = panel(data, "weekly_distance")
-    assert [r["body"] for r in weekly["rows"]] == [{}, {}, {"yellow": 2, "red": 1}, {"red": 1}]
+    assert [r["body"] for r in weekly["rows"]] == [{}, {"yellow": 2, "red": 1}, {"red": 1}]
     assert all(
         "body" not in r
         for r in panel(dashboard.build_data(full, TODAY, 4, None, True), "long_run")["rows"]
@@ -654,9 +685,9 @@ def test_hidden_panels_are_not_rendered(full: sqlite3.Connection, tmp_path: Path
 
 def test_long_run_is_longest_per_week_vs_planned_long(full: sqlite3.Connection) -> None:
     rows = panel(with_extra(full, TODAY, 4), "long_run")["rows"]
-    assert [r["value"] for r in rows] == [None, None, 15000, 12000]
+    assert [r["value"] for r in rows] == [None, 15000, 12000]  # from the plan's first week
     week = next(s for s in week_plan(full)["sessions"] if s["kind"] == "long")
-    assert rows[3]["target"] == week["distance_meters"]
+    assert rows[2]["target"] == week["distance_meters"]
 
 
 def test_fueling_only_plots_entries_with_a_rate(full: sqlite3.Connection) -> None:

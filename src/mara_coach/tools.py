@@ -7,7 +7,8 @@ Rules:
 - Read-only. `validate_plan` checks a draft but never accepts it; Sydney accepts via the CLI.
   `propose_fuel_entry` checks a debrief entry but never saves it; the Slack channel saves it in
   code after she replies yes. `propose_week` works the same way for one week, and
-  `propose_body_entry` for one body check / niggle.
+  `propose_body_entry` for one body check / niggle, and `propose_run_entry` for one run the
+  watch didn't record.
 - Channel actions (`sync_runs`, `get_weather`): the registry only describes them. The work is
   done by a function the channel passes to `call_tool` (`actions`); the Slack bot does. Without
   one (the CLI, the evals, tests) they answer "not available here" and touch nothing, so no
@@ -25,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mara_trainer import body, db, fueling, reports
+from mara_trainer import body, db, fueling, manual_runs, reports
 from mara_trainer.plan_rules import SESSION_KINDS
 
 from . import knowledge, profile, sources
@@ -228,6 +229,58 @@ def propose_body_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
         "entry": {k: v for k, v in entry.__dict__.items() if v is not None},
         "message": "Not saved yet. The app shows her this entry and asks her to confirm; it "
         "saves when she says yes. Don't say it's logged, and don't rate it.",
+    }
+
+
+def build_run_entry(args: dict[str, Any]) -> manual_runs.ManualRun:
+    """A hand-logged run's fields (miles or km, H:MM:SS) -> a ManualRun in SI units. Duration is
+    required (never estimated). Raises ToolError."""
+    if args.get("duration") is None:
+        raise ToolError("missing duration: ask her once how long the run took; never guess it")
+    per_unit = MI_METERS if args.get("unit", "mi") == "mi" else 1000.0
+    try:
+        meters = round(float(args["distance"]) * per_unit)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ToolError("distance must be a number") from exc
+    return manual_runs.ManualRun(
+        date=str(args.get("date")),
+        distance_meters=meters,
+        duration_seconds=_seconds(str(args["duration"])),
+        notes=args.get("notes"),
+    )
+
+
+def propose_run_entry(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
+    """Validate one run the watch didn't record and look for runs already logged that day.
+    Never saves: the channel saves it in code only after the runner says yes."""
+    try:
+        run = build_run_entry(args)
+        found = manual_runs.check(conn, run, reports.athlete_today(conn))
+    except (ToolError, LookupError, reports.ReportError) as exc:
+        return {"ok": False, "saved": False, "problems": [str(exc)]}
+    if not found["ok"]:
+        return {"ok": False, "saved": False, "problems": found["problems"]}
+    if found["exact_duplicate"]:
+        message = "This exact run is already logged. Tell her; there's nothing new to save."
+    elif found["possible_duplicates"]:
+        message = (
+            "Not saved yet. A run is already logged that day (possible_duplicates), maybe a "
+            "synced watch run: say so and ask whether this is a different run. The app shows "
+            "both and asks her to confirm."
+        )
+    else:
+        message = (
+            "Not saved yet. The app shows her this run and asks her to confirm; it saves when "
+            "she says yes. Don't say it's logged."
+        )
+    return {
+        "ok": True,
+        "saved": False,
+        "entry": found["entry"],
+        "distance_miles": round(run.distance_meters / MI_METERS, 2),
+        "exact_duplicate": found["exact_duplicate"],
+        "possible_duplicates": found["possible_duplicates"],
+        "message": message,
     }
 
 
@@ -507,6 +560,24 @@ TOOLS: tuple[Tool, ...] = (
             required=["date", "status"],
         ),
         propose_body_entry,
+    ),
+    Tool(
+        "propose_run_entry",
+        "A run her watch didn't record (no watch, watch died): check one hand-logged run and "
+        "see any run already logged that day. Distance and duration are her numbers, never "
+        "guessed; ask once for what's missing. It does NOT save; the app shows it to her and "
+        "saves it in code after she replies yes.",
+        _schema(
+            {
+                "date": {**_DATE, "description": "The run's day (athlete-local), not future"},
+                "distance": {"type": "number", "minimum": 0.1, "maximum": 310},
+                "unit": {"type": "string", "enum": ["mi", "km"]},
+                "duration": {"type": "string", "description": "H:MM:SS or MM:SS, her time"},
+                "notes": {"type": "string", "maxLength": manual_runs.NOTES_MAX},
+            },
+            required=["date", "distance"],
+        ),
+        propose_run_entry,
     ),
     Tool(
         "propose_week",

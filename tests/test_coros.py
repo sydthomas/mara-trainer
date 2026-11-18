@@ -125,6 +125,30 @@ def test_near_duplicates_wait_for_confirmation(conn: sqlite3.Connection, tmp_pat
     assert conn.execute("SELECT count(*) FROM activities").fetchone()[0] == 2
 
 
+def test_a_run_logged_by_hand_is_named_in_the_duplicate_question(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    from mara_trainer import manual_runs
+
+    manual_runs.add_run(conn, manual_runs.ManualRun("2026-11-07", 16000, 5600), today="2026-11-08")
+    report = _sync(conn, FakeApi({"2": _fit(SAT)}, RUNS[1:]), tmp_path)
+    assert report.imported == [] and len(report.pending) == 1
+    assert report.pending[0].by_hand == ("Sat 11/7: 9.94 mi, 1:33:20",)
+    question = coros.duplicate_question(report.pending)
+    assert "logged by hand" in question and "Sat 11/7: 9.94 mi, 1:33:20" in question
+    assert "*yes*" in question and "both" in question and "*no*" in question
+    assert "Apple Health" not in question
+    assert conn.execute("SELECT count(*) FROM activities").fetchone()[0] == 1  # nothing merged
+    assert coros.import_confirmed(conn, report.pending) == 1  # yes: both are kept
+    assert conn.execute("SELECT count(*) FROM activities").fetchone()[0] == 2
+
+
+def test_duplicate_question_without_hand_logged_runs_is_unchanged() -> None:
+    pending = coros.Pending(Path("x.fit"), ("k1",), ("Sat 11/7: 10.00 mi, 1:30:00",))
+    question = coros.duplicate_question([pending])
+    assert "logged by hand" not in question and "Apple Health copy" in question
+
+
 def test_download_failure_stops_and_keeps_what_it_has(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:

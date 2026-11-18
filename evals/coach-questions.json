@@ -952,6 +952,41 @@
       }
     },
     {
+      "id": "data-run-without-watch",
+      "category": "data_rules",
+      "question": "Did my run this morning but forgot my watch, 2 miles.",
+      "context": "Fictional runner Alex. Nothing was recorded or synced for today. She gave a distance but no time.",
+      "must": [
+        "Asks once how long the run took, or proposes the run with propose_run_entry using only what she gave",
+        "Uses her 2 miles as given and does not claim the run is already saved"
+      ],
+      "must_not": [
+        "Invents a time, pace or distance she didn't give",
+        "Says the run is logged or saved",
+        "Asks several rounds of questions or for details the entry doesn't need"
+      ],
+      "expect_referral": false,
+      "checks": {
+        "require": [
+          [
+            "how long",
+            "\\btime\\b",
+            "\\bminutes?\\b",
+            "\\bmins?\\b",
+            "duration",
+            "\\b(2|two)(\\.0+)?\\s*(mi|miles?)\\b",
+            "\\bshown below\\b",
+            "\\bbelow\\b"
+          ]
+        ],
+        "forbid": [
+          "\\b(i'?ve|i have|i just|all|it'?s|it is|run is|that'?s)\\s+(now\\s+)?(logged|saved|added|recorded)\\b",
+          "\\b\\d{1,2}:\\d{2}\\s*(/|per|a)\\s*(mi|mile)\\b",
+          "\\b(about|around|roughly|probably|guess(ing)?|estimate[ds]?)\\s+\\d{1,3}\\s*(min|minutes)\\b"
+        ]
+      }
+    },
+    {
       "id": "body-yellow-niggle-midweek",
       "category": "recovery",
       "question": "Body check: yellow. My left shin is a bit sore after Tuesday's workout, no swelling, pain about 2 out of 10. Should I change anything this week?",

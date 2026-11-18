@@ -29,6 +29,7 @@ EXPECTED = {
     "propose_fuel_entry",
     "body_log",
     "propose_body_entry",
+    "propose_run_entry",
     "propose_week",
     "plan_week",
     "sync_runs",
@@ -268,3 +269,81 @@ def test_propose_week_schema_has_cut_and_restore() -> None:
     assert "never more" in spec["description"]
     args = {"start_date": "2026-11-16", "sessions": [], "restore": "yes"}
     assert tools.check_args(spec["input_schema"], args)  # a non-boolean restore is refused
+
+
+# ---------------------------------------------------------------- propose_run_entry
+
+
+def _today(conn: sqlite3.Connection) -> str:
+    from mara_trainer import reports
+
+    return reports.athlete_today(conn)
+
+
+def _activities(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("SELECT count(*) FROM activities").fetchone()[0])
+
+
+def test_propose_run_entry_validates_and_never_saves(conn: sqlite3.Connection) -> None:
+    today = _today(conn)
+    out = tools.call_tool(
+        conn,
+        "propose_run_entry",
+        {"date": today, "distance": 2, "duration": "20:00", "notes": "forgot my watch"},
+    )
+    assert out["ok"] is True and out["saved"] is False
+    assert out["entry"] == {
+        "date": today,
+        "distance_meters": 3219,
+        "duration_seconds": 1200,
+        "notes": "forgot my watch",
+    }
+    assert out["distance_miles"] == 2.0
+    assert out["possible_duplicates"] == [] and out["exact_duplicate"] is False
+    assert "Not saved" in out["message"]
+    assert _activities(conn) == 0
+
+
+def test_propose_run_entry_km(conn: sqlite3.Connection) -> None:
+    out = tools.call_tool(
+        conn,
+        "propose_run_entry",
+        {"date": _today(conn), "distance": 5, "unit": "km", "duration": "0:25:00"},
+    )
+    assert out["entry"]["distance_meters"] == 5000
+
+
+def test_propose_run_entry_asks_for_a_missing_duration(conn: sqlite3.Connection) -> None:
+    out = tools.call_tool(conn, "propose_run_entry", {"date": _today(conn), "distance": 2})
+    assert out["ok"] is False and out["saved"] is False
+    assert any("duration" in p and "ask" in p for p in out["problems"])
+
+
+def test_propose_run_entry_refuses_a_future_day(conn: sqlite3.Connection) -> None:
+    out = tools.call_tool(
+        conn, "propose_run_entry", {"date": "2999-01-01", "distance": 2, "duration": "20:00"}
+    )
+    assert out["ok"] is False and any("future" in p for p in out["problems"])
+    bad = tools.call_tool(
+        conn, "propose_run_entry", {"date": _today(conn), "distance": 2, "duration": "twenty"}
+    )
+    assert bad["ok"] is False and "duration" in bad["problems"][0]
+
+
+def test_propose_run_entry_reports_a_run_already_that_day(conn: sqlite3.Connection) -> None:
+    from mara_trainer import manual_runs
+
+    today = _today(conn)
+    manual_runs.add_run(conn, manual_runs.ManualRun(today, 3300, 1250))
+    out = tools.call_tool(
+        conn, "propose_run_entry", {"date": today, "distance": 2, "duration": "20:00"}
+    )
+    assert out["ok"] is True and out["saved"] is False
+    [dup] = out["possible_duplicates"]
+    assert dup["date"] == today and dup["source"] == "manual"
+    assert "already" in out["message"]
+    same = tools.call_tool(
+        conn, "propose_run_entry", {"date": today, "distance": 3300 / 1609.344, "duration": "20:50"}
+    )
+    assert same["exact_duplicate"] is True and "already logged" in same["message"]
+    assert _activities(conn) == 1
