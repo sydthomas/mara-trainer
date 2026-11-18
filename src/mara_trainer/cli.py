@@ -168,7 +168,8 @@ def dashboard_cmd(
         str | None, typer.Option(help="Build as of this athlete-local date (YYYY-MM-DD)")
     ] = None,
     fit_dir: Annotated[
-        Path, typer.Option(help="Folder of .fit files for the heart-rate data (read only)")
+        Path,
+        typer.Option(help="Kept for compatibility; this version of the page reads no FIT files"),
     ] = Path("exports/coros"),
 ) -> None:
     """Write the local progress dashboard: one offline HTML file, nothing uploaded."""

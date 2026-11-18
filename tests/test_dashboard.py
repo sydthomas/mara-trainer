@@ -107,9 +107,9 @@ def test_empty_db_every_panel_says_no_data(conn: sqlite3.Connection) -> None:
     data = dashboard.build_data(conn, TODAY, 4)
     assert data["generated_for"] == TODAY and data["weeks"] == 4 and data["unit"] == "mi"
     assert [p["id"] for p in data["panels"]] == SHOWN
-    assert [p["id"] for p in data["extra"]] == NOT_SHOWN
-    assert all(p["status"] == "no_data" for p in data["panels"] + data["extra"])
-    assert data["last_sync"] is None
+    assert data["extra"] == []
+    assert all(p["status"] == "no_data" for p in data["panels"])
+    assert data["last_import"] is None
     weekly = panel(data, "weekly_distance")["rows"]
     assert len(weekly) == 4
     assert all(r["value"] is None and r["target"] is None for r in weekly)  # missing, not zero
@@ -117,7 +117,7 @@ def test_empty_db_every_panel_says_no_data(conn: sqlite3.Connection) -> None:
     today, week = view(page, "today"), view(page, "week")
     assert "No accepted plan yet." in today and "No accepted plan yet." in week
     assert "No race set yet." in today and "No race set yet." in week
-    assert "No runs synced yet." in today and "No runs synced yet." in week
+    assert "No runs imported yet." in today and "No runs imported yet." in week
     assert "Import runs or accept a plan to see weekly miles." in today
     assert "<svg" not in section(page, "weekly_distance")
     assert "0.0" not in page and "0 mi" not in page
@@ -217,37 +217,37 @@ def test_today_default_is_the_athlete_local_date(
 # ---------------------------------------------------------------- last sync
 
 
-def test_last_sync_absent(full: sqlite3.Connection) -> None:
+def test_last_import_absent(full: sqlite3.Connection) -> None:
     data = dashboard.build_data(full, TODAY, 4)
-    assert data["last_sync"] is None
+    assert data["last_import"] is None
     page = dashboard.render_html(data)
-    assert view(page, "today").count("No runs synced yet.") == 1
-    assert view(page, "week").count("No runs synced yet.") == 1
+    assert view(page, "today").count("No runs imported yet.") == 1
+    assert view(page, "week").count("No runs imported yet.") == 1
 
 
-def test_last_sync_newest_batch_in_athlete_local_time(full: sqlite3.Connection) -> None:
+def test_last_import_newest_batch_in_athlete_local_time(full: sqlite3.Connection) -> None:
     add_batch(full, "2026-03-13T02:02:00.000Z")  # Thu Mar 12, 7:02 pm in Los Angeles (PDT)
     add_batch(full, "2026-03-15T14:42:00.000Z")  # Sun Mar 15, 7:42 am
     data = dashboard.build_data(full, TODAY, 4)
-    assert data["last_sync"] == {
+    assert data["last_import"] == {
         "at": "2026-03-15T14:42:00.000Z",
-        "label": "Runs last synced today, 7:42 am",
+        "label": "Last run imported today, 7:42 am",
     }
     page = dashboard.render_html(data)
-    assert "Runs last synced today, 7:42 am" in view(page, "today")
-    assert "Runs last synced today, 7:42 am" in view(page, "week")
+    assert "Last run imported today, 7:42 am" in view(page, "today")
+    assert "Last run imported today, 7:42 am" in view(page, "week")
     later = dashboard.build_data(full, "2026-03-17", 4)
-    assert later["last_sync"]["label"] == "Runs last synced Mar 15, 7:42 am"
+    assert later["last_import"]["label"] == "Last run imported Mar 15, 7:42 am"
 
 
-def test_last_sync_crossing_midnight_uses_the_local_date(full: sqlite3.Connection) -> None:
+def test_last_import_crossing_midnight_uses_the_local_date(full: sqlite3.Connection) -> None:
     add_batch(full, "2026-03-15T06:02:00.000Z")  # Sat Mar 14, 11:02 pm local, Sunday in UTC
-    label = dashboard.build_data(full, TODAY, 4)["last_sync"]["label"]
-    assert label == "Runs last synced Mar 14, 11:02 pm"
+    label = dashboard.build_data(full, TODAY, 4)["last_import"]["label"]
+    assert label == "Last run imported Mar 14, 11:02 pm"
     with full:
         full.execute("UPDATE athlete SET timezone = 'Europe/London' WHERE id = 1")
-    label = dashboard.build_data(full, TODAY, 4)["last_sync"]["label"]
-    assert label == "Runs last synced today, 6:02 am"
+    label = dashboard.build_data(full, TODAY, 4)["last_import"]["label"]
+    assert label == "Last run imported today, 6:02 am"
 
 
 # ---------------------------------------------------------------- this week
@@ -312,8 +312,36 @@ def test_this_week_two_runs_one_day(full: sqlite3.Connection) -> None:
 def test_this_week_without_a_plan(conn: sqlite3.Connection) -> None:
     add_run(conn, "2026-03-10T16:00:00.000Z", 6000)
     week = panel(dashboard.build_data(conn, TODAY, 4), "this_week")
-    assert week["status"] == "no_data" and week["rows"] == []
-    assert week["start"] == "2026-03-09" and week["end"] == TODAY
+    assert week["status"] == "no_data" and week["start"] == "2026-03-09" and week["end"] == TODAY
+    # The days are still there with what was done; only the planned parts are missing.
+    assert [r["date"] for r in week["rows"]] == [f"2026-03-{d:02d}" for d in range(9, 16)]
+    assert [r["done_meters"] for r in week["rows"]] == [None, 6000, None, None, None, None, None]
+    assert all(r["kind"] is None and r["planned_meters"] is None for r in week["rows"])
+    assert week["planned_meters"] is None and week["done_meters"] == 6000
+    assert week["left"] == [] and week["up_next"] is None
+
+
+def test_no_plan_run_today_shows_as_done(conn: sqlite3.Connection) -> None:
+    add_run(conn, "2026-03-15T16:00:00.000Z", 8047)  # 5.0 mi, today
+    data = dashboard.build_data(conn, TODAY, 4)
+    today = panel(data, "today")
+    assert today["status"] == "no_data" and today["state"] == "done"
+    assert today["done_meters"] == 8047
+    page = dashboard.render_html(data)
+    hero = section(page, "today")
+    assert "No accepted plan yet." in hero and "Done · 5.0 mi" in hero
+    week = view(page, "week")
+    assert "No accepted plan yet." in week and week.count("<li ") == 7
+    sunday = week.split("<li ")[7]
+    assert "Done · 5.0 mi" in sunday and "Sun" in sunday
+
+
+def test_week_outside_the_plan_still_shows_runs(full: sqlite3.Connection) -> None:
+    add_run(full, "2026-02-17T16:00:00.000Z", 4828)  # 3.0 mi, the week before plan week 1
+    page = dashboard.render_html(dashboard.build_data(full, "2026-02-18", 1))
+    assert "This week is not in the accepted plan." in view(page, "week")
+    assert "Done · 3.0 mi" in view(page, "week")
+    assert "3.0" in section(page, "this_week")
 
 
 def test_this_week_race_week(full: sqlite3.Connection) -> None:
@@ -471,6 +499,18 @@ def test_week_view_done_today_shows_done_not_today_pill(full: sqlite3.Connection
     assert "Up next" not in week  # nothing left this week
 
 
+def test_past_run_day_with_nothing_logged_looks_different(full: sqlite3.Connection) -> None:
+    page = dashboard.render_html(dashboard.build_data(full, TODAY, 4))  # Thu and Sat: nothing
+    strip = section(page, "this_week")
+    assert strip.count("g-past") == 2 and "g-plan" not in strip
+    assert strip.count(", nothing logged</span>") == 2
+    week = view(page, "week")
+    thursday = week.split("<li ")[4]
+    assert "g-past" in thursday and f'<span class="muted">{dashboard.MISSING}</span>' in thursday
+    future = view(dashboard.render_html(dashboard.build_data(full, "2026-03-11", 4)), "week")
+    assert "g-past" not in future and "nothing logged" not in future
+
+
 def test_strip_glyphs_and_text_alternatives(full: sqlite3.Connection) -> None:
     edit_week(full, {3: {"kind": "strength"}})
     page = dashboard.render_html(dashboard.build_data(full, "2026-03-11", 4))
@@ -540,7 +580,10 @@ def test_weekly_distance_marks_weeks_with_yellow_or_red(full: sqlite3.Connection
     data = dashboard.build_data(full, TODAY, 4)
     weekly = panel(data, "weekly_distance")
     assert [r["body"] for r in weekly["rows"]] == [{}, {}, {"yellow": 2, "red": 1}, {"red": 1}]
-    assert all("body" not in r for r in panel(data, "long_run")["rows"])
+    assert all(
+        "body" not in r
+        for r in panel(dashboard.build_data(full, TODAY, 4, None, True), "long_run")["rows"]
+    )
 
     chart = weekly_chart(data)
     svg = weekly_svg(data)
@@ -586,22 +629,38 @@ def test_weekly_distance_without_yellow_or_red_has_no_marks(full: sqlite3.Connec
 # ---------------------------------------------------------------- data kept but not shown
 
 
+def with_extra(*args: Any) -> dict[str, Any]:
+    return dashboard.build_data(*args, include_extra=True)
+
+
+def test_extra_is_off_by_default_and_fit_files_are_not_read(
+    full: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("FIT files decoded for data the page does not show")
+
+    monkeypatch.setattr(hr_pace, "report", boom)
+    assert dashboard.build_data(full, TODAY, 4, tmp_path)["extra"] == []
+
+
 def test_hidden_panels_are_not_rendered(full: sqlite3.Connection, tmp_path: Path) -> None:
-    page = dashboard.render_html(dashboard.build_data(full, TODAY, 4, tmp_path))
+    data = with_extra(full, TODAY, 4, tmp_path)
+    assert [p["id"] for p in data["extra"]] == NOT_SHOWN
+    page = dashboard.render_html(data)
     for panel_id in NOT_SHOWN:
         assert f'id="{panel_id}"' not in page
     assert "Carbs per hour" not in page and "Long-run build-up" not in page
 
 
 def test_long_run_is_longest_per_week_vs_planned_long(full: sqlite3.Connection) -> None:
-    rows = panel(dashboard.build_data(full, TODAY, 4), "long_run")["rows"]
+    rows = panel(with_extra(full, TODAY, 4), "long_run")["rows"]
     assert [r["value"] for r in rows] == [None, None, 15000, 12000]
     week = next(s for s in week_plan(full)["sessions"] if s["kind"] == "long")
     assert rows[3]["target"] == week["distance_meters"]
 
 
 def test_fueling_only_plots_entries_with_a_rate(full: sqlite3.Connection) -> None:
-    fuel = panel(dashboard.build_data(full, TODAY, 4), "fueling")
+    fuel = panel(with_extra(full, TODAY, 4), "fueling")
     assert fuel["rows"] == [{"date": "2026-03-08", "value": 40.0, "target": None}]
     assert "1 of 2" in fuel["note"]
 
@@ -616,17 +675,17 @@ def test_fueling_counts_every_entry_in_the_window(conn: sqlite3.Connection) -> N
         fueling.add_entry(
             conn, fueling.FuelEntry(date="2026-04-01", duration_seconds=3600, carbs_grams=30)
         )
-    fuel = panel(dashboard.build_data(conn, TODAY, 4), "fueling")
+    fuel = panel(with_extra(conn, TODAY, 4), "fueling")
     assert [r["date"] for r in fuel["rows"]] == ["2026-03-08", "2026-03-08"]
     assert "2 of 2" in fuel["note"]
-    later = panel(dashboard.build_data(conn, "2026-04-05", 8), "fueling")
+    later = panel(with_extra(conn, "2026-04-05", 8), "fueling")
     assert len(later["rows"]) == fueling.MAX_LAST + 2
     assert later["rows"][0]["date"] == "2026-03-08"
 
 
 def test_fueling_logged_without_rate_is_no_data(conn: sqlite3.Connection) -> None:
     fueling.add_entry(conn, fueling.FuelEntry(date="2026-03-15", stomach=4))
-    fuel = panel(dashboard.build_data(conn, TODAY, 4), "fueling")
+    fuel = panel(with_extra(conn, TODAY, 4), "fueling")
     assert fuel["status"] == "no_data" and fuel["rows"] == []
 
 
@@ -639,14 +698,14 @@ def tuesday_run(folder: Path, weeks_ago: int, hr: int | None) -> None:
 
 def test_hr_panel_no_folder_or_no_files(conn: sqlite3.Connection, tmp_path: Path) -> None:
     for folder in (None, tmp_path / "missing", tmp_path):
-        hr = panel(dashboard.build_data(conn, TODAY, 4, folder), "hr_at_pace")
+        hr = panel(with_extra(conn, TODAY, 4, folder), "hr_at_pace")
         assert hr["status"] == "no_data" and hr["band"] is None and hr["trend"] is None
         assert all(r["value"] is None for r in hr["rows"])  # missing, never zero
 
 
 def test_hr_panel_runs_but_none_usable(conn: sqlite3.Connection, tmp_path: Path) -> None:
     tuesday_run(tmp_path, 0, None)  # no heart rate recorded
-    hr = panel(dashboard.build_data(conn, TODAY, 4, tmp_path), "hr_at_pace")
+    hr = panel(with_extra(conn, TODAY, 4, tmp_path), "hr_at_pace")
     assert hr["status"] == "no_data"
     assert hr["note"].startswith("0 of 1 runs")
 
@@ -655,7 +714,7 @@ def test_hr_panel_weekly_means_band_and_gaps(conn: sqlite3.Connection, tmp_path:
     tuesday_run(tmp_path, 0, 150)
     tuesday_run(tmp_path, 1, 152)
     tuesday_run(tmp_path, 3, 156)  # the week in between has no run
-    hr = panel(dashboard.build_data(conn, TODAY, 4, tmp_path), "hr_at_pace")
+    hr = panel(with_extra(conn, TODAY, 4, tmp_path), "hr_at_pace")
     report = hr_pace.report(tmp_path, "America/Los_Angeles", TODAY, 4)
     assert hr["status"] == "ok" and hr["band"] == "10:05-10:35/mi"
     assert [r["value"] for r in hr["rows"]] == [w["mean_hr"] for w in report["weeks"]]
@@ -672,11 +731,11 @@ def test_hr_panel_trend_sentence_with_enough_weeks(
     expected = (
         "HR at your usual pace (10:05-10:35/mi): 150 bpm over the last 4 weeks, 156 the 4 before"
     )
-    assert panel(dashboard.build_data(conn, TODAY, 8, tmp_path), "hr_at_pace")["trend"] == expected
+    assert panel(with_extra(conn, TODAY, 8, tmp_path), "hr_at_pace")["trend"] == expected
 
 
 def test_body_panel_entries_in_the_window(conn: sqlite3.Connection) -> None:
-    assert panel(dashboard.build_data(conn, TODAY, 4), "body_log")["rows"] == []
+    assert panel(with_extra(conn, TODAY, 4), "body_log")["rows"] == []
     entries = [
         ("2026-02-10", "red", "old entry"),  # before the 4-week window
         ("2026-02-17", "green", None),
@@ -687,6 +746,6 @@ def test_body_panel_entries_in_the_window(conn: sqlite3.Connection) -> None:
     ]
     for day, status, where in entries:
         body.add_entry(conn, body.BodyEntry(date=day, status=status, location=where))
-    log = panel(dashboard.build_data(conn, TODAY, 4), "body_log")
+    log = panel(with_extra(conn, TODAY, 4), "body_log")
     assert log["status"] == "ok" and log["start"] == "2026-02-16" and log["end"] == TODAY
     assert [(r["date"], r["status"], r["location"]) for r in log["rows"]] == entries[1:5]

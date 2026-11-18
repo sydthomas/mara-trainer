@@ -101,31 +101,31 @@ def _this_week(
 ) -> dict[str, Any]:
     """The Monday-Sunday week containing `today`: each day's planned session (`reports.plan_week`)
     next to the runs logged that athlete-local day (`summarize_range`). A day with no run has no
-    done distance (missing, not zero). `left` = run days from today on with nothing logged yet."""
+    done distance (missing, not zero). `left` = run days from today on with nothing logged yet.
+    The seven days are always there; without a plan week only the planned parts are missing."""
     start, end = week_bounds(today)
     week = reports.plan_week(plan, today)
+    planned = {s["date"]: s for s in week["sessions"]} if week else {}
     rows: list[dict[str, Any]] = []
-    if week:
-        planned = {s["date"]: s for s in week["sessions"]}
-        for offset in range(7):
-            day = (date.fromisoformat(start) + timedelta(days=offset)).isoformat()
-            session = planned.get(day)
-            kind = session["kind"] if session else None
-            done = summarize_range(activities, [], tz, day, day, now)
-            rows.append(
-                {
-                    "date": day,
-                    "kind": kind,  # None = the plan has no session for this day
-                    "planned_meters": (
-                        session["distance_meters"] if session and kind not in NOT_RUNS else None
-                    ),
-                    "details": session.get("details") if session else None,
-                    "done_meters": done.distance_meters if done.run_count else None,
-                    "run_count": done.run_count,
-                    "future": day > today,
-                    "state": _day_state(kind, done.run_count, day, today),
-                }
-            )
+    for offset in range(7):
+        day = (date.fromisoformat(start) + timedelta(days=offset)).isoformat()
+        session = planned.get(day)
+        kind = session["kind"] if session else None
+        done = summarize_range(activities, [], tz, day, day, now)
+        rows.append(
+            {
+                "date": day,
+                "kind": kind,  # None = no session for this day (or no plan week)
+                "planned_meters": (
+                    session["distance_meters"] if session and kind not in NOT_RUNS else None
+                ),
+                "details": session.get("details") if session else None,
+                "done_meters": done.distance_meters if done.run_count else None,
+                "run_count": done.run_count,
+                "future": day > today,
+                "state": _day_state(kind, done.run_count, day, today),
+            }
+        )
     left = [r for r in rows if r["state"] in ("today", "planned")]
     done_rows = [r for r in rows if r["done_meters"] is not None]
     up_next = next((r["date"] for r in rows if r["state"] == "planned"), None)
@@ -215,15 +215,16 @@ def _where(
     }
 
 
-def _sync_label(at: str, tz: str, today: str) -> str:
-    """'Runs last synced today, 7:42 am' or '... Mar 14, 11:02 pm', in athlete-local time."""
+def _import_label(at: str, tz: str, today: str) -> str:
+    """'Last run imported today, 7:42 am' or '... Mar 14, 11:02 pm', in athlete-local time.
+    This is when the newest file was imported, not when COROS was last checked."""
     local = parse_instant(at).astimezone(ZoneInfo(tz))
     clock = local.strftime("%-I:%M %p").lower()
     day = local.date().isoformat()
     when = "today" if day == today else local.strftime("%b %-d")
     if day[:4] != today[:4]:
         when += local.strftime(", %Y")
-    return f"Runs last synced {when}, {clock}"
+    return f"Last run imported {when}, {clock}"
 
 
 def _body_by_week(conn: sqlite3.Connection, start: str, today: str) -> dict[str, dict[str, int]]:
@@ -356,10 +357,13 @@ def build_data(
     today: str | None = None,
     weeks: int = DEFAULT_WEEKS,
     fit_dir: Path | None = None,
+    include_extra: bool = False,
 ) -> dict[str, Any]:
     """Sections for the week containing `today` (athlete-local, default today) and the last
-    `weeks` Monday-Sunday weeks ending with it. Runs after `today` are left out. `fit_dir` is the
-    folder of FIT files for the heart-rate data panel (read only, not rendered)."""
+    `weeks` Monday-Sunday weeks ending with it. Runs after `today` are left out.
+    `include_extra` adds the data panels the page doesn't show (long run, fueling, heart rate at
+    pace from the FIT files in `fit_dir`, body log); off by default, so no FIT file is decoded
+    for a normal build."""
     if not 1 <= weeks <= MAX_WEEKS:
         raise DashboardError(f"weeks must be 1-{MAX_WEEKS}")
     try:
@@ -457,13 +461,15 @@ def build_data(
         all_weeks = weekly_rollups(activities, [], tz, span.days // 7 + 1, now)
 
     week = _this_week(plan, activities, tz, today, now)
-    synced = db.last_import_at(conn)
+    imported = db.last_import_at(conn)
     return {
         "generated_for": today,
         "weeks": weeks,
         "unit": unit,
         "race": {"name": race.race_name, "date": race.race_date} if race else None,
-        "last_sync": ({"at": synced, "label": _sync_label(synced, tz, today)} if synced else None),
+        "last_import": (
+            {"at": imported, "label": _import_label(imported, tz, today)} if imported else None
+        ),
         "panels": [
             _today(week, plan, today),
             week,
@@ -472,12 +478,16 @@ def build_data(
             _milestones(everything, all_weeks, race, today),
         ],
         # Kept for later versions; not rendered on the page.
-        "extra": [
-            long_run,
-            fuel,
-            _hr_panel(fit_dir, tz, today, weeks, unit),
-            _body_panel(conn, rollups[0].start_date, today),
-        ],
+        "extra": (
+            [
+                long_run,
+                fuel,
+                _hr_panel(fit_dir, tz, today, weeks, unit),
+                _body_panel(conn, rollups[0].start_date, today),
+            ]
+            if include_extra
+            else []
+        ),
     }
 
 
@@ -530,6 +540,7 @@ color:var(--text)}
 .g-gym path{stroke:#c7c7cc;stroke-width:2;stroke-linecap:round}
 .g-rest circle{fill:var(--faint)}
 .g-plan circle{fill:none;stroke:var(--muted);stroke-width:2}
+.g-past circle{fill:none;stroke:var(--faint);stroke-width:1.25}
 .bar{height:6px;background:var(--card2);border-radius:999px;margin-top:8px;overflow:hidden}
 .bar div{height:100%;border-radius:999px;background:var(--ac)}
 .chart{width:100%;height:auto;display:block}
@@ -668,7 +679,7 @@ _GLYPHS = {
     "rest": ("g-rest", '<circle cx="18" cy="18" r="3"/>'),
     "none": ("g-rest", '<circle cx="18" cy="18" r="3"/>'),
     "planned": ("g-plan", '<circle cx="18" cy="18" r="14"/>'),
-    "past": ("g-plan", '<circle cx="18" cy="18" r="14"/>'),
+    "past": ("g-past", '<circle cx="18" cy="18" r="14"/>'),
 }
 
 
@@ -677,21 +688,31 @@ def _glyph(state: str) -> str:
     return f'<svg viewBox="0 0 36 36" class="dot {cls}" aria-hidden="true">{shapes}</svg>'
 
 
+def _row_title(row: dict[str, Any]) -> str:
+    """The day's session name; a logged run on a day with no plan session reads 'Run'."""
+    if row["kind"] is None:
+        return "Run" if row["done_meters"] is not None else MISSING
+    return _kind(row["kind"])
+
+
 def _day_text(row: dict[str, Any], unit: str) -> str:
     """One day in words, for screen readers: 'Tue Mar 10: Easy run 3.7 mi, done 3.7 mi'."""
-    text = f"{date.fromisoformat(row['date']).strftime('%a %b %-d')}: {_kind(row['kind'])}"
+    name = _row_title(row) if row["kind"] or row["done_meters"] is not None else "no session"
+    text = f"{date.fromisoformat(row['date']).strftime('%a %b %-d')}: {name}"
     if row["planned_meters"] is not None:
         text += f" {_amount(row['planned_meters'], 'distance', unit)}"
     if row["done_meters"] is not None:
         text += f", done {_amount(row['done_meters'], 'distance', unit)}"
     elif row["state"] == "today":
         text += ", today"
+    elif row["state"] == "past":
+        text += ", nothing logged"
     return text
 
 
 def _sync_line(data: dict[str, Any]) -> str:
-    sync = data["last_sync"]
-    return f'<p class="sync">{escape(sync["label"] if sync else "No runs synced yet.")}</p>'
+    last = data["last_import"]
+    return f'<p class="sync">{escape(last["label"] if last else "No runs imported yet.")}</p>'
 
 
 def _empty(text: str) -> str:
@@ -746,8 +767,6 @@ def _left_text(p: dict[str, Any], unit: str) -> str:
 
 def _render_strip(p: dict[str, Any], data: dict[str, Any], unit: str) -> str:
     head = '<div class="row"><h2>This week</h2><span class="muted">Mon to Sun</span></div>'
-    if p["status"] != "ok":
-        return f'<section class="card" id="this_week">{head}{_empty(p["empty"])}</section>'
     days = []
     for row in p["rows"]:
         state = row["state"]
@@ -764,13 +783,23 @@ def _render_strip(p: dict[str, Any], data: dict[str, Any], unit: str) -> str:
             f'{_glyph(state)}<span class="dm" aria-hidden="true">{escape(note)}</span>'
             f'<span class="sr">{escape(_day_text(row, unit))}</span></div>'
         )
+    strip = f'<div class="strip">{"".join(days)}</div>'
+    if p["status"] != "ok":  # no plan week: what was done, and the plain reason for the rest
+        done = (
+            f'<div class="row tight"><span><b>{_num(p["done_meters"], unit)}</b> '
+            f'<span class="muted">{unit} done</span></span></div>'
+            if p["done_meters"] is not None
+            else ""
+        )
+        body_html = f"{head}{strip}{done}{_empty(p['empty'])}"
+        return f'<section class="card" id="this_week">{body_html}</section>'
     totals = (
         f'<div class="row tight"><span><b>{_num(p["done_meters"], unit)}</b> '
         f'<span class="muted">of {_num(p["planned_meters"], unit)} {unit}</span></span>'
         f'<span class="muted">{escape(_left_text(p, unit))}</span></div>'
     )
     return (
-        f'<section class="card" id="this_week">{head}<div class="strip">{"".join(days)}</div>'
+        f'<section class="card" id="this_week">{head}{strip}'
         f"{totals}{_progress(p['done_meters'], p['planned_meters'])}</section>"
     )
 
@@ -997,22 +1026,28 @@ def _render_week_view(data: dict[str, Any], unit: str) -> str:
         eyebrow = f"{_day(week['start'])} to {_day(week['end'])}"
     race = _race_line(where) if where["status"] == "ok" else _empty(where["empty"])
     out = [f'<p class="eyebrow">{escape(eyebrow)}</p><h1>This week</h1>']
-    if week["status"] != "ok":
+    if week["status"] != "ok":  # no plan week: the days still show what was done
+        done = (
+            f'<p class="muted">{escape(_amount(week["done_meters"], "distance", unit))} done '
+            "this week</p>"
+            if week["done_meters"] is not None
+            else ""
+        )
         out.append(
-            f'<section class="card" id="week_head">{race}{_empty(week["empty"])}'
+            f'<section class="card" id="week_head">{race}{done}{_empty(week["empty"])}'
             f"{_sync_line(data)}</section>"
         )
-        return "".join(out)
-    left = (
-        f"{_amount(week['left_meters'], 'distance', unit)} left this week"
-        if week["left_meters"]
-        else "Nothing left on the plan this week"
-    )
-    out.append(
-        f'<section class="card headrow" id="week_head">'
-        f"{_ring(week['done_meters'], week['planned_meters'], unit)}"
-        f'<div>{race}<p class="muted">{escape(left)}</p>{_sync_line(data)}</div></section>'
-    )
+    else:
+        left = (
+            f"{_amount(week['left_meters'], 'distance', unit)} left this week"
+            if week["left_meters"]
+            else "Nothing left on the plan this week"
+        )
+        out.append(
+            f'<section class="card headrow" id="week_head">'
+            f"{_ring(week['done_meters'], week['planned_meters'], unit)}"
+            f'<div>{race}<p class="muted">{escape(left)}</p>{_sync_line(data)}</div></section>'
+        )
     rows = []
     for row in week["rows"]:
         state = row["state"]
@@ -1024,9 +1059,11 @@ def _render_week_view(data: dict[str, Any], unit: str) -> str:
             right = '<span class="pill sm">Today</span>'
         elif row["date"] == week["up_next"]:
             right = '<span class="muted next">Up next</span>'
+        elif state == "past":
+            right = f'<span class="muted">{MISSING}</span>'
         else:
             right = "<span></span>"
-        title = _kind(row["kind"])
+        title = _row_title(row)
         if row["planned_meters"] is not None and state != "done":
             title += f" {_amount(row['planned_meters'], 'distance', unit)}"
         details = f'<span class="muted">{escape(row["details"])}</span>' if row["details"] else ""
