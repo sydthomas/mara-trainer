@@ -5,6 +5,8 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-17
+
 ### Added
 - Slack: a lowered week can get sessions back. When she reports that a qualified professional
   who assessed her said she may run again, the coach can propose a restore (`propose_week` with
@@ -25,6 +27,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   spikes and the 10% rule in `training`; bone-stress warning signs and clinician-managed return in
   `health-referrals`; cold-water immersion, HRV across the cycle and overtraining in `recovery`
   and `women`; weather and heart-rate drift in `race-week`). They wait for re-approval.
+- Knowledge base: `cross-training`, `recovery` and `training` updated from the four sources
+  approved 2026-11-17 (deep water running, post-run sauna, cold on a soft tissue injury, bone
+  stress prevention); no sauna or cold dose is relayed. All 15 sections approved.
 - Sources: four proposals for gaps (cross-training while injured, sauna, cold on an injury) and
   three eval cases from questions that got "no approved source" answers.
 
@@ -201,7 +206,8 @@ First tagged version: a working single-athlete coach.
 ### Removed
 - Strava integration: its 2026-06-01 API policy bars storing data or feeding it to AI apps (#16).
 
-[Unreleased]: https://github.com/sydthomas/mara-trainer/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sydthomas/mara-trainer/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sydthomas/mara-trainer/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sydthomas/mara-trainer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sydthomas/mara-trainer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sydthomas/mara-trainer/compare/v0.1.0...v0.2.0
