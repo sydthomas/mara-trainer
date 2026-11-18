@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Changed
+- Dashboard redesigned: dark, phone first, opens on Today (today's session and whether it's done,
+  last sync, the week strip, weeks to race, weekly miles, milestones) with a switch to a Week view
+  (one row per day). Long-run, fueling, HR-at-pace and body-log panels are no longer shown (their
+  data is kept). Default window 12 weeks.
+
 ## [0.5.0] - 2026-11-17
 
 ### Added

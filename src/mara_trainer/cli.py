@@ -161,12 +161,15 @@ def dashboard_cmd(
     out: Annotated[
         Path, typer.Option(help="HTML file to write (keep it under data/, which is gitignored)")
     ] = Path("data/dashboard.html"),
-    weeks: Annotated[int, typer.Option(help="Monday-Sunday weeks to show, ending this week")] = 16,
+    weeks: Annotated[
+        int, typer.Option(help="Monday-Sunday weeks of weekly miles, ending this week")
+    ] = dashboard.DEFAULT_WEEKS,
     today: Annotated[
         str | None, typer.Option(help="Build as of this athlete-local date (YYYY-MM-DD)")
     ] = None,
     fit_dir: Annotated[
-        Path, typer.Option(help="Folder of .fit files for the heart-rate panel (read only)")
+        Path,
+        typer.Option(help="Kept for compatibility; this version of the page reads no FIT files"),
     ] = Path("exports/coros"),
 ) -> None:
     """Write the local progress dashboard: one offline HTML file, nothing uploaded."""

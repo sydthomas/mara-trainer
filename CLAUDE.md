@@ -56,13 +56,13 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach plan show` — accepted plan
 - `uv run coach import <file> [--dry-run] [--allow-duplicate KEY ...]` — .fit / .gpx / export.xml / export.zip; exit 2 = near-duplicates need confirmation, nothing written
 - `uv run coach summary [--week current|last|YYYY-MM-DD] [--weeks N]`
-- `uv run coach dashboard [--out data/dashboard.html] [--weeks 16] [--today YYYY-MM-DD] [--fit-dir exports/coros]` — local progress page
-  (`mara_trainer/dashboard.py`): one offline HTML file (inline CSS + SVG, no scripts, nothing uploaded) with
-  milestones, this week (planned vs done per day, no judgement words), weekly distance vs plan (weeks
-  with yellow or red body checks marked), long-run build-up, carbs per hour, heart rate at the usual pace
-  (weekly means from `hr_pace`, band named, trend caveat) and the body check log (one mark per entry by
-  date and status, shape + color; location in the table); no advice text; a panel with no data says so;
-  prints `{path, panels, weeks, generated_for}`
+- `uv run coach dashboard [--out data/dashboard.html] [--weeks 12] [--today YYYY-MM-DD] [--fit-dir exports/coros]` — local progress page
+  (`mara_trainer/dashboard.py`): one offline HTML file (inline CSS + SVG, no scripts, nothing uploaded), dark, phone
+  first, purple accent. Opens on a Today view (today's session and whether a run was logged that day, when a run was
+  last imported, the Monday-Sunday week strip with miles left, weeks to race and phase, weekly miles done vs plan with
+  yellow/red body-check marks, milestones); a CSS-only switch shows the Week view (miles ring, one row per day). No
+  advice or judgement words, missing is never shown as zero, each empty state says so. `build_data(include_extra=True)` adds the
+  long-run, fueling, HR-at-pace and body-log data under `extra` (not rendered; off by default, so no FIT files are read); prints `{path, panels, weeks, generated_for}`
 - `uv run coach pace [--distance 13.1 --time 1:55:00 --unit mi|km]` — Riegel race-time predictions (5K/10K/half/marathon), SI + per-mile; defaults to the saved recent race; no training zones
 - `uv run coach hr-pace [--dir exports/coros] [--weeks 12] [--pace-min M:SS --pace-max M:SS | --band-width 30] [--unit mi|km] [--today YYYY-MM-DD]`
   — heart rate at one easy pace band from the FIT files' per-second records (`hr_pace.py`; nothing
