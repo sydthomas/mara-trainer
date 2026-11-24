@@ -11,6 +11,11 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   (one row per day). Long-run, fueling, HR-at-pace and body-log panels are no longer shown (their
   data is kept). Default window 12 weeks.
 
+### Fixed
+- COROS sync no longer reports "0 new runs" when COROS rejects the sign-in: COROS sends that as a
+  normal reply, which now raises "sign in again". `coach coros login` always opens a fresh browser
+  sign-in instead of reusing a saved token COROS no longer accepts.
+
 ## [0.5.0] - 2026-11-17
 
 ### Added
