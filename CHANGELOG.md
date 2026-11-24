@@ -8,6 +8,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 ### Added
 - Server-ready secrets: COROS sign-in can live in 0600 files in `COACH_SECRETS_DIR` (`COACH_SECRET_BACKEND=file`, default off macOS), `coach coros login --no-browser` signs in over an SSH tunnel, and systemd `LoadCredential=` files load as env vars.
 - Source gaps: when no approved source covers a question, the coach still says so and logs the topic with `log_source_gap` to a private, ranked backlog (`coach gaps list|log|close`, migration 012).
+- DigitalOcean hosting: `coach backup` (integrity-checked SQLite snapshot), `deploy/linux/` (bootstrap, hardened systemd units, nightly restic backups to B2, deploy with a startup check, laptop-to-server data move) and the runbook in `docs/hosting.md`; the LaunchAgent becomes the fallback.
 
 ### Changed
 - Dashboard redesigned: dark, phone first, opens on Today (today's session and whether it's done,

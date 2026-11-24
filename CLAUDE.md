@@ -49,6 +49,9 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run pytest` — tests (must pass before every commit)
 - `uv run ruff check . && uv run ruff format --check . && uv run mypy src/`
 - `uv run coach init-db [--timezone America/Los_Angeles]` — create/upgrade the DB
+- `uv run coach backup --out PATH` — consistent DB snapshot (SQLite backup API) + `PRAGMA
+  integrity_check` on the copy; PATH is a file or an existing directory (`coach-<UTC stamp>.db`);
+  prints `{path, bytes, integrity}`; exit 3 if the check fails, 1 if there's no DB
 - `uv run coach race set --name ... --date YYYY-MM-DD --days sun,tue,thu,sat --long-run-day sun --weekly-min 25 --weekly-max 30 --longest 10 [--unit mi] [--goal-time 3:59:00] [--experience returning|first_marathon] [--recent-race-distance 13.1 --recent-race-time 1:55:00]`
 - `uv run coach race show`
 - `uv run coach plan brief [--today YYYY-MM-DD]` — weekly targets, long-run bounds, phases, runs/week
@@ -152,7 +155,14 @@ be summarized. If no approved source covers a question, the coach says so.
   restart is finished on start; answers arrive as new messages (Slack notifies on those, not on
   edits) and the placeholder is deleted. The DM history and a waiting yes/no question
   survive restarts.
-- `deploy/macos/install.sh` / `uninstall.sh` — run the Slack bot as a LaunchAgent (hosting Option 0,
+- Server (hosting decision 2026-11-24, `docs/hosting.md`): DigitalOcean Droplet, data + secrets on a
+  Volume at `/srv/mara`, inbound only over Tailscale, nightly restic backups to B2. `deploy/linux/`:
+  `bootstrap.sh` (once, root), `install-units.sh` (units + optional credentials + deploy sudoers),
+  `mara-slack.service`, `mara-backup.{service,timer}` + `backup.sh` (03:30 Pacific), `deploy.sh
+  [REF]` (as mara; snapshot first, exit 0 only when "Slack bot running" is logged), `coach.sh ARGS`
+  (any coach command on the server, as mara), `move-data.sh HOST` (laptop to server, deletes
+  nothing). The server owns the DB; never run two bots at once
+- Fallback: `deploy/macos/install.sh` / `uninstall.sh` — run the Slack bot as a LaunchAgent (hosting Option 0,
   `docs/hosting.md`); the repo must stay outside `~/Desktop`/`~/Documents` (macOS privacy blocks it)
 - `uv run coach slack run` — the coach in Slack DMs (Socket Mode, `mara_coach/slack_bot.py`); needs
   `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USER_ID` and `ANTHROPIC_API_KEY` in `.env`;
@@ -291,7 +301,7 @@ be summarized. If no approved source covers a question, the coach says so.
   themselves stay hers. Off-plan work waits for her batch review.
 
 ## Layout
-- `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
+- `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`, `backup.py` (DB snapshot),
   `fueling.py` (fueling log), `body.py` (body check / niggle log), `gaps.py` (source-gap backlog + ranking), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `hr_pace.py` (heart rate at a fixed pace, from FIT records), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
   (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log`, `niggle_log` and `source_gaps`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
@@ -303,6 +313,7 @@ be summarized. If no approved source covers a question, the coach says so.
 - `evals/coach-questions.json` — synthetic eval questions + rubrics (no real athlete data)
 - `tests/` — pytest; `fit_builder.py` (synthetic FIT), `plan_factory.py` (valid-plan generator)
 - `examples/sample-plan.json` — synthetic plan that passes `validate-plan`
+- `deploy/linux/` — server scripts and systemd units; `deploy/macos/` — LaunchAgent fallback
 - `.claude/skills/{plan-builder,weekly-review,import-workouts,ask-coach,debrief,knowledge-audit,coros-run-planner,coros-sync}/SKILL.md` (`ask-coach` is
   the coach for now: answers questions from `coach tools call` + approved, cited sources)
 - `docs/public-mvp-goal.md` (goal + roadmap), `docs/multi-user.md` (single-user assumptions; add a row
