@@ -280,3 +280,48 @@ def test_push_with_no_runs_calls_nothing() -> None:
 def test_watch_week_needs_a_race_and_a_plan_week(conn: sqlite3.Connection) -> None:
     with pytest.raises(CorosError, match="No race"):
         coros.watch_week(conn, "2026-11-16", TUE)
+
+
+AUTH_FAILED = (
+    "Client authentication credentials missing, expired, or identity mismatched. Diagnostic "
+    "advice: Verify COROS App login status, or confirm whether the current App account aligns "
+    "with the MCP authorized account."
+)
+
+
+class AuthFailClient:
+    """COROS answers a lapsed sign-in with a normal (not is_error) text result."""
+
+    async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+        return NS(is_error=False, content=[NS(text=json.dumps(AUTH_FAILED))])
+
+
+def test_lapsed_sign_in_is_an_error_not_zero_runs() -> None:
+    api = coros.McpCorosApi(AuthFailClient())
+    with pytest.raises(coros.SignInNeeded):
+        asyncio.run(api.runs(date(2026, 11, 16), date(2026, 11, 22)))
+    with pytest.raises(coros.SignInNeeded):
+        asyncio.run(api.schedule("20261116", "20261122"))
+
+
+def test_login_ignores_the_saved_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    def run(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        blob = base64.b64encode(b'{"access_token": "old", "token_type": "Bearer"}').decode()
+        return subprocess.CompletedProcess(cmd, 0, stdout=blob)
+
+    assert asyncio.run(coros.KeychainStorage(run).get_tokens()) is not None
+    assert asyncio.run(coros.FreshSignIn(run).get_tokens()) is None
+
+    used: list[Any] = []
+
+    class Stop(Exception):
+        pass
+
+    def fake_connect(interactive: bool = False, storage: Any = None) -> Any:
+        used.append((interactive, storage))
+        raise Stop
+
+    monkeypatch.setattr(coros, "connect", fake_connect)
+    with pytest.raises(CorosError):
+        coros.login()
+    assert used[0][0] is True and isinstance(used[0][1], coros.FreshSignIn)

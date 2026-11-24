@@ -99,6 +99,8 @@ def parse_schedule(text: str) -> dict[str, list[str]]:
 _RECORD = re.compile(r"^\s*\d+\.\s.*?(\d{4}-\d{2}-\d{2})\s*$", re.M)
 _IDS = re.compile(r"LabelId:\s*(\d+)\s*\|\s*SportType:\s*(\d+)")
 _NONE = re.compile(r"\(0 records\)|no (sport )?records", re.I)
+# COROS answers a lapsed or mismatched sign-in with an ordinary text result (is_error false).
+_AUTH_FAILED = re.compile(r"authentication credentials missing|identity mismatched", re.I)
 
 
 def parse_runs(text: str) -> list[CorosRun]:
@@ -379,6 +381,14 @@ class KeychainStorage:
         self._set("client", client_info.model_dump_json())
 
 
+class FreshSignIn(KeychainStorage):
+    """For `login`: ignore the saved token so the browser sign-in always runs. COROS can reject a
+    token that still passes OAuth (lapsed app login, other account); a new one overwrites it."""
+
+    async def get_tokens(self) -> Any:
+        return None
+
+
 class McpCorosApi:
     def __init__(self, client: Any) -> None:
         self._client = client
@@ -387,6 +397,8 @@ class McpCorosApi:
         result = await self._client.call_tool(name, args)
         if result.is_error:
             raise CorosError(f"COROS said: {_text(result.content)[:200] or 'error'}")
+        if _AUTH_FAILED.search(_text(result.content)):
+            raise SignInNeeded
         return result
 
     async def runs(self, start: date, end: date) -> list[CorosRun]:
@@ -539,7 +551,7 @@ def login() -> None:
     """One-time interactive sign-in; makes one harmless call so tokens get stored."""
 
     async def go() -> None:
-        async with connect(interactive=True) as api:
+        async with connect(interactive=True, storage=FreshSignIn()) as api:
             today = datetime.now(UTC).date()
             await api.runs(today, today)
 
