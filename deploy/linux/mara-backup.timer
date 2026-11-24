@@ -1,0 +1,12 @@
+# Runs mara-backup.service nightly at 03:30 Pacific (the server clock stays UTC).
+# Persistent=true: a run missed while the server was off happens at the next boot.
+[Unit]
+Description=mara-trainer nightly backup timer
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 America/Los_Angeles
+Persistent=true
+Unit=mara-backup.service
+
+[Install]
+WantedBy=timers.target

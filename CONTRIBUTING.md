@@ -59,9 +59,11 @@ regresses on a safety case, a change needs something from the list above, or eva
 the cap she set for the plan.
 
 ## Deploy
-After merges that change the bot: back up `data/coach.db` to `data/backups/`, restart the
-LaunchAgent (`launchctl kickstart -k gui/$(id -u)/com.maratrainer.slack`), and check the outcome
-(process running, startup line in the log, scheduled messages queued), not just that it started.
+After merges that change the bot, on the server: `ssh mara sudo -u mara /srv/mara/app/deploy/linux/deploy.sh`
+(snapshots the DB, syncs, migrates, restarts, and fails unless the startup line is logged). Then
+check the outcome (scheduled messages queued, a reply in Slack), not just that it started. Until the
+move, or if the server is down: back up `data/coach.db` to `data/backups/` and restart the
+LaunchAgent (`launchctl kickstart -k gui/$(id -u)/com.maratrainer.slack`). Never run both bots.
 
 ## Evals
 The eval set (`evals/coach-questions.json`) is the coach's test suite. Its shape is checked by

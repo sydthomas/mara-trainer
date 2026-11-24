@@ -1,0 +1,49 @@
+# The coach's Slack bot (docs/hosting.md). Installed by deploy/linux/install-units.sh.
+# Secrets come from /srv/mara/secrets/env/<NAME> (one value per file, mode 0600) through
+# systemd credentials; the app reads them from $CREDENTIALS_DIRECTORY. Optional ones
+# (COACH_LAT, COACH_LON, COACH_PLACES, COACH_NWS_CONTACT) are added by install-units.sh in a
+# drop-in only when their file exists, because a missing LoadCredential file stops the unit.
+[Unit]
+Description=mara-trainer Slack coach bot
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/mara
+
+[Service]
+Type=simple
+User=mara
+Group=mara
+WorkingDirectory=/srv/mara/app
+ExecStart=/usr/local/bin/uv run --no-sync coach slack run
+Restart=always
+RestartSec=10
+Environment=COACH_DB_PATH=/srv/mara/data/coach.db
+Environment=COACH_SECRET_BACKEND=file
+Environment=COACH_SECRETS_DIR=/srv/mara/secrets
+Environment=UV_CACHE_DIR=/srv/mara/cache/uv
+Environment=UV_PYTHON_INSTALL_DIR=/srv/mara/cache/python
+Environment=PYTHONUNBUFFERED=1
+# SQLite and Python temp files (can hold DB pages) stay on the Volume.
+Environment=TMPDIR=/srv/mara/tmp
+Environment=SQLITE_TMPDIR=/srv/mara/tmp
+LoadCredential=ANTHROPIC_API_KEY:/srv/mara/secrets/env/ANTHROPIC_API_KEY
+LoadCredential=SLACK_BOT_TOKEN:/srv/mara/secrets/env/SLACK_BOT_TOKEN
+LoadCredential=SLACK_APP_TOKEN:/srv/mara/secrets/env/SLACK_APP_TOKEN
+LoadCredential=SLACK_ALLOWED_USER_ID:/srv/mara/secrets/env/SLACK_ALLOWED_USER_ID
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/mara
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
