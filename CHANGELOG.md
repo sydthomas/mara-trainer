@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Added
+- Server-ready secrets: COROS sign-in can live in 0600 files in `COACH_SECRETS_DIR` (`COACH_SECRET_BACKEND=file`, default off macOS), `coach coros login --no-browser` signs in over an SSH tunnel, and systemd `LoadCredential=` files load as env vars.
+
 ### Changed
 - Dashboard redesigned: dark, phone first, opens on Today (today's session and whether it's done,
   last sync, the week strip, weeks to race, weekly miles, milestones) with a switch to a Week view

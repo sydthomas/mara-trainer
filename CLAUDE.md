@@ -75,9 +75,15 @@ be summarized. If no approved source covers a question, the coach says so.
   week containing tomorrow) as COROS course JSON for `createScheduledWorkout`: runs with watch
   targets mapped from the sources (`docs/plan-rules-sources.md`), skipped strength/race/past days
   with reasons; exit 1 if no race or the week isn't in the accepted plan
-- `uv run coach coros login` — one-time COROS sign-in in the browser for code-side sync (official MCP
-  server, OAuth via the `mcp` SDK; client registration + tokens in the macOS keychain, service
-  `mara-trainer-coros`, never in a file)
+- `uv run coach coros login [--no-browser]` — one-time COROS sign-in for code-side sync (official MCP
+  server, OAuth via the `mcp` SDK). Storage is picked by `coros.token_storage()` from
+  `COACH_SECRET_BACKEND=keychain|file` (default `keychain` on macOS, `file` elsewhere): `keychain` =
+  macOS keychain, service `mara-trainer-coros`; `file` = 0600 JSON files in `COACH_SECRETS_DIR`
+  (must exist, be the bot user's and closed to group/others). `--no-browser` (server) prints the
+  authorize URL to stderr and waits for the callback on 127.0.0.1:33418: from the laptop run
+  `ssh -L 33418:127.0.0.1:33418 <server>`, then open the URL. On the server run it as the bot's
+  user (`sudo -u <bot user> ... coach coros login --no-browser`): the folder must be that user's.
+  Login and sync call `load_env`, so the backend can be set in `.env` or a credential
 - `uv run coach coros sync` — `coros-sync` in plain code (`mara_coach/coros.py`, no LLM): this week's
   runs (Monday through today), FIT downloaded once into `exports/coros/`, then the normal import;
   exit 2 = near-duplicates need confirmation (those files not imported). Slack: "sync my runs"
@@ -255,8 +261,11 @@ be summarized. If no approved source covers a question, the coach says so.
   disclose any affiliate link.
 
 ## Secrets and privacy
-- Secrets only in `.env` (gitignored) or the OS keychain. Never read, print, log, or commit tokens,
-  passwords or API keys. `.env.example` holds names only.
+- Secrets only in `.env` (gitignored), the OS keychain, or on the server the secrets folder. Never
+  read, print, log, or commit tokens, passwords or API keys. `.env.example` holds names only.
+- Server secrets: `load_env` (`mara_coach/env.py`) also reads systemd credentials: each file in
+  `$CREDENTIALS_DIRECTORY` (`LoadCredential=`) becomes an env var named after the file, loaded
+  before `.env`, never overriding a var already set, never logged.
 - `data/`, `exports/`, `plans/`, `*.fit`, `*.gpx`, `*.db`, `export.zip` are gitignored. Test fixtures
   are synthetic only (`tests/fit_builder.py` generates FIT bytes in memory).
 - Never paste real activity/health data into commits, PR text, issues or docs.

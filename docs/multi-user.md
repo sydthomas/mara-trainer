@@ -16,7 +16,7 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | One DM channel and message cursor | `slack_state` (`dm_channel`, `last_handled_ts`, `inflight_reply`, `dm_turns`), `scheduled_messages` | Key both by athlete (and Slack user) |
 | Schedule constants | `slack_schedule.py` / `slack_bot.py`: 7am body check, 10am debrief, 6pm weekly (syncs COROS first) ("Sydney's choice") | Per-athlete settings in the DB |
 | COROS through Claude Code | `.mcp.json`, one OAuth login on her laptop; `coros-sync` and `coros-run-planner` are skills | Per-user OAuth with tokens stored server-side; sync and push become server jobs |
-| One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, fixed loopback port; `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete |
+| One COROS sign-in for Slack sync | `coros.py`: one keychain service (`mara-trainer-coros`) on the laptop, or one `coros-tokens.json` / `coros-client.json` pair in `COACH_SECRETS_DIR` on the server (`token_storage()`); fixed loopback port 33418 (headless login tunnels it over SSH); `exports/coros/` shared | Tokens per athlete in a secrets store; downloads keyed by athlete; a hosted callback URL instead of loopback + tunnel |
 | One dashboard file | `dashboard.py`: reads the single athlete row (timezone, units), writes `data/dashboard.html` | Build per athlete behind sign-in; never a shared file |
 | One folder of FIT files, one timezone | `hr_pace.py` / `coach hr-pace`: reads every `.fit` in `exports/coros/` as one runner's, weeks from the single `athlete` row's timezone | Pass the athlete's own files and timezone (the function already takes both as arguments) |
 | One FIT folder for the Slack line and the dashboard | `slack_bot.HR_PACE_DIR` (= `coros.EXPORTS`) for the Sunday HR-at-pace line; `coach dashboard --fit-dir` defaults to `exports/coros` | Per-athlete file storage; pass that athlete's folder |
@@ -27,7 +27,7 @@ Postgres and hosting are post-MVP and need Sydney's go-ahead (CLAUDE.md).
 | Local files | `exports/`, `plans/`, `data/eval-runs/` | Object storage keyed by athlete, or rows in the DB |
 | Approvals by name | `sources.approved_by`, knowledge approvals, "only Sydney approves" | A coach/admin role. Sources and knowledge stay shared; runners never approve them |
 | Cost by channel only | `api_usage` | Add `athlete_id` for cost per user and per-user limits |
-| One API key | `ANTHROPIC_API_KEY` in `.env` | A secrets manager; never per-user keys in the DB |
+| One API key | `ANTHROPIC_API_KEY` in `.env`, or one systemd credential file in `$CREDENTIALS_DIRECTORY` on the server (`env.load_env`) | A secrets manager; never per-user keys in the DB |
 
 ## Shared vs per-athlete
 - **Shared** (one copy for everyone): `sources`, `knowledge/`, eval set, plan rules, watch-target
