@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -11,7 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import body, coros_workouts, dashboard, db, fueling, hr_pace, imports, paces, reports
+from . import backup, body, coros_workouts, dashboard, db, fueling, hr_pace, imports, paces, reports
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -86,6 +87,25 @@ def init_db(
     conn = db.connect()
     db.init_db(conn, timezone, name, units)
     _out({"ok": True, "db": str(db.db_path()), "timezone": timezone})
+
+
+@app.command("backup")
+def backup_cmd(
+    out: Annotated[
+        Path,
+        typer.Option(help="Snapshot file, or an existing directory for coach-<UTC stamp>.db"),
+    ],
+) -> None:
+    """Consistent snapshot of the DB (SQLite backup API), then an integrity check on the copy.
+
+    Exit 0 = copy written and `integrity` is "ok"; 3 = the check found problems; 1 = no DB."""
+    try:
+        result = backup.snapshot(db.db_path(), out)
+    except (FileNotFoundError, ValueError, sqlite3.DatabaseError) as e:
+        _fail(str(e))
+    _out(result.to_dict())
+    if not result.ok:
+        raise typer.Exit(3)
 
 
 @app.command("import")

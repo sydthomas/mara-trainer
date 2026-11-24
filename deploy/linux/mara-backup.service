@@ -1,0 +1,29 @@
+# Nightly backup: consistent DB snapshot + FIT exports to restic on Backblaze B2
+# (deploy/linux/backup.sh, docs/hosting.md). Started by mara-backup.timer.
+[Unit]
+Description=mara-trainer nightly backup (restic to B2)
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/mara
+
+[Service]
+Type=oneshot
+User=mara
+Group=mara
+WorkingDirectory=/srv/mara/app
+ExecStart=/srv/mara/app/deploy/linux/backup.sh
+Nice=10
+IOSchedulingClass=idle
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/mara
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
