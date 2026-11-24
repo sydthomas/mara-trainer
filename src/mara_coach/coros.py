@@ -8,10 +8,13 @@ APIs.
 - Near-duplicates are never imported here: they come back in `SyncReport.pending` for the runner
   to confirm (`import_confirmed`). Nothing is auto-merged or deleted.
 - Sign-in: `coach coros login` runs the OAuth flow once in the browser (dynamic client
-  registration + PKCE, handled by the `mcp` SDK). The client registration and tokens live in the
-  macOS keychain (`KEYCHAIN_SERVICE`), never in a file, log or message. The bot refreshes tokens
-  on its own; when it can't, it says to sign in again (`SignInNeeded`) instead of opening a
-  browser.
+  registration + PKCE, handled by the `mcp` SDK). On a server with no browser,
+  `coach coros login --no-browser` prints the link instead; the loopback callback is reached
+  through an SSH tunnel from the laptop. The client registration and tokens live in the macOS
+  keychain (`KEYCHAIN_SERVICE`, default on macOS) or, with `COACH_SECRET_BACKEND=file` (default
+  elsewhere), in two 0600 JSON files in `$COACH_SECRETS_DIR` (a folder only its owner can open),
+  never in a log or message. The bot refreshes tokens on its own; when it can't, it says to sign
+  in again (`SignInNeeded`) instead of opening a browser.
 - Only the run list and FIT files are read. Health data tools (sleep, HRV, cycles) aren't called.
 - Watch push (`push_week`): the one write. Called only after the runner's yes for that week. The
   workouts come unchanged from `coros_workouts.coros_week` (accepted plan, which passed the
@@ -25,11 +28,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import re
 import sqlite3
 import subprocess
+import sys
+import tempfile
 import webbrowser
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -50,7 +56,12 @@ KEYCHAIN_SERVICE = "mara-trainer-coros"
 REDIRECT_PORT = 33418  # loopback port for the one-time sign-in
 REDIRECT_URI = f"http://127.0.0.1:{REDIRECT_PORT}/callback"
 LOGIN_TIMEOUT = 5 * 60  # seconds to finish signing in
-SIGN_IN_AGAIN = "COROS needs you to sign in again: run `uv run coach coros login` on the laptop."
+SIGN_IN_AGAIN = (
+    "COROS needs you to sign in again: run `uv run coach coros login` where the bot runs "
+    "(add `--no-browser` on the server)."
+)
+TOKENS_FILE = "coros-tokens.json"
+CLIENT_FILE = "coros-client.json"
 
 
 class CorosError(Exception):
@@ -381,12 +392,114 @@ class KeychainStorage:
         self._set("client", client_info.model_dump_json())
 
 
-class FreshSignIn(KeychainStorage):
-    """For `login`: ignore the saved token so the browser sign-in always runs. COROS can reject a
-    token that still passes OAuth (lapsed app login, other account); a new one overwrites it."""
+class FileTokenStorage:
+    """`mcp` TokenStorage as two JSON files in `folder` (the server's `COACH_SECRETS_DIR`, on the
+    encrypted volume). The folder must exist, belong to this user and be closed to group and
+    others; each file is written 0600 to a temp file and swapped in with `os.replace`, so a crash
+    never leaves half a token. Error messages name the folder, never a value."""
+
+    def __init__(self, folder: Path) -> None:
+        self.folder = Path(folder)
+
+    def _check_folder(self) -> None:
+        try:
+            info = self.folder.stat()
+        except FileNotFoundError:
+            raise CorosError(
+                f"The COROS secrets folder {self.folder} (COACH_SECRETS_DIR) doesn't exist."
+            ) from None
+        if not self.folder.is_dir() or info.st_uid != os.geteuid():
+            raise CorosError(
+                f"The COROS secrets folder {self.folder} must be a folder owned by this user."
+            )
+        if info.st_mode & 0o077:
+            raise CorosError(
+                f"The COROS secrets folder {self.folder} is open to group or others; "
+                f"run `chmod 700 {self.folder}`."
+            )
+
+    def _get(self, name: str) -> str | None:
+        self._check_folder()
+        path = self.folder / name
+        try:
+            info = path.stat()
+        except FileNotFoundError:
+            return None
+        if info.st_mode & 0o077:
+            raise CorosError(
+                f"The COROS secrets file {path} is open to group or others; run `chmod 600 {path}`."
+            )
+        return path.read_text()
+
+    def _set(self, name: str, value: str) -> None:
+        self._check_folder()
+        fd, tmp = tempfile.mkstemp(dir=self.folder, prefix=f".{name}.", suffix=".tmp")  # 0600
+        try:
+            with os.fdopen(fd, "w") as handle:
+                handle.write(value)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, self.folder / name)
+        except OSError:
+            Path(tmp).unlink(missing_ok=True)
+            raise CorosError(f"Couldn't save the COROS sign-in in {self.folder}.") from None
+
+    async def get_tokens(self) -> Any:
+        from mcp.shared.auth import OAuthToken
+
+        raw = self._get(TOKENS_FILE)
+        return None if raw is None else OAuthToken.model_validate_json(raw)
+
+    async def set_tokens(self, tokens: Any) -> None:
+        self._set(TOKENS_FILE, tokens.model_dump_json())
+
+    async def get_client_info(self) -> Any:
+        from mcp.shared.auth import OAuthClientInformationFull
+
+        raw = self._get(CLIENT_FILE)
+        return None if raw is None else OAuthClientInformationFull.model_validate_json(raw)
+
+    async def set_client_info(self, client_info: Any) -> None:
+        self._set(CLIENT_FILE, client_info.model_dump_json())
+
+
+def token_storage() -> KeychainStorage | FileTokenStorage:
+    """The one place that picks where the COROS sign-in lives: `COACH_SECRET_BACKEND=keychain`
+    (default on macOS) or `file` (default elsewhere; needs `COACH_SECRETS_DIR`)."""
+    backend = os.environ.get("COACH_SECRET_BACKEND") or (
+        "keychain" if sys.platform == "darwin" else "file"
+    )
+    if backend == "keychain":
+        return KeychainStorage()
+    if backend == "file":
+        folder = os.environ.get("COACH_SECRETS_DIR")
+        if not folder:
+            raise CorosError(
+                "Set COACH_SECRETS_DIR to the folder for the COROS sign-in (file backend)."
+            )
+        return FileTokenStorage(Path(folder))
+    raise CorosError("COACH_SECRET_BACKEND must be `keychain` or `file`.")
+
+
+class FreshSignIn:
+    """For `login`: wraps any storage and ignores the saved token so the sign-in always runs.
+    COROS can reject a token that still passes OAuth (lapsed app login, other account); the new
+    one overwrites it. The client registration is still reused."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
 
     async def get_tokens(self) -> Any:
         return None
+
+    async def set_tokens(self, tokens: Any) -> None:
+        await self._inner.set_tokens(tokens)
+
+    async def get_client_info(self) -> Any:
+        return await self._inner.get_client_info()
+
+    async def set_client_info(self, client_info: Any) -> None:
+        await self._inner.set_client_info(client_info)
 
 
 class McpCorosApi:
@@ -431,8 +544,32 @@ async def _no_callback() -> Any:
 
 
 async def _open_browser(url: str) -> None:
-    print(f"Opening COROS sign-in in your browser. If it doesn't open, visit:\n{url}")
+    print(
+        f"Opening COROS sign-in in your browser. If it doesn't open, visit:\n{url}",
+        file=sys.stderr,
+        flush=True,
+    )
     webbrowser.open(url)
+
+
+async def _print_url(url: str) -> None:
+    """`--no-browser`: show the link (stderr, so stdout stays JSON) and how to reach the
+    loopback callback on a server through an SSH tunnel."""
+    print(
+        "Open this COROS sign-in link in a browser on your laptop:\n"
+        f"{url}\n\n"
+        f"COROS sends you back to 127.0.0.1:{REDIRECT_PORT} on this machine. If this is a "
+        "server, first run this on the laptop and leave it open until sign-in finishes:\n"
+        f"  ssh -L {REDIRECT_PORT}:127.0.0.1:{REDIRECT_PORT} <server>",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _redirect_handler(interactive: bool, browser: bool) -> Callable[[str], Awaitable[None]]:
+    if not interactive:
+        return _no_browser
+    return _open_browser if browser else _print_url
 
 
 async def _await_callback() -> Any:
@@ -472,8 +609,11 @@ def _serve_one_callback() -> dict[str, str]:
 
 
 @asynccontextmanager
-async def connect(interactive: bool = False, storage: Any = None) -> AsyncIterator[McpCorosApi]:
-    """An authenticated COROS session. Only `interactive` (the login command) opens a browser."""
+async def connect(
+    interactive: bool = False, storage: Any = None, browser: bool = True
+) -> AsyncIterator[McpCorosApi]:
+    """An authenticated COROS session. Only `interactive` (the login command) starts a sign-in:
+    in the browser, or with `browser=False` by printing the link."""
     import httpx2
     from mcp import Client
     from mcp.client.auth import OAuthClientProvider
@@ -490,8 +630,8 @@ async def connect(interactive: bool = False, storage: Any = None) -> AsyncIterat
             response_types=["code"],
             token_endpoint_auth_method="none",
         ),
-        storage=storage or KeychainStorage(),
-        redirect_handler=_open_browser if interactive else _no_browser,
+        storage=storage or token_storage(),
+        redirect_handler=_redirect_handler(interactive, browser),
         callback_handler=_await_callback if interactive else _no_callback,
     )
     async with (
@@ -547,11 +687,13 @@ def push_week(conn: sqlite3.Connection, day: str, now: datetime | None = None) -
         raise found from exc
 
 
-def login() -> None:
-    """One-time interactive sign-in; makes one harmless call so tokens get stored."""
+def login(browser: bool = True) -> None:
+    """One-time interactive sign-in; makes one harmless call so tokens get stored. With
+    `browser=False` (headless server) the link is printed instead of opened."""
 
     async def go() -> None:
-        async with connect(interactive=True, storage=FreshSignIn()) as api:
+        storage = FreshSignIn(token_storage())
+        async with connect(interactive=True, storage=storage, browser=browser) as api:
             today = datetime.now(UTC).date()
             await api.runs(today, today)
 
