@@ -109,6 +109,11 @@ be summarized. If no approved source covers a question, the coach says so.
 - `uv run coach body log --status green|yellow|red [--date YYYY-MM-DD] [--context before_run|after_run|other] [--location ...] [--swelling/--no-swelling] [--pain 0-10] [--notes ...]`
   — body check / niggle log: her own status, stored as given (no classification or advice in code)
 - `uv run coach body show [--last N] [--since YYYY-MM-DD]` / `coach body delete ID`
+- `uv run coach gaps list [--status open|researching|closed|all]` / `coach gaps log --topic ... --summary ... --category training|fueling|recovery|gear|health|other [--safety]` / `coach gaps close ID --reason ...`
+  — private source-gap backlog (`gaps.py`): questions no approved source covers, logged by the coach
+  (`log_source_gap`) or by hand; one open row per topic (repeat asks count); `list` ranks by a
+  code-computed score with plain reasons (recent asks full / older half, health topic x2, +2
+  fueling/gear within 4 weeks of the race, +1 researching); never leaves the DB (no issues, no files)
 - `uv run coach source import [sources/seed.json] [--update]` — add seed sources as `proposed`; `--update` refreshes metadata of existing ones (approval kept)
 - `uv run coach source add --slug ... --title ... --author ... --kind ... --topics a,b --license ... --trust-reason ... [--url https://...]`
 - `uv run coach source list [--status proposed|approved|retired] [--topic fueling] [--women-tested]`
@@ -122,13 +127,14 @@ be summarized. If no approved source covers a question, the coach says so.
   of the approved sources. Check exits 3 on problems; approve needs a passing check and records a
   body hash (edits send a section back to review). Only Sydney approves.
 - `uv run coach tools list` / `uv run coach tools call NAME [--args '{json}']` — the coach's
-  read-only tool layer (plan_brief, summary, validate_plan, show_plan, get_profile, fuel_log,
+  read-only tool layer, plus the source-gap log (plan_brief, summary, validate_plan, show_plan, get_profile, fuel_log,
   body_log, search_sources, read_knowledge, propose_fuel_entry, propose_body_entry, propose_week,
-  plan_week, sync_runs, get_weather, allowed_domains); exit 1 on bad args or a tool error.
+  plan_week, sync_runs, get_weather, allowed_domains, log_source_gap); exit 1 on bad args or a tool error.
   `sync_runs` and `get_weather` are channel actions: only the Slack bot supplies the function
   that does the work (its own sync, read-only on COROS, which imports non-duplicate runs
   into the DB, and its forecast code); from the CLI, the evals and
-  tests they answer "not available here" and make no request
+  tests they answer "not available here" and make no request. `log_source_gap` is the one tool that saves directly: only to the private
+  source-gap backlog (topic + one-line paraphrase, no runner data)
 - `uv run coach ask "QUESTION" [--effort low|medium|high]` — the coach on the Claude API
   (`mara_coach/agent.py`): read-only tools + web fetch limited to approved domains; needs
   `ANTHROPIC_API_KEY` in `.env`; prints `{answer, stop_reason, tools_used, usage}`
@@ -277,8 +283,8 @@ be summarized. If no approved source covers a question, the coach says so.
 
 ## Layout
 - `src/mara_trainer/` — `cli.py`, `db.py`, `dates.py`, `plan_rules.py`, `summaries.py`, `imports.py`,
-  `fueling.py` (fueling log), `body.py` (body check / niggle log), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `hr_pace.py` (heart rate at a fixed pace, from FIT records), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
-  (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log` and `niggle_log`)
+  `fueling.py` (fueling log), `body.py` (body check / niggle log), `gaps.py` (source-gap backlog + ranking), `dashboard.py` (local progress page: `build_data` panels list + `render_html`), `hr_pace.py` (heart rate at a fixed pace, from FIT records), `coros_workouts.py` (plan week to COROS workouts), `reports.py` (plan brief / summary / plan check shared by the CLI and the tools), `migrations/`
+  (all tables, including the coach's `sources`, `athlete_profile`, `fuel_log`, `niggle_log` and `source_gaps`)
 - `src/mara_coach/` — `cli.py` (entry point), `agent.py` (Claude API coach loop), `coros.py` (COROS sync over the official MCP), `env.py` (.env loader), `evals.py` (eval-set loader), `evals_runner.py` (offline scorer), `knowledge.py` (knowledge base), `slack_bot.py` (Slack DMs), `sources.py` (source
   registry), `profile.py` (runner profile), `tools.py` (tool functions + registry with JSON input
   schemas, reused by the future API agent), `weather.py` (Open-Meteo run-window forecast + optional NWS

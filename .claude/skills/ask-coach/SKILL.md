@@ -44,6 +44,8 @@ anything not yet imported "from COROS (not imported)", and don't write it to any
   a source's `female_evidence` is `mostly_male`, say plainly that it rests mostly on studies of men.
 - If nothing approved covers it, say "No approved source covers this" and stop there. Don't fill
   the gap from memory. You can suggest a source for Sydney to review (`coach source add`).
+  Log the topic once: `coach gaps log --topic ... --summary ... --category ...` (add `--safety` for
+  health topics), so it joins the ranked backlog.
 - Fetch only from `allowed_domains` (`uv run coach source domains`). `fetchable: false` sources and
   books are cited by reference, never fetched. Summarize only when `may_summarize` is true;
   otherwise give a one-line pointer in your own words and the link. Never quote long passages.

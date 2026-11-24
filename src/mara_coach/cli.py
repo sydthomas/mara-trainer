@@ -256,7 +256,9 @@ def profile_show() -> None:
     _out({"profile": profile.get_profile(_conn())})
 
 
-tools_app = typer.Typer(help="Coach tools: read-only views of the core for the coach agent.")
+tools_app = typer.Typer(
+    help="Coach tools: read-only views of the core for the coach agent (plus the source-gap log)."
+)
 app.add_typer(tools_app, name="tools")
 
 

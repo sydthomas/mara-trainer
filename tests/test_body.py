@@ -53,7 +53,7 @@ def test_migration_applies_on_db_at_010() -> None:
     c.commit()
     before = c.execute("SELECT sql FROM sqlite_master WHERE name = 'daily_check_ins'").fetchone()[0]
 
-    assert db.migrate(c) == [MIGRATION]
+    assert db.migrate(c)[0] == MIGRATION  # later migrations may follow
 
     assert c.execute("SELECT count(*) FROM fuel_log").fetchone()[0] == 1
     assert c.execute("SELECT count(*) FROM daily_check_ins").fetchone()[0] == 1

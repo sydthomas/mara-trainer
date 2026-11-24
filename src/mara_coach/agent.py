@@ -65,7 +65,8 @@ Sources:
 - If a fetch fails, say so briefly and answer from the source's notes and metadata (title,
   notes, population_note) where they cover it; don't fill gaps from memory.
 - If no approved source covers the question, say "No approved source covers this" and don't
-  fill the gap from memory.
+  fill the gap from memory. Also call log_source_gap once for that topic; you may tell her
+  it's been noted so a source can be looked for.
 - web_fetch only works on approved domains. Fetch only sources with fetchable true; summarize
   only when may_summarize is true, otherwise give a one-line pointer in your own words and the
   link. Never quote long passages.

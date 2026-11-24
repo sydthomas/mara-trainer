@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Added
+- Source gaps: when no approved source covers a question, the coach still says so and logs the topic with `log_source_gap` to a private, ranked backlog (`coach gaps list|log|close`, migration 012).
+
 ### Changed
 - Dashboard redesigned: dark, phone first, opens on Today (today's session and whether it's done,
   last sync, the week strip, weeks to race, weekly miles, milestones) with a switch to a Week view
