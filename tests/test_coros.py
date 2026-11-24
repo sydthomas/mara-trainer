@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import sqlite3
 import subprocess
 from datetime import UTC, date, datetime
@@ -458,3 +459,29 @@ def test_cli_login_no_browser_passes_through(monkeypatch: pytest.MonkeyPatch) ->
     assert runner.invoke(app, ["coros", "login", "--no-browser"]).exit_code == 0
     assert runner.invoke(app, ["coros", "login"]).exit_code == 0
     assert calls == [False, True]
+
+
+def test_cli_login_and_sync_load_env_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The storage backend can live in .env or a systemd credential, so login must see it."""
+    monkeypatch.delenv("COACH_SECRET_BACKEND", raising=False)
+    import mara_coach.cli as cli
+
+    monkeypatch.setattr(cli, "load_env", lambda: monkeypatch.setenv("COACH_SECRET_BACKEND", "file"))
+    seen: list[str | None] = []
+    monkeypatch.setattr(
+        coros, "login", lambda browser=True: seen.append(os.environ.get("COACH_SECRET_BACKEND"))
+    )
+    assert CliRunner().invoke(app, ["coros", "login"]).exit_code == 0
+    assert seen == ["file"]
+
+
+def test_damaged_token_file_names_the_file_not_the_token(tmp_path: Path) -> None:
+    folder = tmp_path / "secrets"
+    folder.mkdir(mode=0o700)
+    bad = folder / "coros-tokens.json"
+    bad.write_text('{"access_token": "SECRETVALUE12345')
+    bad.chmod(0o600)
+    with pytest.raises(CorosError) as caught:
+        asyncio.run(coros.FileTokenStorage(folder).get_tokens())
+    assert "damaged" in str(caught.value) and "SECRETVALUE" not in str(caught.value)
+    assert caught.value.__cause__ is None and caught.value.__suppress_context__

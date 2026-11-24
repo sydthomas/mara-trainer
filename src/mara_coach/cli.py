@@ -457,6 +457,7 @@ def coros_login(
 ) -> None:
     """Sign in to COROS once (official MCP server). Tokens go to the keychain (macOS) or to
     COACH_SECRETS_DIR (COACH_SECRET_BACKEND=file)."""
+    load_env()  # the storage backend can be set in .env or a systemd credential
     try:
         coros.login(browser=not no_browser)
     except coros.CorosError as exc:
@@ -468,6 +469,7 @@ def coros_login(
 def coros_sync() -> None:
     """Import this training week's COROS runs (Monday through today) as FIT files. Exit 2 when
     near-duplicates need confirmation: nothing is written for those files."""
+    load_env()
     conn = _conn()
     try:
         report = coros.sync_week(conn)

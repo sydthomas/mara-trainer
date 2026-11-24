@@ -429,11 +429,33 @@ class FileTokenStorage:
             raise CorosError(
                 f"The COROS secrets file {path} is open to group or others; run `chmod 600 {path}`."
             )
-        return path.read_text()
+        try:
+            return path.read_text()
+        except OSError:
+            raise CorosError(f"Couldn't read the COROS secrets file {path}.") from None
+
+    def _parse(self, name: str, model: Any) -> Any:
+        """Saved JSON as `model`; a damaged file names the file only (pydantic errors quote the
+        start of the input, which could be a token)."""
+        from pydantic import ValidationError
+
+        raw = self._get(name)
+        if raw is None:
+            return None
+        try:
+            return model.model_validate_json(raw)
+        except ValidationError:
+            raise CorosError(
+                f"The COROS secrets file {self.folder / name} is damaged; "
+                "run `coach coros login` again."
+            ) from None
 
     def _set(self, name: str, value: str) -> None:
         self._check_folder()
-        fd, tmp = tempfile.mkstemp(dir=self.folder, prefix=f".{name}.", suffix=".tmp")  # 0600
+        try:
+            fd, tmp = tempfile.mkstemp(dir=self.folder, prefix=f".{name}.", suffix=".tmp")  # 0600
+        except OSError:
+            raise CorosError(f"Couldn't save the COROS sign-in in {self.folder}.") from None
         try:
             with os.fdopen(fd, "w") as handle:
                 handle.write(value)
@@ -447,8 +469,7 @@ class FileTokenStorage:
     async def get_tokens(self) -> Any:
         from mcp.shared.auth import OAuthToken
 
-        raw = self._get(TOKENS_FILE)
-        return None if raw is None else OAuthToken.model_validate_json(raw)
+        return self._parse(TOKENS_FILE, OAuthToken)
 
     async def set_tokens(self, tokens: Any) -> None:
         self._set(TOKENS_FILE, tokens.model_dump_json())
@@ -456,8 +477,7 @@ class FileTokenStorage:
     async def get_client_info(self) -> Any:
         from mcp.shared.auth import OAuthClientInformationFull
 
-        raw = self._get(CLIENT_FILE)
-        return None if raw is None else OAuthClientInformationFull.model_validate_json(raw)
+        return self._parse(CLIENT_FILE, OAuthClientInformationFull)
 
     async def set_client_info(self, client_info: Any) -> None:
         self._set(CLIENT_FILE, client_info.model_dump_json())
