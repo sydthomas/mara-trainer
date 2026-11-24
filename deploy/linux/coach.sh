@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Run `coach` on the server as the mara user with the same settings as the bot
 # (docs/hosting.md). Example, from the laptop:
-#   ssh mara-coach sudo -u mara /srv/mara/app/deploy/linux/coach.sh summary
+#   ssh mara sudo -u mara /srv/mara/app/deploy/linux/coach.sh summary
+# (`mara` = the Droplet's Tailscale MagicDNS name, User root in ~/.ssh/config). Health
+# entries (fuel, body) go through Slack, never as command arguments over SSH.
 # CREDENTIALS_DIRECTORY points at the secrets the systemd unit loads, so commands that need an
 # API key (coach ask) work the same way as in the bot. Nothing here prints a secret.
 set -euo pipefail
@@ -15,6 +17,7 @@ export COACH_DB_PATH="${COACH_DB_PATH:-/srv/mara/data/coach.db}"  # override: re
 export COACH_SECRET_BACKEND=file
 export COACH_SECRETS_DIR=/srv/mara/secrets
 export CREDENTIALS_DIRECTORY="${CREDENTIALS_DIRECTORY:-/srv/mara/secrets/env}"
+export TMPDIR=/srv/mara/tmp SQLITE_TMPDIR=/srv/mara/tmp  # temp files stay on the Volume
 export UV_CACHE_DIR=/srv/mara/cache/uv
 export UV_PYTHON_INSTALL_DIR=/srv/mara/cache/python
 

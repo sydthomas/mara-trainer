@@ -23,6 +23,12 @@ Shape:
 - **The server owns the database.** Dev stays on the laptop; `coach` commands that touch her
   data run on the server over SSH (`deploy/linux/coach.sh`). The laptop copy of
   `data/coach.db` is stale after the move.
+- **Nothing personal on the boot disk, logs included.** The journal is kept in memory only
+  (`Storage=volatile`, not forwarded to syslog; logs are lost on reboot), sudo does not log
+  commands run by root or mara, SQLite and Python temp files go to `/srv/mara/tmp`, and
+  health entries (fuel, body) go through Slack, never as command arguments over SSH. For
+  anything else typed on the server that names her data, start the command with a space
+  (`HISTCONTROL=ignoreboth` in root's `.bashrc`, set by bootstrap) so it stays out of history.
 - Secrets: one value per file in `/srv/mara/secrets/env/`, passed to the bot by systemd
   (`LoadCredential`, read from `$CREDENTIALS_DIRECTORY`); COROS tokens in
   `/srv/mara/secrets` (`COACH_SECRET_BACKEND=file`); restic settings in
@@ -36,12 +42,12 @@ vendor pages before buying.
 ## Files (`deploy/linux/`)
 | File | Runs | Does |
 |---|---|---|
-| `bootstrap.sh` | once, as root, on the Droplet | volume check, packages (git, restic, sqlite3, uv, Tailscale), `mara` user, `/srv/mara/{app,data,exports,secrets,backup,cache}`, clone, `app/data` and `app/exports` symlinks, units, ufw (only once Tailscale is up). Re-runnable |
-| `install-units.sh` | as root (bootstrap runs it) | installs the three units, writes the optional-credentials drop-in, the deploy sudoers rule |
+| `bootstrap.sh` | once, as root, from root's clone `/root/mara-deploy` | volume check, packages (git, restic, sqlite3, uv, Tailscale), `mara` user, `/srv/mara/{app,data,exports,secrets,backup,cache,tmp}`, clone for mara, `app/data` and `app/exports` symlinks, units, ufw (only once Tailscale is up), root password reminder. Re-runnable |
+| `install-units.sh` | as root, from `/root/mara-deploy` (bootstrap runs it) | installs the three units, the optional-credentials drop-in, journald in memory only, sudoers (deploy restart rule, no sudo logging) |
 | `mara-slack.service` | systemd | the bot, as `mara`, hardened, restarts after 10 s |
 | `mara-backup.service` / `.timer` | systemd, 03:30 Pacific, `Persistent=true` | runs `backup.sh` |
 | `backup.sh` | as mara | snapshot, restic backup, forget/prune, Sunday check; `init` and `restic ARGS` helpers |
-| `deploy.sh [REF]` | as mara | fetch + reset to `origin/main` or a tag, `uv sync --frozen`, pre-deploy snapshot, `init-db`, restart, waits 60 s for "Slack bot running" |
+| `deploy.sh [REF]` | as mara | pre-deploy snapshot, fetch + reset to `origin/main` or a tag, `uv sync --frozen`, `init-db`, restart, waits 60 s for "Slack bot running"; any failure rolls the code back to the previous commit |
 | `coach.sh ARGS` | as mara | any `coach` command with the bot's settings |
 | `move-data.sh HOST` | on the laptop | stops the LaunchAgent, snapshots, copies DB + `exports/` to the server |
 
@@ -49,6 +55,18 @@ Paths: the app reads FIT files from `<repo>/exports/coros` (found from the packa
 and writes `data/` relative to the working directory, so bootstrap makes
 `/srv/mara/app/data -> /srv/mara/data` and `/srv/mara/app/exports -> /srv/mara/exports`
 (listed in `.git/info/exclude`). The DB path is set explicitly (`COACH_DB_PATH`).
+
+Root never runs a file the bot user can change: `/srv/mara/app` belongs to mara, so root runs
+`bootstrap.sh` and `install-units.sh` from its own clone at `/root/mara-deploy` (public code
+only), and both refuse to run from a copy root doesn't own.
+
+**SSH host name:** `mara`, the Droplet's Tailscale MagicDNS name (`tailscale up --hostname
+mara`). On the laptop, add to `~/.ssh/config`:
+```
+Host mara
+  User root
+```
+so `ssh mara` works everywhere below (Tailscale SSH checks the login).
 
 ## Runbook: first setup
 Every step that needs an account or a credential is Sydney's.
@@ -68,17 +86,18 @@ Every step that needs an account or a credential is Sydney's.
    echo '/dev/disk/by-id/scsi-0DO_Volume_<name> /srv/mara ext4 defaults,nofail,discard,noatime 0 2' >> /etc/fstab
    mount -a && findmnt /srv/mara
    ```
-4. **Bootstrap:**
+4. **Bootstrap** (as root, from a root-owned clone):
    ```sh
-   curl -fsSLO https://raw.githubusercontent.com/sydthomas/mara-trainer/main/deploy/linux/bootstrap.sh
-   less bootstrap.sh && bash bootstrap.sh
-   tailscale up --ssh            # sign in with the printed link (Sydney)
+   git clone --depth 1 https://github.com/sydthomas/mara-trainer.git /root/mara-deploy
+   bash /root/mara-deploy/deploy/linux/bootstrap.sh
+   tailscale up --ssh --hostname mara   # sign in with the printed link (Sydney)
+   passwd root                          # Sydney: save it in the password manager (Recovery)
    ```
-   In the Tailscale admin console, **disable key expiry** for this machine (otherwise SSH stops
-   working after 180 days; the bot keeps running). From the laptop, check
-   `ssh root@<tailscale-name>` works, then run `bash /srv/mara/app/deploy/linux/bootstrap.sh`
-   again: it enables ufw. Check: `ufw status verbose` shows deny incoming, allow on tailscale0;
-   SSH to the public IP now times out.
+   In the Tailscale admin console, **disable key expiry** for `mara` (otherwise SSH stops
+   working after 180 days; the bot keeps running). From the laptop, check `ssh mara` works,
+   then run `bash /root/mara-deploy/deploy/linux/bootstrap.sh` again: it enables ufw. Check:
+   `ufw status verbose` shows deny incoming, allow on tailscale0; SSH to the public IP now
+   times out.
 5. **Secrets (Sydney, over Tailscale SSH).** One value per file, typed or pasted at a hidden
    prompt (nothing in shell history, no trailing newline):
    ```sh
@@ -86,7 +105,7 @@ Every step that needs an account or a credential is Sydney's.
    for n in ANTHROPIC_API_KEY SLACK_BOT_TOKEN SLACK_APP_TOKEN SLACK_ALLOWED_USER_ID; do
      put "$n" "/srv/mara/secrets/env/$n"; done
    # optional: COACH_LAT COACH_LON COACH_PLACES COACH_NWS_CONTACT, same way, then:
-   bash /srv/mara/app/deploy/linux/install-units.sh
+   bash /root/mara-deploy/deploy/linux/install-units.sh
    put repository /srv/mara/secrets/restic/repository        # b2:mara-coach-backup:mara
    put password /srv/mara/secrets/restic/password
    put b2-account-id /srv/mara/secrets/restic/b2-account-id
@@ -94,7 +113,7 @@ Every step that needs an account or a credential is Sydney's.
    sudo -u mara /srv/mara/app/deploy/linux/backup.sh init
    ```
    Never `cat` these files. Same Slack app and tokens as the laptop.
-6. **Move the data** (laptop): `deploy/linux/move-data.sh root@<tailscale-name>`. It stops the
+6. **Move the data** (laptop): `deploy/linux/move-data.sh mara`. It stops the
    LaunchAgent (two bots would both answer every DM), takes a snapshot, copies it and
    `exports/` to `/srv/mara/backup/incoming/`, and prints the server commands that put them in
    place. Nothing local is deleted.
@@ -102,7 +121,7 @@ Every step that needs an account or a credential is Sydney's.
    seen in the log).
 8. **COROS sign-in** (Sydney). From the laptop, with the callback port forwarded:
    ```sh
-   ssh -L 33418:127.0.0.1:33418 root@<tailscale-name>
+   ssh -L 33418:127.0.0.1:33418 mara
    sudo -u mara /srv/mara/app/deploy/linux/coach.sh coros login --no-browser
    ```
    Open the printed link in the laptop browser; the redirect to `127.0.0.1:33418` reaches the
@@ -117,13 +136,19 @@ Every step that needs an account or a credential is Sydney's.
 10. **Restore drill** (below) once, before relying on it.
 
 ## Day to day
-- **Deploy** after merges that change the bot: `ssh root@<tailscale-name> sudo -u mara
+- **Deploy** after merges that change the bot: `ssh mara sudo -u mara
   /srv/mara/app/deploy/linux/deploy.sh [vX.Y.Z]`. It snapshots the DB to
-  `/srv/mara/backup/pre-deploy.db` before migrations and keeps the stored timezone.
-- **Run coach commands:** `ssh root@<tailscale-name> sudo -u mara
-  /srv/mara/app/deploy/linux/coach.sh summary` (any command). To import a FIT file, `scp` it
-  into `/srv/mara/exports/` first, then `coach.sh import /srv/mara/exports/<file>`.
-- **Logs:** `journalctl -u mara-slack -f`.
+  `/srv/mara/backup/pre-deploy.db` before touching the code, keeps the stored timezone, and
+  if any later step fails (sync, migration, the bot not starting) it puts the previous commit
+  back, re-syncs and restarts. The DB is not rolled back on its own; the snapshot is there.
+- **Run coach commands:** `ssh mara sudo -u mara /srv/mara/app/deploy/linux/coach.sh summary`
+  (reports, imports, logins). Health entries (fuel, body) go through Slack, never as command
+  arguments here: arguments show in process lists and shell history. To import a FIT file,
+  `scp` it into `/srv/mara/exports/` first, then `coach.sh import /srv/mara/exports/<file>`.
+- **Unit changes** (a merged change to `deploy/linux/*.service|*.timer`, or to
+  `install-units.sh`): review the diff, then
+  `git -C /root/mara-deploy pull && bash /root/mara-deploy/deploy/linux/install-units.sh`.
+- **Logs:** `journalctl -u mara-slack -f` (memory only: a reboot clears them).
 - The deploy sudoers rule (`/etc/sudoers.d/mara-deploy`) allows exactly
   `mara ALL=(root) NOPASSWD: /usr/bin/systemctl restart mara-slack.service`.
 
@@ -132,11 +157,18 @@ Every step that needs an account or a credential is Sydney's.
 - **Slack or Anthropic key rotated:** `put NAME /srv/mara/secrets/env/NAME` (step 5), then
   `systemctl restart mara-slack`.
 - **Optional setting added or removed:** write or delete its file, then
-  `bash /srv/mara/app/deploy/linux/install-units.sh && systemctl restart mara-slack`.
+  `bash /root/mara-deploy/deploy/linux/install-units.sh && systemctl restart mara-slack`.
 - **B2 key rotated:** `put` the two `b2-account-*` files; the next backup uses them. The restic
   password does not change with the key.
-- **Tailscale:** if key expiry was left on and SSH stops, re-authenticate from the DO web
-  console with `tailscale up --ssh`.
+- **Tailscale:** if key expiry was left on and SSH stops, re-authenticate from the Recovery
+  Console (below) with `tailscale up --ssh --hostname mara`.
+
+## Recovery (Tailscale or SSH broken)
+The DO **Droplet Console** connects over SSH, so ufw blocks it once bootstrap has run. Use the
+**Recovery Console** (Droplet page, Access) instead: a login prompt on the Droplet's own
+screen, which needs the root password. Set it at bootstrap (`passwd root`, saved in the
+password manager). If it's lost: Access, "Reset root password" in the control panel (DO emails
+a new one, the Droplet power-cycles), then log in at the Recovery Console and change it.
 
 ## Restore
 **Drill** (no change to live data):
@@ -155,11 +187,14 @@ Note the date and result here when done.
 ```sh
 systemctl stop mara-slack
 sudo -u mara /srv/mara/app/deploy/linux/backup.sh restic restore latest --target /srv/mara/restore
+rm -f /srv/mara/data/coach.db-journal /srv/mara/data/coach.db-wal /srv/mara/data/coach.db-shm
 install -o mara -g mara -m 0600 /srv/mara/restore/srv/mara/backup/coach.db /srv/mara/data/coach.db
 sudo -u mara cp -a /srv/mara/restore/srv/mara/exports/. /srv/mara/exports/
 rm -rf /srv/mara/restore
-sudo -u mara /srv/mara/app/deploy/linux/deploy.sh
+systemctl start mara-slack
 ```
+Always remove the old `-journal`/`-wal`/`-shm` files before putting a DB in place: SQLite
+would apply a leftover one to the new file. `move-data.sh` prints the same step.
 Use a snapshot ID instead of `latest` for an older copy. Runs logged since that backup come
 back with "sync my runs" (FIT files re-download); fuel and body entries since then are lost.
 
@@ -199,5 +234,7 @@ answered when it comes back.
 | **2c. Hetzner** CX23 | about €4.29-4.49 + VAT | Hetzner | most RAM for the money | prices rose in 2026 |
 | **3. PaaS** (Railway Hobby / Render worker) | $5 floor / $7 | vendor | git-push deploys | usage-based extras |
 
-Not done yet: a heartbeat alert (the bot DMs nothing for 24 h around a check-in), and deploys
+Not done yet: a heartbeat alert (the bot DMs nothing for 24 h around a check-in), an alert
+when the nightly backup fails (today a failure only shows in `systemctl status mara-backup`
+and the in-memory journal, so check it after deploys), and deploys
 limited to tagged releases (supported by `deploy.sh vX.Y.Z`; the default is `origin/main`).

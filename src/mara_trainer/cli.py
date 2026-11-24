@@ -98,7 +98,8 @@ def backup_cmd(
 ) -> None:
     """Consistent snapshot of the DB (SQLite backup API), then an integrity check on the copy.
 
-    Exit 0 = copy written and `integrity` is "ok"; 3 = the check found problems; 1 = no DB."""
+    Exit 0 = copy written and `integrity` is "ok"; 3 = the check found problems (nothing
+    written, an older file at PATH is kept); 1 = no DB."""
     try:
         result = backup.snapshot(db.db_path(), out)
     except (FileNotFoundError, ValueError, sqlite3.DatabaseError) as e:

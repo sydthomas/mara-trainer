@@ -11,6 +11,9 @@ Type=oneshot
 User=mara
 Group=mara
 WorkingDirectory=/srv/mara/app
+# SQLite, restic and Python temp files stay on the Volume.
+Environment=TMPDIR=/srv/mara/tmp
+Environment=SQLITE_TMPDIR=/srv/mara/tmp
 ExecStart=/srv/mara/app/deploy/linux/backup.sh
 Nice=10
 IOSchedulingClass=idle

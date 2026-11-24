@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Move the coach's data from the laptop to the server, over Tailscale (docs/hosting.md).
 # Run on the laptop, from anywhere in the repo:
-#   deploy/linux/move-data.sh root@<tailscale-name>
+#   deploy/linux/move-data.sh mara
+# (`mara` = the Droplet's Tailscale MagicDNS name, User root in ~/.ssh/config; any ssh target
+# that logs in as root works.)
 # Stops the LaunchAgent bot (two bots would both answer), takes a consistent DB snapshot with
 # `coach backup`, and copies it plus exports/ to /srv/mara/backup/incoming/ on the server.
 # Deletes nothing on the laptop. Secrets (.env) are NOT copied: enter them on the server.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: $0 root@<tailscale-name>" >&2
+  echo "usage: $0 mara   (ssh host of the Droplet, logging in as root)" >&2
   exit 2
 fi
 TARGET="$1"
@@ -50,6 +52,7 @@ is a stale copy.
 
 Next, on the server (ssh $TARGET):
   systemctl stop mara-slack.service
+  rm -f /srv/mara/data/coach.db-journal /srv/mara/data/coach.db-wal /srv/mara/data/coach.db-shm
   install -o mara -g mara -m 0600 $INCOMING/coach.db /srv/mara/data/coach.db
   sudo -u mara cp -a $INCOMING/exports/. /srv/mara/exports/
   sudo -u mara /srv/mara/app/deploy/linux/coach.sh backup --out /srv/mara/backup/moved-check.db

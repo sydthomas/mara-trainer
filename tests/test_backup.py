@@ -98,3 +98,36 @@ def test_cli_backup_missing_db(tmp_db: Path, tmp_path: Path) -> None:
     r = runner.invoke(app, ["backup", "--out", str(tmp_path / "out.db")])
     assert r.exit_code == 1
     assert not tmp_db.exists()
+
+
+def test_failed_check_keeps_previous_good_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = tmp_path / "coach.db"
+    _make_db(src)
+    out = tmp_path / "copy.db"
+    backup.snapshot(src, out)
+    good = out.read_bytes()
+    conn = sqlite3.connect(src)
+    with conn:
+        conn.executemany("INSERT INTO t VALUES (?)", [(i,) for i in range(5000)])
+    conn.close()
+    monkeypatch.setattr(backup, "integrity_check", lambda path: "row 3 missing from index")
+    result = backup.snapshot(src, out)
+    assert not result.ok and result.integrity == "row 3 missing from index"
+    assert out.read_bytes() == good  # never replaced by a copy that failed the check
+    assert not list(tmp_path.glob(".*.partial"))
+
+
+def test_error_during_copy_removes_partial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = tmp_path / "coach.db"
+    _make_db(src)
+
+    def boom(path: Path) -> str:
+        raise sqlite3.DatabaseError("disk I/O error")
+
+    monkeypatch.setattr(backup, "integrity_check", boom)
+    with pytest.raises(sqlite3.DatabaseError):
+        backup.snapshot(src, tmp_path / "copy.db")
+    assert not (tmp_path / "copy.db").exists()
+    assert not list(tmp_path.glob(".*.partial"))

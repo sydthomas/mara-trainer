@@ -58,8 +58,8 @@ mkdir -p "$SNAPSHOT_DIR"
 # coach backup exits nonzero if the integrity check fails; set -e then stops before upload.
 "$HERE/coach.sh" backup --out "$SNAPSHOT"
 
-restic backup --tag mara --host mara-coach "$SNAPSHOT" "$EXPORTS"
-restic forget --tag mara --host mara-coach \
+restic backup --tag mara --host mara "$SNAPSHOT" "$EXPORTS"
+restic forget --tag mara --host mara \
   --keep-daily 7 --keep-weekly 8 --keep-monthly 12 --prune
 
 # Weekly: verify the repository structure (Sunday, date +%u = 7).

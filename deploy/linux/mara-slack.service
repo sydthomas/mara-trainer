@@ -23,6 +23,9 @@ Environment=COACH_SECRETS_DIR=/srv/mara/secrets
 Environment=UV_CACHE_DIR=/srv/mara/cache/uv
 Environment=UV_PYTHON_INSTALL_DIR=/srv/mara/cache/python
 Environment=PYTHONUNBUFFERED=1
+# SQLite and Python temp files (can hold DB pages) stay on the Volume.
+Environment=TMPDIR=/srv/mara/tmp
+Environment=SQLITE_TMPDIR=/srv/mara/tmp
 LoadCredential=ANTHROPIC_API_KEY:/srv/mara/secrets/env/ANTHROPIC_API_KEY
 LoadCredential=SLACK_BOT_TOKEN:/srv/mara/secrets/env/SLACK_BOT_TOKEN
 LoadCredential=SLACK_APP_TOKEN:/srv/mara/secrets/env/SLACK_APP_TOKEN

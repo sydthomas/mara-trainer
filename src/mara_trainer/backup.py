@@ -49,8 +49,9 @@ def integrity_check(path: Path) -> str:
 def snapshot(source: Path, out: Path) -> BackupResult:
     """Copy `source` to `out` (a file, or a directory for a timestamped name) and check it.
 
-    The copy is written to a temporary file next to the target and renamed into place, so a
-    half-written file never carries the final name.
+    The copy is written to a hidden `.partial` file next to the target and checked there; it
+    is renamed into place only when the check says "ok". On a failed check or any error the
+    partial file is removed and an existing file at the target is left untouched.
     """
     if not source.is_file():
         raise FileNotFoundError(f"database not found: {source}")
@@ -60,14 +61,20 @@ def snapshot(source: Path, out: Path) -> BackupResult:
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_name(f".{target.name}.partial")
     tmp.unlink(missing_ok=True)
-    src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     try:
-        dst = sqlite3.connect(tmp)
+        src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
         try:
-            src.backup(dst)
+            dst = sqlite3.connect(tmp)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
         finally:
-            dst.close()
+            src.close()
+        size = tmp.stat().st_size
+        integrity = integrity_check(tmp)
+        if integrity == "ok":
+            os.replace(tmp, target)
     finally:
-        src.close()
-    os.replace(tmp, target)
-    return BackupResult(target, target.stat().st_size, integrity_check(target))
+        tmp.unlink(missing_ok=True)
+    return BackupResult(target, size, integrity)
