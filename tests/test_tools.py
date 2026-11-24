@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 from mara_coach import profile, sources, tools
 from mara_coach.cli import app
 from mara_coach.tools import ToolError
-from mara_trainer import db
+from mara_trainer import db, gaps
 from mara_trainer.plan_rules import RaceSetup
 
 runner = CliRunner()
@@ -33,6 +33,7 @@ EXPECTED = {
     "plan_week",
     "sync_runs",
     "get_weather",
+    "log_source_gap",
 }
 
 
@@ -268,3 +269,40 @@ def test_propose_week_schema_has_cut_and_restore() -> None:
     assert "never more" in spec["description"]
     args = {"start_date": "2026-11-16", "sessions": [], "restore": "yes"}
     assert tools.check_args(spec["input_schema"], args)  # a non-boolean restore is refused
+
+
+def test_log_source_gap_saves_to_the_backlog(conn: sqlite3.Connection) -> None:
+    args = {
+        "topic": "Compression socks",
+        "summary": "Whether compression socks help recovery after long runs.",
+        "category": "recovery",
+    }
+    first = tools.call_tool(conn, "log_source_gap", args)
+    assert first["ok"] is True and first["saved"] is True and first["created"] is True
+    assert first["topic"] == "compression-socks" and first["asks"] == 1
+    assert "No approved source covers this" in first["message"]
+    again = tools.call_tool(conn, "log_source_gap", {**args, "safety": False})
+    # a repeat within gaps.REPEAT_MINUTES is the same question (follow-up turn): counted once
+    assert again["created"] is False and again["asks"] == 1
+    [row] = gaps.list_gaps(conn, "open")
+    assert row["asks"] == 1 and row["summary"] == args["summary"]
+
+
+def test_log_source_gap_bad_args(conn: sqlite3.Connection) -> None:
+    with pytest.raises(ToolError, match="bad arguments"):
+        tools.call_tool(conn, "log_source_gap", {"topic": "x", "summary": "y", "category": "z"})
+    with pytest.raises(ToolError, match="bad arguments"):
+        tools.call_tool(conn, "log_source_gap", {"topic": "x", "category": "other"})
+    with pytest.raises(ToolError, match="topic"):
+        tools.call_tool(
+            conn, "log_source_gap", {"topic": "?!", "summary": "y", "category": "other"}
+        )
+    assert gaps.list_gaps(conn, "all") == []
+
+
+def test_log_source_gap_is_the_only_direct_write() -> None:
+    spec = next(s for s in tools.tool_specs() if s["name"] == "log_source_gap")
+    assert spec["input_schema"]["required"] == ["topic", "summary", "category"]
+    assert "No approved source covers this" in spec["description"]
+    assert "saves" in spec["description"].lower()
+    assert {"log_source_gap"} == set(tools.WRITE_TOOLS)

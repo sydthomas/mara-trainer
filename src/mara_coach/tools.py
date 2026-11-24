@@ -4,7 +4,11 @@ ask-coach skill (now, via `coach tools call`) can use them directly.
 
 Rules:
 - No mileage or pace math here. Every number comes from `mara_trainer` (or the DB) unchanged.
-- Read-only. `validate_plan` checks a draft but never accepts it; Sydney accepts via the CLI.
+- Read-only, with one exception: `log_source_gap` saves directly. It writes only to the
+  private source-gap backlog (`mara_trainer.gaps`: a topic label and a one-line paraphrase,
+  never runner data, never sent anywhere), so there is nothing for the runner to confirm.
+  `WRITE_TOOLS` lists it; nothing else writes.
+- `validate_plan` checks a draft but never accepts it; Sydney accepts via the CLI.
   `propose_fuel_entry` checks a debrief entry but never saves it; the Slack channel saves it in
   code after she replies yes. `propose_week` works the same way for one week, and
   `propose_body_entry` for one body check / niggle.
@@ -25,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mara_trainer import body, db, fueling, reports
+from mara_trainer import body, db, fueling, gaps, reports
 from mara_trainer.plan_rules import SESSION_KINDS
 
 from . import knowledge, profile, sources
@@ -273,6 +277,27 @@ def get_weather(conn: sqlite3.Connection, **args: Any) -> dict[str, Any]:
         "ok": False,
         "reason": "The forecast isn't available in this channel. Tell her to ask for it "
         'herself: "weather" in Slack, or `coach weather` in the terminal.',
+    }
+
+
+def log_source_gap(
+    conn: sqlite3.Connection, topic: str, summary: str, category: str, safety: bool = False
+) -> dict[str, Any]:
+    """Save one uncovered question to the private source-gap backlog (the only direct write;
+    module docstring). A repeat of an open topic counts as another ask."""
+    try:
+        result = gaps.log_gap(conn, topic, summary, category, safety)
+    except gaps.GapError as exc:
+        raise ToolError(str(exc)) from exc
+    gap = result["gap"]
+    return {
+        "ok": True,
+        "saved": True,
+        "created": result["created"],
+        "topic": gap["topic"],
+        "asks": gap["asks"],
+        "message": "Noted for research. Still tell her: No approved source covers this. Don't "
+        "answer from memory. You may say it's been noted so a source can be looked for.",
     }
 
 
@@ -590,6 +615,30 @@ TOOLS: tuple[Tool, ...] = (
         ),
         get_weather,
     ),
+    # The one tool that saves directly: it writes to the private source-gap backlog only
+    # (a topic label and a one-line paraphrase), never runner data, so no yes is needed.
+    Tool(
+        "log_source_gap",
+        "Call once per topic when no approved source covers her question (after read_knowledge "
+        "and search_sources found nothing). It saves the topic to a private research list of "
+        "missing sources, so a source can be looked for; it never reaches her plan or logs. "
+        "topic: a short label (e.g. 'compression socks'); summary: one line in your own words "
+        "about what was asked, with no personal or health detail beyond the topic. You still "
+        "answer: No approved source covers this.",
+        _schema(
+            {
+                "topic": {"type": "string", "maxLength": gaps.TOPIC_MAX},
+                "summary": {"type": "string", "maxLength": gaps.SUMMARY_MAX},
+                "category": {"type": "string", "enum": list(gaps.CATEGORIES)},
+                "safety": {
+                    "type": "boolean",
+                    "description": "True for an injury, illness or health topic",
+                },
+            },
+            required=["topic", "summary", "category"],
+        ),
+        log_source_gap,
+    ),
     Tool(
         "allowed_domains",
         "Web domains the coach may fetch from at answer time (approved, fetchable sources only).",
@@ -598,6 +647,7 @@ TOOLS: tuple[Tool, ...] = (
     ),
 )
 _BY_NAME = {t.name: t for t in TOOLS}
+WRITE_TOOLS = frozenset({"log_source_gap"})  # tools that save without the runner's yes
 
 
 def tool_specs() -> list[dict[str, Any]]:

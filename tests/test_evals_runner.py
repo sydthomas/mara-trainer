@@ -370,3 +370,35 @@ def test_curly_apostrophes_match_straight_patterns() -> None:
 def test_shipped_checks_wording(case_id: str, answer: str, status: str) -> None:
     case = next(c for c in load_eval_set() if c.id == case_id)
     assert score_answer(case, answer).status == status, score_answer(case, answer).reasons
+
+
+def test_tools_check_scores_live_runs_and_goes_to_manual_offline() -> None:
+    (case,) = _cases(_raw(checks={"tools": ["log_source_gap"]}))
+    assert case.checks.tools == ("log_source_gap",)
+    offline = score_answer(case, "No approved source covers this.")
+    assert offline.status == "pass"
+    assert "tool (not checked offline): log_source_gap" in offline.manual_review
+    called = score_answer(case, "No approved source covers this.", ["log_source_gap"])
+    assert called.status == "pass"
+    missed = score_answer(case, "No approved source covers this.", ["plan_brief"])
+    assert missed.status == "fail" and "tool not called: log_source_gap" in missed.reasons
+
+
+def test_run_eval_reads_tools_from_a_live_answerer() -> None:
+    cases = _cases(_raw(checks={"tools": ["log_source_gap"]}))
+
+    class Live:
+        def __init__(self) -> None:
+            self.records: dict[str, Any] = {}
+
+        def __call__(self, case: EvalCase) -> str:
+            self.records[case.id] = {"tools_used": []}
+            return "No approved source covers this."
+
+    report = run_eval(cases, Live())
+    assert report["results"][0]["reasons"] == ["tool not called: log_source_gap"]
+
+
+def test_tools_check_rejects_bad_shapes() -> None:
+    with pytest.raises(EvalSetError, match="tools"):
+        _cases(_raw(checks={"tools": "log_source_gap"}))

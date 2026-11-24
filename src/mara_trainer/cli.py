@@ -12,7 +12,19 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
-from . import backup, body, coros_workouts, dashboard, db, fueling, hr_pace, imports, paces, reports
+from . import (
+    backup,
+    body,
+    coros_workouts,
+    dashboard,
+    db,
+    fueling,
+    gaps,
+    hr_pace,
+    imports,
+    paces,
+    reports,
+)
 from .dates import parse_day
 from .plan_rules import (
     RaceSetup,
@@ -43,6 +55,11 @@ app.add_typer(plan_app, name="plan")
 app.add_typer(fuel_app, name="fuel")
 app.add_typer(body_app, name="body")
 app.add_typer(coros_app, name="coros")
+gaps_app = typer.Typer(
+    help="Source gaps: questions no approved source covers (private backlog, ranked).",
+    no_args_is_help=True,
+)
+app.add_typer(gaps_app, name="gaps")
 
 KM = 1000.0
 MI = 1609.344
@@ -562,6 +579,63 @@ def body_delete(entry_id: Annotated[int, typer.Argument(help="Entry id")]) -> No
     if not body.delete_entry(_conn(), entry_id):
         _fail(f"no body entry with id {entry_id}")
     _out({"ok": True, "deleted": entry_id})
+
+
+@gaps_app.command("list")
+def gaps_list(
+    status: Annotated[str, typer.Option(help="open, researching, closed or all")] = "open",
+) -> None:
+    """Source gaps, highest score first, each with the plain reasons behind its score."""
+    conn = _conn()
+    try:
+        today = reports.athlete_today(conn)
+    except reports.ReportError:
+        today = date.today().isoformat()
+    try:
+        rows = gaps.ranked(conn, status, today, gaps.phase_info(conn, today))
+    except gaps.GapError as exc:
+        _fail(str(exc))
+    _out({"status": status, "today": today, "count": len(rows), "gaps": rows})
+
+
+@gaps_app.command("log")
+def gaps_log(
+    topic: Annotated[str, typer.Option(help="Short label, e.g. 'compression socks'")],
+    summary: Annotated[str, typer.Option(help="One line in your own words, no health detail")],
+    category: Annotated[str, typer.Option(help=", ".join(gaps.CATEGORIES))],
+    safety: Annotated[
+        bool, typer.Option("--safety", help="Injury, illness or health topic")
+    ] = False,
+) -> None:
+    """Log a source gap by hand (a repeat of an open topic counts as another ask)."""
+    try:
+        result = gaps.log_gap(_conn(), topic, summary, category, safety)
+    except gaps.GapError as exc:
+        _fail(str(exc))
+    _out({"ok": True, **result})
+
+
+@gaps_app.command("research")
+def gaps_research(gap_id: Annotated[int, typer.Argument(help="Gap id")]) -> None:
+    """Mark an open source gap as being researched (sources are being looked for)."""
+    try:
+        moved = gaps.research_gap(_conn(), gap_id)
+    except gaps.GapError as exc:
+        _fail(str(exc))
+    _out({"ok": True, "gap": moved})
+
+
+@gaps_app.command("close")
+def gaps_close(
+    gap_id: Annotated[int, typer.Argument(help="Gap id")],
+    reason: Annotated[str, typer.Option(help="Why, e.g. 'source approved' or 'out of scope'")],
+) -> None:
+    """Close a source gap (kept as history; a later ask opens a new one)."""
+    try:
+        closed = gaps.close_gap(_conn(), gap_id, reason)
+    except gaps.GapError as exc:
+        _fail(str(exc))
+    _out({"ok": True, "gap": closed})
 
 
 def main() -> None:  # pragma: no cover

@@ -145,6 +145,8 @@ def test_system_prompt_rules() -> None:
     p = agent.SYSTEM_PROMPT
     for phrase in (
         "No approved source covers this",
+        "log_source_gap",
+        "the one exception is\n  log_source_gap",
         "qualified professional",
         "Strava",
         "dietitian",
