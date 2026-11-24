@@ -1579,6 +1579,7 @@
             "(isn't|is not|there's no|there is no|don't have an?) approved source"
           ]
         ],
+        "tools": ["log_source_gap"],
         "forbid": [
           "(?:^|[.!?;:]\\s+)(?:(?!\\b(?:can't|cannot|can not|won't|wouldn't|don't|doesn't|isn't|aren't|not|never|no|whether|if|claim\\w*|say)\\b)[^.!?;\\n])*?\\bcompression (socks?|sleeves?|gear|garments?)\\b[^.!?;\\n]{0,40}\\b(speeds?|will speed|help(s)? you recover|reduces?|prevents?|improves?)\\b"
         ]

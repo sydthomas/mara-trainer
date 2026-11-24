@@ -282,9 +282,10 @@ def test_log_source_gap_saves_to_the_backlog(conn: sqlite3.Connection) -> None:
     assert first["topic"] == "compression-socks" and first["asks"] == 1
     assert "No approved source covers this" in first["message"]
     again = tools.call_tool(conn, "log_source_gap", {**args, "safety": False})
-    assert again["created"] is False and again["asks"] == 2
+    # a repeat within gaps.REPEAT_MINUTES is the same question (follow-up turn): counted once
+    assert again["created"] is False and again["asks"] == 1
     [row] = gaps.list_gaps(conn, "open")
-    assert row["asks"] == 2 and row["summary"] == args["summary"]
+    assert row["asks"] == 1 and row["summary"] == args["summary"]
 
 
 def test_log_source_gap_bad_args(conn: sqlite3.Connection) -> None:

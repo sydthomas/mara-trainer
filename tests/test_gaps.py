@@ -159,11 +159,12 @@ def test_score_race_relevance_and_researching() -> None:
 
 
 def test_phase_info_reads_the_saved_race(conn: sqlite3.Connection) -> None:
-    assert gaps.phase_info(conn, "2026-11-24") == {"days_to_race": None}
+    tz = "America/Los_Angeles"
+    assert gaps.phase_info(conn, "2026-11-24") == {"days_to_race": None, "timezone": tz}
     setup = RaceSetup.from_dict(json.loads(EXAMPLE.read_text())["setup"])
     db.save_race_setup(conn, setup)
     info = gaps.phase_info(conn, setup.race_date)
-    assert info == {"days_to_race": 0}
+    assert info == {"days_to_race": 0, "timezone": tz}
 
 
 def test_ranked_sorts_by_score(conn: sqlite3.Connection) -> None:
@@ -219,3 +220,46 @@ def test_cli_errors(tmp_db: Path) -> None:
     assert r.exit_code == 1 and "no source gap" in r.output
     r = runner.invoke(app, ["gaps", "log", "--topic", "x", "--summary", "y", "--category", "z"])
     assert r.exit_code == 1 and "category" in r.output
+
+
+def test_same_topic_within_the_repeat_window_counts_once(conn: sqlite3.Connection) -> None:
+    gaps.log_gap(conn, "Ice baths", "Do ice baths help?", "recovery", now=T1)
+    soon = "2026-11-01T15:10:00.000Z"  # a follow-up turn in the same thread
+    again = gaps.log_gap(conn, "ice baths", "follow-up", "recovery", now=soon)
+    assert again["created"] is False and again["gap"]["asks"] == 1
+    assert again["gap"]["last_asked"] == soon
+    later = gaps.log_gap(conn, "ice baths", "later", "recovery", now=T2)
+    assert later["gap"]["asks"] == 2
+
+
+def test_log_gap_counts_across_connections(tmp_path: Path) -> None:
+    """Two processes (bot + CLI) on one file: the second ask counts, no IntegrityError."""
+    path = tmp_path / "race.db"
+    a, b = db.connect(str(path)), db.connect(str(path))
+    db.migrate(a)
+    gaps.log_gap(a, "Sauna", "Sauna after runs?", "recovery", now=T1)
+    out = gaps.log_gap(b, "sauna", "again", "recovery", now=T2)
+    assert out["created"] is False and out["gap"]["asks"] == 2
+
+
+def test_research_sets_status_and_earns_the_bonus(conn: sqlite3.Connection) -> None:
+    gap = gaps.log_gap(conn, "Altitude", "Altitude tents?", "training", now=T1)["gap"]
+    moved = gaps.research_gap(conn, gap["id"])
+    assert moved["status"] == "researching"
+    assert "being researched" in gaps.score(moved, "2026-11-02", NO_RACE)["reasons"]
+    with pytest.raises(GapError):
+        gaps.research_gap(conn, 999)
+
+
+def test_cli_research(tmp_db: Path) -> None:
+    log = ["gaps", "log", "--topic", "altitude", "--summary", "Tents?", "--category", "training"]
+    gap_id = json.loads(runner.invoke(app, log).output)["gap"]["id"]
+    out = json.loads(runner.invoke(app, ["gaps", "research", str(gap_id)]).output)
+    assert out["ok"] is True and out["gap"]["status"] == "researching"
+
+
+def test_age_uses_the_runner_local_date() -> None:
+    # 2026-11-02 04:00Z is still Nov 1 in Los Angeles: asked "today", not 1 day ago or -1.
+    gap = _gap(asks=1, last_asked="2026-11-02T04:00:00.000Z")
+    info = {"days_to_race": None, "timezone": "America/Los_Angeles"}
+    assert gaps.ask_age(gap, "2026-11-01", info) == 0

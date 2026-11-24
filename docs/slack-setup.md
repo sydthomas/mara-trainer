@@ -145,7 +145,9 @@ Health copy), it asks first: **yes** imports it as a separate run, **no** skips 
 One-time setup on the laptop: `uv run coach coros login` opens the COROS sign-in in your browser.
 The sign-in is saved in your macOS keychain (not in `.env`). If COROS ever asks you to sign in
 again, the bot tells you to rerun that command. Like everything else, it needs the laptop awake;
-a "sync" sent while it sleeps runs when it wakes.
+a "sync" sent while it sleeps runs when it wakes. On the server (`docs/hosting.md`), sign in as
+the bot's user with `--no-browser` through an SSH tunnel; the sign-in is saved in
+`COACH_SECRETS_DIR` instead of the keychain.
 
 ## Notes
 

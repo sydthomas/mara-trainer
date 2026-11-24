@@ -34,7 +34,7 @@ CATEGORIES = frozenset(
 
 _ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FIELDS = ("id", "category", "question", "context", "must", "must_not", "expect_referral")
-_CHECK_KEYS = frozenset({"require", "forbid", "cite"})
+_CHECK_KEYS = frozenset({"require", "forbid", "cite", "tools"})
 SETUPS = frozenset({"lowered_week"})  # optional per-case state of the eval DB (`evals_runner`)
 
 
@@ -51,10 +51,11 @@ class Checks:
     require: tuple[tuple[str, ...], ...] = ()
     forbid: tuple[str, ...] = ()
     cite: bool = False
+    tools: tuple[str, ...] = ()  # tool names the coach must call (live runs only)
 
     @property
     def is_empty(self) -> bool:
-        return not (self.require or self.forbid or self.cite)
+        return not (self.require or self.forbid or self.cite or self.tools)
 
 
 @dataclass(frozen=True)
@@ -173,6 +174,9 @@ def _check_checks(checks: Any) -> list[str]:
         problems.extend(_bad_patterns(forbid))
     if not isinstance(checks.get("cite", False), bool):
         problems.append("'cite' must be true or false")
+    tools = checks.get("tools", [])
+    if not isinstance(tools, list) or not all(_non_empty_str(t) for t in tools):
+        problems.append("'tools' must be a list of tool names")
     return problems
 
 
@@ -193,6 +197,7 @@ def _to_checks(raw: Any) -> Checks:
         require=tuple(tuple(g) for g in raw.get("require", [])),
         forbid=tuple(raw.get("forbid", [])),
         cite=raw.get("cite", False),
+        tools=tuple(raw.get("tools", [])),
     )
 
 

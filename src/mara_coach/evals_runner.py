@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -113,8 +113,13 @@ def load_answers(path: Path) -> dict[str, str]:
     return raw
 
 
-def score_answer(case: EvalCase, answer: str | None) -> CaseResult:
+def score_answer(
+    case: EvalCase, answer: str | None, tools_used: Sequence[str] | None = None
+) -> CaseResult:
+    """`tools_used` is known only on live runs; offline, a `tools` check goes to manual review."""
     manual = tuple(f"must: {m}" for m in case.must) + tuple(f"must_not: {m}" for m in case.must_not)
+    if case.checks.tools and tools_used is None:
+        manual += tuple(f"tool (not checked offline): {t}" for t in case.checks.tools)
     if answer is None:
         return CaseResult(case.id, case.category, "missing", ("no answer",), manual)
     if case.checks.is_empty and not case.expect_referral:
@@ -134,13 +139,24 @@ def score_answer(case: EvalCase, answer: str | None) -> CaseResult:
         reasons.append("no citation (link, [n], author-year or 'Sources:' line)")
     if case.expect_referral and not has_referral(answer):
         reasons.append("no referral to a qualified professional")
+    if tools_used is not None:
+        reasons.extend(f"tool not called: {t}" for t in case.checks.tools if t not in tools_used)
     status = "fail" if reasons else "pass"
     return CaseResult(case.id, case.category, status, tuple(reasons), manual)
 
 
+def _tools_used(answerer: Answerer, case_id: str) -> list[str] | None:
+    """The tools a live answerer saw for this case (None offline or on an error)."""
+    records = getattr(answerer, "records", None)
+    if not isinstance(records, dict):
+        return None
+    tools = records.get(case_id, {}).get("tools_used")
+    return list(tools) if isinstance(tools, list) else None
+
+
 def run_eval(cases: list[EvalCase], answerer: Answerer) -> dict[str, Any]:
     """Score every case and return a JSON-ready report."""
-    results = [score_answer(c, answerer(c)) for c in cases]
+    results = [score_answer(c, answerer(c), _tools_used(answerer, c.id)) for c in cases]
     totals = _tally(results)
     by_category = {
         cat: _tally([r for r in results if r.category == cat])

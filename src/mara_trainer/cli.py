@@ -593,6 +593,16 @@ def gaps_log(
     _out({"ok": True, **result})
 
 
+@gaps_app.command("research")
+def gaps_research(gap_id: Annotated[int, typer.Argument(help="Gap id")]) -> None:
+    """Mark an open source gap as being researched (sources are being looked for)."""
+    try:
+        moved = gaps.research_gap(_conn(), gap_id)
+    except gaps.GapError as exc:
+        _fail(str(exc))
+    _out({"ok": True, "gap": moved})
+
+
 @gaps_app.command("close")
 def gaps_close(
     gap_id: Annotated[int, typer.Argument(help="Gap id")],

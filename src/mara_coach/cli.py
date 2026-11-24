@@ -447,10 +447,21 @@ def weather_cmd(
 
 
 @coros_app.command("login")
-def coros_login() -> None:
-    """Sign in to COROS once in the browser (official MCP server). Tokens go to the keychain."""
+def coros_login(
+    no_browser: Annotated[
+        bool,
+        typer.Option(
+            "--no-browser",
+            help="Print the sign-in link instead of opening a browser (headless server; "
+            "tunnel port 33418 from the laptop with ssh -L).",
+        ),
+    ] = False,
+) -> None:
+    """Sign in to COROS once (official MCP server). Tokens go to the keychain (macOS) or to
+    COACH_SECRETS_DIR (COACH_SECRET_BACKEND=file)."""
+    load_env()  # the storage backend can be set in .env or a systemd credential
     try:
-        coros.login()
+        coros.login(browser=not no_browser)
     except coros.CorosError as exc:
         _fail(str(exc))
     _out({"ok": True, "status": "COROS connected; `coach coros sync` and Slack sync can run"})
@@ -460,6 +471,7 @@ def coros_login() -> None:
 def coros_sync() -> None:
     """Import this training week's COROS runs (Monday through today) as FIT files. Exit 2 when
     near-duplicates need confirmation: nothing is written for those files."""
+    load_env()
     conn = _conn()
     try:
         report = coros.sync_week(conn)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import sqlite3
 import subprocess
 from datetime import UTC, date, datetime
@@ -309,19 +310,178 @@ def test_login_ignores_the_saved_token(monkeypatch: pytest.MonkeyPatch) -> None:
         blob = base64.b64encode(b'{"access_token": "old", "token_type": "Bearer"}').decode()
         return subprocess.CompletedProcess(cmd, 0, stdout=blob)
 
-    assert asyncio.run(coros.KeychainStorage(run).get_tokens()) is not None
-    assert asyncio.run(coros.FreshSignIn(run).get_tokens()) is None
+    keychain = coros.KeychainStorage(run)
+    assert asyncio.run(keychain.get_tokens()) is not None
+    assert asyncio.run(coros.FreshSignIn(keychain).get_tokens()) is None
 
     used: list[Any] = []
 
     class Stop(Exception):
         pass
 
-    def fake_connect(interactive: bool = False, storage: Any = None) -> Any:
-        used.append((interactive, storage))
+    def fake_connect(interactive: bool = False, storage: Any = None, browser: bool = True) -> Any:
+        used.append((interactive, storage, browser))
         raise Stop
 
     monkeypatch.setattr(coros, "connect", fake_connect)
+    monkeypatch.setattr(coros, "token_storage", lambda: keychain)
     with pytest.raises(CorosError):
         coros.login()
     assert used[0][0] is True and isinstance(used[0][1], coros.FreshSignIn)
+    assert used[0][2] is True
+
+
+# ------------------------------------------------------------------ file token storage (server)
+
+
+def _secrets_dir(tmp_path: Path, mode: int = 0o700) -> Path:
+    folder = tmp_path / "secrets"
+    folder.mkdir()
+    folder.chmod(mode)
+    return folder
+
+
+def test_file_storage_round_trips_tokens_and_client_with_0600_files(tmp_path: Path) -> None:
+    from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+    from pydantic import AnyUrl
+
+    folder = _secrets_dir(tmp_path)
+    store = coros.FileTokenStorage(folder)
+    assert asyncio.run(store.get_tokens()) is None
+    assert asyncio.run(store.get_client_info()) is None
+    asyncio.run(store.set_tokens(OAuthToken(access_token="secret-a", refresh_token="r")))
+    client = OAuthClientInformationFull(client_id="c1", redirect_uris=[AnyUrl(coros.REDIRECT_URI)])
+    asyncio.run(store.set_client_info(client))
+    assert asyncio.run(store.get_tokens()).access_token == "secret-a"
+    assert asyncio.run(store.get_client_info()).client_id == "c1"
+    for name in ("coros-tokens.json", "coros-client.json"):
+        assert (folder / name).stat().st_mode & 0o777 == 0o600
+    assert sorted(p.name for p in folder.iterdir()) == ["coros-client.json", "coros-tokens.json"]
+
+
+def test_file_storage_overwrites_atomically(tmp_path: Path) -> None:
+    from mcp.shared.auth import OAuthToken
+
+    folder = _secrets_dir(tmp_path)
+    store = coros.FileTokenStorage(folder)
+    asyncio.run(store.set_tokens(OAuthToken(access_token="one")))
+    asyncio.run(store.set_tokens(OAuthToken(access_token="two")))
+    assert asyncio.run(store.get_tokens()).access_token == "two"
+    assert [p.name for p in folder.iterdir()] == ["coros-tokens.json"]  # no tmp file left
+
+
+@pytest.mark.parametrize("mode", [0o750, 0o705, 0o777])
+def test_file_storage_refuses_a_loose_directory(tmp_path: Path, mode: int) -> None:
+    from mcp.shared.auth import OAuthToken
+
+    folder = _secrets_dir(tmp_path, mode)
+    store = coros.FileTokenStorage(folder)
+    with pytest.raises(CorosError, match="group or others"):
+        asyncio.run(store.get_tokens())
+    with pytest.raises(CorosError, match="group or others"):
+        asyncio.run(store.set_tokens(OAuthToken(access_token="secret-a")))
+    assert list(folder.iterdir()) == []
+
+
+def test_file_storage_refuses_a_loose_file_without_showing_it(tmp_path: Path) -> None:
+    folder = _secrets_dir(tmp_path)
+    token = folder / "coros-tokens.json"
+    token.write_text('{"access_token": "tok-value-a", "token_type": "Bearer"}')
+    token.chmod(0o644)
+    with pytest.raises(CorosError, match="group or others") as caught:
+        asyncio.run(coros.FileTokenStorage(folder).get_tokens())
+    assert "tok-value-a" not in str(caught.value)
+
+
+def test_file_storage_needs_an_existing_directory(tmp_path: Path) -> None:
+    with pytest.raises(CorosError, match="doesn't exist"):
+        asyncio.run(coros.FileTokenStorage(tmp_path / "missing").get_tokens())
+
+
+def test_fresh_sign_in_works_with_file_storage(tmp_path: Path) -> None:
+    from mcp.shared.auth import OAuthToken
+
+    store = coros.FileTokenStorage(_secrets_dir(tmp_path))
+    asyncio.run(store.set_tokens(OAuthToken(access_token="old")))
+    fresh = coros.FreshSignIn(store)
+    assert asyncio.run(fresh.get_tokens()) is None
+    asyncio.run(fresh.set_tokens(OAuthToken(access_token="new")))
+    assert asyncio.run(store.get_tokens()).access_token == "new"
+
+
+def test_token_storage_picks_the_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    folder = _secrets_dir(tmp_path)
+    monkeypatch.setenv("COACH_SECRET_BACKEND", "file")
+    monkeypatch.setenv("COACH_SECRETS_DIR", str(folder))
+    store = coros.token_storage()
+    assert isinstance(store, coros.FileTokenStorage) and store.folder == folder
+    monkeypatch.setenv("COACH_SECRET_BACKEND", "keychain")
+    assert isinstance(coros.token_storage(), coros.KeychainStorage)
+    monkeypatch.setenv("COACH_SECRET_BACKEND", "vault")
+    with pytest.raises(CorosError, match="COACH_SECRET_BACKEND"):
+        coros.token_storage()
+
+
+def test_token_storage_default_follows_the_platform(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(coros.sys, "platform", "darwin")
+    assert isinstance(coros.token_storage(), coros.KeychainStorage)
+    monkeypatch.setattr(coros.sys, "platform", "linux")
+    with pytest.raises(CorosError, match="COACH_SECRETS_DIR"):
+        coros.token_storage()
+    monkeypatch.setenv("COACH_SECRETS_DIR", str(_secrets_dir(tmp_path)))
+    assert isinstance(coros.token_storage(), coros.FileTokenStorage)
+
+
+def test_headless_login_prints_the_url_and_tunnel_hint(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(coros.webbrowser, "open", opened.append)
+    asyncio.run(coros._print_url("https://coros.example/authorize?x=1"))
+    err = capsys.readouterr().err
+    assert "https://coros.example/authorize?x=1" in err
+    assert "ssh -L 33418:127.0.0.1:33418" in err
+    assert opened == []
+
+
+def test_connect_picks_the_redirect_handler() -> None:
+    assert coros._redirect_handler(interactive=True, browser=True) is coros._open_browser
+    assert coros._redirect_handler(interactive=True, browser=False) is coros._print_url
+    assert coros._redirect_handler(interactive=False, browser=False) is coros._no_browser
+
+
+def test_cli_login_no_browser_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+    monkeypatch.setattr(coros, "login", lambda browser=True: calls.append(browser))
+    runner = CliRunner()
+    assert runner.invoke(app, ["coros", "login", "--no-browser"]).exit_code == 0
+    assert runner.invoke(app, ["coros", "login"]).exit_code == 0
+    assert calls == [False, True]
+
+
+def test_cli_login_and_sync_load_env_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The storage backend can live in .env or a systemd credential, so login must see it."""
+    monkeypatch.delenv("COACH_SECRET_BACKEND", raising=False)
+    import mara_coach.cli as cli
+
+    monkeypatch.setattr(cli, "load_env", lambda: monkeypatch.setenv("COACH_SECRET_BACKEND", "file"))
+    seen: list[str | None] = []
+    monkeypatch.setattr(
+        coros, "login", lambda browser=True: seen.append(os.environ.get("COACH_SECRET_BACKEND"))
+    )
+    assert CliRunner().invoke(app, ["coros", "login"]).exit_code == 0
+    assert seen == ["file"]
+
+
+def test_damaged_token_file_names_the_file_not_the_token(tmp_path: Path) -> None:
+    folder = tmp_path / "secrets"
+    folder.mkdir(mode=0o700)
+    bad = folder / "coros-tokens.json"
+    bad.write_text('{"access_token": "SECRETVALUE12345')
+    bad.chmod(0o600)
+    with pytest.raises(CorosError) as caught:
+        asyncio.run(coros.FileTokenStorage(folder).get_tokens())
+    assert "damaged" in str(caught.value) and "SECRETVALUE" not in str(caught.value)
+    assert caught.value.__cause__ is None and caught.value.__suppress_context__
