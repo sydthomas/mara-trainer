@@ -20,9 +20,11 @@ INCOMING=/srv/mara/backup/incoming
 
 cd "$REPO"
 
-# 1. Stop the laptop bot. The plist stays, so the fallback is one command away
-#    (launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.maratrainer.slack.plist).
+# 1. Stop the laptop bot and disable it, so it doesn't start again at the next login next to the
+#    server bot. The plist stays; the fallback is in docs/hosting.md (launchctl enable, then
+#    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.maratrainer.slack.plist).
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+launchctl disable "gui/$(id -u)/$LABEL"
 sleep 2
 if pgrep -f "coach slack run" >/dev/null; then
   echo "a 'coach slack run' process is still running on this laptop; stop it, then re-run" >&2

@@ -61,9 +61,9 @@ the cap she set for the plan.
 ## Deploy
 After merges that change the bot, on the server: `ssh mara sudo -u mara /srv/mara/app/deploy/linux/deploy.sh`
 (snapshots the DB, syncs, migrates, restarts, and fails unless the startup line is logged). Then
-check the outcome (scheduled messages queued, a reply in Slack), not just that it started. Until the
-move, or if the server is down: back up `data/coach.db` to `data/backups/` and restart the
-LaunchAgent (`launchctl kickstart -k gui/$(id -u)/com.maratrainer.slack`). Never run both bots.
+check the outcome (scheduled messages queued, a reply in Slack), not just that it started. If the
+server is down for long, follow the laptop fallback in `docs/hosting.md` (stop the server bot,
+copy its DB down, re-enable the LaunchAgent). Never run both bots.
 
 ## Evals
 The eval set (`evals/coach-questions.json`) is the coach's test suite. Its shape is checked by

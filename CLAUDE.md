@@ -208,6 +208,12 @@ be summarized. If no approved source covers a question, the coach says so.
   groups, one match each), `forbid`, `cite`; referral cases are always checked for a referral.
   Add a case whenever the coach gets something wrong.
 
+## Where the data lives (since 2026-11-24)
+The Slack bot and `coach.db` run on the server (`docs/hosting.md`). On the laptop, `data/coach.db`
+is a stale copy: run data commands on the server with `ssh mara sudo -u mara
+/srv/mara/app/deploy/linux/coach.sh <command>` (the skills below still assume the laptop DB
+until they're updated). Never run the laptop bot while the server bot runs.
+
 ## Data sources and rules (read before touching integrations)
 - **COROS — official MCP only.** Sydney's watch data comes through COROS's official MCP server
   (`coros`, `https://mcpus.coros.com/mcp` (US region; `mcp.coros.com` fails OAuth because its

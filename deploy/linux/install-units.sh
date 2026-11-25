@@ -66,6 +66,9 @@ visudo -cf "$SUDOERS.tmp" >/dev/null
 mv "$SUDOERS.tmp" "$SUDOERS"
 
 systemctl daemon-reload
-systemctl enable mara-slack.service mara-backup.timer >/dev/null
+# The bot starts at boot, but not now (deploy.sh starts it once data and secrets are in place).
+# The backup timer starts now too: enable alone would leave it idle until the next reboot.
+systemctl enable mara-slack.service >/dev/null
+systemctl enable --now mara-backup.timer >/dev/null
 echo "units installed; optional credentials:"
 grep '^LoadCredential=' "$DROPIN_DIR/optional-credentials.conf" | cut -d: -f1 | sed 's/^LoadCredential=/  /' || echo "  (none)"
