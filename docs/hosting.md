@@ -87,7 +87,8 @@ Every step that needs an account or a credential is Sydney's.
 3. **Mount the Volume** (DO web console or SSH as root, while the public IP still works):
    If DO already auto-mounted it under `/mnt/volume_*` (its own `mnt-volume_*.mount` unit):
    check it's empty, then `systemctl disable --now mnt-volume_<name>.mount`, skip `mkfs`
-   (it's already ext4) and continue with `mkdir`/`fstab` below. Otherwise:
+   (it's already ext4), delete any DO-added `/etc/fstab` line for the volume (ours replaces it)
+   and continue with `mkdir`/`fstab` below. Otherwise:
    ```sh
    ls /dev/disk/by-id/                        # scsi-0DO_Volume_<name>
    mkfs.ext4 /dev/disk/by-id/scsi-0DO_Volume_<name>   # new, empty volume only
