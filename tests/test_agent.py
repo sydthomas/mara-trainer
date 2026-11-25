@@ -184,3 +184,28 @@ def test_system_prompt_restore_needs_a_professional() -> None:
         "an illness like a cold that has passed, and no pain is involved",
     ):
         assert phrase in " ".join(section.split()), phrase
+
+
+def test_today_is_the_runner_local_date_not_the_server_clock(
+    conn: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a UTC server, 01:00 UTC Wednesday is still Tuesday evening in Los Angeles."""
+    from datetime import UTC, date, datetime
+
+    import mara_trainer.reports as reports
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
+            return datetime(2026, 11, 25, 1, 0, tzinfo=UTC)
+
+    class ServerDate(date):
+        @classmethod
+        def today(cls) -> date:  # the server's own clock (UTC) already says Wednesday
+            return date(2026, 11, 25)
+
+    monkeypatch.setattr(reports, "datetime", Clock)
+    monkeypatch.setattr(agent, "date", ServerDate, raising=False)
+    api = FakeAPI(_resp("end_turn", _text("ok")))
+    agent.Coach(conn, api).ask("What's today?")
+    assert api.calls[0]["messages"][0]["content"].startswith("(Today is 2026-11-24.)")

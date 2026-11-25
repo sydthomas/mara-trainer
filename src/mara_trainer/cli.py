@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -479,8 +479,9 @@ def fuel_log(
         seconds = _parse_hms(duration) if duration is not None else None
     except (ValueError, typer.BadParameter):
         _fail(f"--duration must be H:MM:SS, got {duration!r}")
+    conn = _conn()
     entry = fueling.FuelEntry(
-        date=date_ or date.today().isoformat(),
+        date=date_ or _athlete_today_or_utc(conn),
         activity_id=activity_id,
         distance_meters=round(distance * (KM if unit == "km" else MI)) if distance else None,
         duration_seconds=seconds,
@@ -495,7 +496,7 @@ def fuel_log(
         notes=notes,
     )
     try:
-        saved = fueling.add_entry(_conn(), entry)
+        saved = fueling.add_entry(conn, entry)
     except fueling.FuelError as exc:
         _fail("invalid fuel entry", problems=exc.problems)
     _out({"ok": True, "entry": saved})
@@ -587,10 +588,7 @@ def gaps_list(
 ) -> None:
     """Source gaps, highest score first, each with the plain reasons behind its score."""
     conn = _conn()
-    try:
-        today = reports.athlete_today(conn)
-    except reports.ReportError:
-        today = date.today().isoformat()
+    today = _athlete_today_or_utc(conn)
     try:
         rows = gaps.ranked(conn, status, today, gaps.phase_info(conn, today))
     except gaps.GapError as exc:
@@ -636,6 +634,14 @@ def gaps_close(
     except gaps.GapError as exc:
         _fail(str(exc))
     _out({"ok": True, "gap": closed})
+
+
+def _athlete_today_or_utc(conn: sqlite3.Connection) -> str:
+    """Today in the athlete's timezone (the server clock is UTC); UTC before init-db."""
+    try:
+        return reports.athlete_today(conn)
+    except reports.ReportError:
+        return datetime.now(UTC).date().isoformat()
 
 
 def main() -> None:  # pragma: no cover

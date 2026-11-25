@@ -17,6 +17,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   data is kept). Default window 12 weeks.
 
 ### Fixed
+- The coach's "today" (and the date it puts on body and fueling entries) is the runner's local date, not the server clock: on the UTC server it ran a day ahead every evening.
 - Server setup starts the nightly backup timer right away (it was only enabled for the next boot).
 - COROS sync no longer reports "0 new runs" when COROS rejects the sign-in: COROS sends that as a
   normal reply, which now raises "sign in again". `coach coros login` always opens a fresh browser

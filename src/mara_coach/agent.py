@@ -16,8 +16,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, datetime
 from typing import Any, Protocol, cast
+
+from mara_trainer import reports
 
 from . import tools
 from . import usage as usage_log
@@ -256,7 +258,7 @@ class Coach:
         self.api = messages_api or _default_messages_api()
         self.model = model
         self.effort = effort
-        self.today = today or date.today().isoformat()
+        self.today = today  # None = the runner's local date, worked out at each question
         # Channel actions (tools.ACTION_NAMES). Empty = those tools answer "not available".
         self.actions: tools.Actions = {}
 
@@ -283,13 +285,23 @@ class Coach:
         except tools.ToolError as exc:
             return f"Error: {exc}", True
 
+    def _today(self) -> str:
+        """The runner's local date (athlete timezone), never the server's clock: a UTC server
+        is already on tomorrow during her evening."""
+        if self.today:
+            return self.today
+        try:
+            return reports.athlete_today(self.conn)
+        except reports.ReportError:
+            return datetime.now(UTC).date().isoformat()  # no athlete row yet
+
     def ask(self, question: str, history: list[dict[str, Any]] | None = None) -> CoachReply:
         """Answer one message. `history` is the earlier turns (as returned in `messages`)."""
         if not question.strip():
             raise CoachError("empty question")
         messages: list[dict[str, Any]] = list(history or [])
         messages.append(
-            {"role": "user", "content": f"(Today is {self.today}.)\n\n{question.strip()}"}
+            {"role": "user", "content": f"(Today is {self._today()}.)\n\n{question.strip()}"}
         )
         tool_defs = self.tool_definitions()
         used: list[str] = []
