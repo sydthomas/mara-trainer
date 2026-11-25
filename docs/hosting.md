@@ -80,10 +80,14 @@ Every step that needs an account or a credential is Sydney's.
    bucket (for example `mara-coach-backup`) and an application key limited to that bucket.
    Save the key ID and key in a password manager. Generate a restic password and save it
    there too: without it the backups cannot be read.
-2. **Droplet and Volume (Sydney).** Create a 10 GiB Volume in SFO3 ("Manually Format & Mount").
-   Create the Droplet: Basic, 1 GB, Ubuntu 24.04 LTS, SFO3, SSH key login, weekly backups on.
+2. **Droplet and Volume (Sydney).** Create a 10 GiB Volume in the Droplet's region ("Manually Format & Mount";
+   if DO auto-mounts it under /mnt, step 3 moves it). Create the Droplet: Basic, 1 GB, Ubuntu
+   24.04 LTS, San Francisco (the live one is SFO2), SSH key login, weekly backups on.
    Attach the Volume.
 3. **Mount the Volume** (DO web console or SSH as root, while the public IP still works):
+   If DO already auto-mounted it under `/mnt/volume_*` (its own `mnt-volume_*.mount` unit):
+   check it's empty, then `systemctl disable --now mnt-volume_<name>.mount`, skip `mkfs`
+   (it's already ext4) and continue with `mkdir`/`fstab` below. Otherwise:
    ```sh
    ls /dev/disk/by-id/                        # scsi-0DO_Volume_<name>
    mkfs.ext4 /dev/disk/by-id/scsi-0DO_Volume_<name>   # new, empty volume only
@@ -209,7 +213,8 @@ above, then step 8 (COROS sign-in) and step 9.
 
 ## Fallback: Option 0, the laptop (installed 2026-10-26)
 If the server is down for long, run the bot on the laptop again. **Only one bot at a time**:
-stop `mara-slack` first (`systemctl stop mara-slack`), and copy the server DB down
+stop `mara-slack` first and keep it from returning after a server reboot
+(`systemctl disable --now mara-slack`; undo with `systemctl enable --now mara-slack`), and copy the server DB down
 (`coach.sh backup`, then `scp`) so the laptop doesn't answer from stale data.
 - `deploy/macos/install.sh` writes a LaunchAgent (`com.maratrainer.slack`): starts at login,
   restarts within 30 s if the bot exits, runs it under `caffeinate -is` so the Mac stays awake on
