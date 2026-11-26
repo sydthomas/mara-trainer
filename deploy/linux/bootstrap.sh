@@ -69,7 +69,13 @@ grep -q '^HISTCONTROL=.*ignorespace\|^HISTCONTROL=ignoreboth' /root/.bashrc 2>/d
 if [[ -s /root/.ssh/authorized_keys ]]; then
   printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n' \
     > /etc/ssh/sshd_config.d/05-mara.conf
-  sshd -t && systemctl reload ssh
+  # A bad drop-in must never survive to the next boot: test it, remove it on failure.
+  if ! sshd -t; then
+    rm -f /etc/ssh/sshd_config.d/05-mara.conf
+    echo "sshd config test failed; removed 05-mara.conf, SSH unchanged" >&2
+    exit 1
+  fi
+  systemctl try-reload-or-restart ssh  # 24.04: ssh is socket-activated, may be inactive
 else
   echo "WARNING: /root/.ssh/authorized_keys is empty; SSH left as is (add a key, then re-run)" >&2
 fi

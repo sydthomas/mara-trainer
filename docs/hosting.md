@@ -74,7 +74,8 @@ Host mara
 so `ssh mara` works everywhere below. It is plain OpenSSH with the laptop's key (root: key only,
 no passwords; set by bootstrap), reachable only over Tailscale. Don't use Tailscale SSH
 (`tailscale up --ssh`): its default check mode asks for a browser sign-in every few hours and
-blocks scripted runs (seen 2026-11-25; turned off with `tailscale set --ssh=false`).
+blocks scripted runs (seen 2026-11-25; turned off with `tailscale set --ssh=false`, and the
+key-only drop-in was written on the live server by hand the same day).
 
 ## Runbook: first setup
 Every step that needs an account or a credential is Sydney's.
