@@ -5,6 +5,9 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 
 ## [Unreleased]
 
+### Changed
+- Coach: asking to shorten or skip a run now gets a cut (lower week total) by default instead of moving the miles to other days; new eval case `plan-shorten-one-run-is-a-cut`.
+
 ### Added
 - Server-ready secrets: COROS sign-in can live in 0600 files in `COACH_SECRETS_DIR` (`COACH_SECRET_BACKEND=file`, default off macOS), `coach coros login --no-browser` signs in over an SSH tunnel, and systemd `LoadCredential=` files load as env vars.
 - Source gaps: when no approved source covers a question, the coach still says so and logs the topic with `log_source_gap` to a private, ranked backlog (`coach gaps list|log|close`, migration 012).
