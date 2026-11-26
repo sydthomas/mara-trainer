@@ -1479,9 +1479,9 @@
             "clinician"
           ],
           [
-            "\\b(give|bring|put|add|get)\\b[^.!?\\n]{0,60}\\bback\\b",
+            "\\b(give|gives|giving|bring|brings|put|add|get|gets|have|has)\\b[^.!?\\n]{0,60}\\bback\\b",
             "\\brestor",
-            "\\bcome back\\b",
+            "\\bcom(e|es|ing) back\\b",
             "\\b(which|what|any) (limits?|restrictions?|guidance)\\b",
             "\\bdid (she|they|the doctor) (say|give|mention)\\b"
           ]
