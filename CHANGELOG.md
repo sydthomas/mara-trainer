@@ -17,7 +17,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   data is kept). Default window 12 weeks.
 
 ### Fixed
-- Slack: "yes, then <request>" saves the waiting body/fueling entry before the coach answers the request, and a waiting entry that gets replaced is never dropped silently.
+- Slack: "log it then <request>" saves the waiting body/fueling entry before the coach answers the request (explicit save + "then" only; corrections never save), and a waiting entry replaced by a new proposal or a sync's duplicate question gets a "wasn't saved" line.
 - The coach's "today" (and the date it puts on body and fueling entries) is the runner's local date, not the server clock: on the UTC server it ran a day ahead every evening.
 - Server setup starts the nightly backup timer right away (it was only enabled for the next boot).
 - COROS sync no longer reports "0 new runs" when COROS rejects the sign-in: COROS sends that as a

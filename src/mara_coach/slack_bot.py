@@ -25,16 +25,19 @@
   (`Conversation.more`); the bot lists both, "yes" saves both, "yes 1" / "yes 2" saves one, "no"
   saves neither. A week is always its own yes: proposed with anything else, only the first of
   those is kept to confirm and the reply says which one wasn't (`ONE_AT_A_TIME`).
-- Yes plus a request: while a body or fueling entry waits, a clear yes followed by a connector
-  and more ("yes log it then plan the rest of my week") saves the waiting entries exactly as a
-  plain yes does (without the fueling save's coach follow-up), then sends the rest to the coach
-  with a note saying what was saved (`yes_and_more`, `saved_note`). Any word that could change
-  the entry ("but", "change", "actually", "pain", ...) means nothing is saved and the whole
-  message goes to the coach. A waiting week never takes this: it needs its own yes.
-- Never dropped silently: when a waiting body or fueling entry is replaced (by a new proposal
-  or a sync's duplicate question) without a yes or a no, the reply ends with one line in code
+- Yes plus a request: while a body or fueling entry waits, an explicit save, then "then", then
+  a request ("yes log it then plan the rest of my week", "ok save it, then what's tomorrow",
+  "log both then plan my week") saves the waiting entries exactly as a plain yes does (without
+  the fueling save's coach follow-up), then sends the request to the coach with a note saying
+  what was saved (`yes_and_more`, `saved_note`). It is an allow-list: a bare "yes, ..." never
+  counts, and a request with hesitation, entry fields, symptoms, body parts, colours or digits
+  means nothing is saved and the whole message goes to the coach. A waiting week never takes
+  this: it needs its own yes.
+- Not dropped silently: when a waiting body or fueling entry is replaced by a new proposal or
+  a sync's duplicate question without a yes or a no, the reply ends with one line in code
   saying it wasn't saved (`NOT_SAVED_BODY`, `NOT_SAVED_FUEL`). A corrected entry of the same
-  kind replacing it is shown for her yes, so it gets no such line.
+  kind and day is shown for her yes, so it gets no such line. (An `IDLE_RESET` or "yes 1" /
+  "yes 2" drops the other entry as before, with no line.)
 - Sunday is one conversation: at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`),
   when the week ending or the next one is in the plan, the bot first syncs the week's runs from
   COROS in code (no separate reminder), then the coach writes a recap of the week and a preview
@@ -463,40 +466,43 @@ NO = re.compile(
 )
 CANCELLED = "Okay, not saved."
 # A yes, then more: "yes log it then plan the rest of my week". Only for a waiting body or
-# fueling entry (a week is always its own yes). The head must be a whole `YES`; the rest goes
-# to the coach after the save. Any word that could change the entry means no save at all
-# (`_EDIT_WORDS`): a missed yes costs her one more message, a wrong save costs a wrong log.
-_CONNECTOR = re.compile(r"\s*(?:[,;.]|\b(?:and\s+then|and\s+also|and|then|also|plus)\b)", re.I)
-_LEADING_CONNECTORS = re.compile(r"^(?:[\s,;.]|\b(?:and|then|also|plus)\b)+", re.I)
+# fueling entry (a week is always its own yes). An allow-list, not a guess: the head must name
+# the save ("log it", "save that", "log both", optionally after yes / ok and commas), then
+# "then" (or "and then", ", then", ". then", "; then"), then her request. A bare "yes, ..."
+# never saves: "yes, left ankle" or "yes, it's a 4" is a correction. The request is checked
+# again (`_EDIT_WORDS`): hesitation, entry fields, symptoms, body parts, colours or any digit
+# mean no save at all. A missed yes costs her one more message; a wrong save, a wrong log.
+_YES_THEN = re.compile(
+    r"^\s*(?:(?:y|yes|yep|yeah|yup|ok|okay|sure)[\s,]+)?(?:please[\s,]+)?"
+    r"(?:log|save)\s+(?:it|that|both)(?:[\s,]+please)?"
+    r"\s*(?:[,.;]\s*)?(?:and\s+)?then\b[\s,]*(?P<rest>.*?)\s*$",
+    re.I | re.S,
+)
 _EDIT_WORDS = re.compile(
     r"\b(?:but|change[sd]?|except|instead|actually|wait|fix|edit|not|no|nope|wrong|updated?"
     r"|make\s+it|should\s+be|hold|oops|sorry|correct(?:ion)?|typo|remove|delete|was|were"
-    r"|pain|swelling|swollen|carbs?|gels?|chews?|fluid|stomach|energy|effort|date|entry)\b"
-    r"|n['’]t\b",
+    r"|meant|unless|though|hmm+|bad|more\s+like|other"
+    r"|pain\w*|swell\w*|swollen|carbs?|gels?|gu|chews?|fluid|drank|drink\w*|ml|stomach"
+    r"|energy|effort|date|entry|hurt\w*|sore\w*|ach(?:e|es|ed|ing|y)|injur\w*"
+    r"|ibuprofen|advil|tylenol|left|right|side|leg|legs|knee|knees|hip|hips|ankle|ankles"
+    r"|foot|feet|calf|calves|shin|shins|green|yellow|red)\b"
+    r"|n['’]t\b|\d",
     re.I,
 )
-# Starts that read as an answer to the question itself ("yes, 1 and ..."), or as thanks
-# rather than a yes ("ok, thanks. what's next"): never split.
-_NOT_A_REQUEST = re.compile(r"^(?:\d|#|both\b|one\b|number\b|thanks?\b|thank\s+you|thx\b)", re.I)
 NOT_SAVED_BODY = 'Your body entry for {day} wasn\'t saved. Say "log a niggle" (or ask) to redo it.'
 NOT_SAVED_FUEL = "Your fueling entry for {day} wasn't saved. Ask me to log it again to redo it."
 
 
 def yes_and_more(text: str) -> str | None:
-    """The request after a clear yes ("yes log it then plan my week" -> "plan my week"), or
-    None when the message isn't a yes followed by a separate request. The longest yes wins, so
-    "yes, log it then ..." keeps "log it" on the yes side."""
-    found = None
-    for connector in _CONNECTOR.finditer(text):
-        head = text[: connector.start()].rstrip(" ,;")
-        rest = _LEADING_CONNECTORS.sub("", text[connector.end() :]).strip()
-        if head and rest and YES.match(head):
-            found = rest
-    if found is None or not re.search(r"[A-Za-z]", found) or _NOT_A_REQUEST.match(found):
+    """The request after an explicit save ("yes log it then plan my week" -> "plan my week"),
+    or None when the message isn't exactly that shape or the request could touch the entry."""
+    match = _YES_THEN.match(text)
+    if match is None:
         return None
-    if _EDIT_WORDS.search(found):
+    rest = match.group("rest")
+    if not re.search(r"[A-Za-z]", rest) or _EDIT_WORDS.search(rest):
         return None
-    return found
+    return rest
 
 
 def entry_name(item: fueling.FuelEntry | body.BodyEntry) -> str:
@@ -516,13 +522,15 @@ def saved_note(saved: list[str], failed: list[str]) -> str:
 
 def not_saved_lines(old: list[Pending], new: list[Pending]) -> list[str]:
     """One line per body or fueling entry that was waiting for her yes and is now replaced
-    without being saved or declined. A new entry of the same kind replaces it in view (a
-    correction), so that one isn't reported."""
+    without being saved or declined. A new entry of the same kind for the same day replaces
+    it in view (a correction), so that one isn't reported; another day's entry is not."""
     lines = []
     for item in old:
         if not isinstance(item, body.BodyEntry | fueling.FuelEntry):
             continue
-        if any(type(other) is type(item) for other in new):
+        if any(
+            type(other) is type(item) and getattr(other, "date", None) == item.date for other in new
+        ):
             continue
         template = NOT_SAVED_BODY if isinstance(item, body.BodyEntry) else NOT_SAVED_FUEL
         lines.append(template.format(day=item.date))

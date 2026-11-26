@@ -454,19 +454,44 @@ def test_the_reminder_points_at_the_earlier_proposal_and_stays_out_of_the_histor
             "yes log it then we need to plan the rest of the runs for this week",
             "we need to plan the rest of the runs for this week",
         ),
+        ("ok save it, then what's tomorrow", "what's tomorrow"),
+        ("log both then plan my week", "plan my week"),
         ("Yes, log it, and then what's my long run?", "what's my long run?"),
-        ("yep save it. plan my week", "plan my week"),
-        ("yes and also what should I eat tonight", "what should I eat tonight"),
-        ("ok; plus sync my runs", "sync my runs"),
+        ("yep save that. then plan my week", "plan my week"),
+        ("save it; then sync my runs", "sync my runs"),
     ],
 )
-def test_yes_and_more_finds_the_request_after_a_clear_yes(text: str, wanted: str) -> None:
+def test_yes_and_more_finds_the_request_after_an_explicit_save(text: str, wanted: str) -> None:
     assert slack_bot.yes_and_more(text) == wanted
+
+
+# Corrections a strict review found a deny-list let through, then edits and plain answers.
+CORRECTIONS = [
+    "yes, red",
+    "yes, left ankle",
+    "yes, I meant the left calf",
+    "ok, it's a 4",
+    "yes, more like 5",
+    "yes, it's the other leg",
+    "yes, though it's my right side",
+    "yes, it's green now",
+    "yes, sunday",
+    "yes, Gu at mile 6",
+    "yes; I drank 500ml",
+    "yes, and it hurts more today",
+    "yes, also my hip hurts",
+    "yes and my other knee too",
+    "yes, and I took ibuprofen",
+    "yes, hmm",
+    "yes, unless that's bad",
+    "yes. Is that bad?",
+]
 
 
 @pytest.mark.parametrize(
     "text",
     [
+        *CORRECTIONS,
         "yes",
         "yes log it",
         "no",
@@ -475,19 +500,38 @@ def test_yes_and_more_finds_the_request_after_a_clear_yes(text: str, wanted: str
         "yes and change pain to 2",
         "yes, actually it was the right shin",
         "yes then make it a 4",
-        "yes and the date should be friday",
-        "yes, but not today",
-        "yes and don't push it",
+        "yes then plan my week",  # no save verb
+        "yes and also what should I eat tonight",  # no "then"
+        "yep save it. plan my week",  # no "then"
+        "ok; plus sync my runs",
+        "log it and plan my week",
+        "log it then",
+        "log it then ...",
+        "log it then it hurts more today",
+        "save it then my left knee is sore",
+        "log it then make it yellow",
+        "log it then I took 2 gels",
+        "log it then actually wait",
         "yes, 1 and then plan my week",
         "ok, thanks. what's next week?",
-        "yes and",
-        "yes, ...",
         "sounds good, then plan my week",
-        "yes I think so but",
     ],
 )
-def test_yes_and_more_is_none_for_edits_and_plain_answers(text: str) -> None:
+def test_yes_and_more_is_none_for_corrections_edits_and_plain_answers(text: str) -> None:
     assert slack_bot.yes_and_more(text) is None
+
+
+@pytest.mark.parametrize("text", CORRECTIONS)
+def test_a_correction_after_yes_never_saves_the_waiting_entry(text: str) -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    coach = MultiCoach(["Got it. Save it?", "Noted."], {"propose_body_entry": NIGGLE})
+    bot = _debrief_bot(coach, shared, _la(7, 8))
+    bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
+    bot.handle(_dm(text), client)
+    assert _entries(shared) == []
+    assert coach.calls[-1][0] == text
+    assert isinstance(bot.conversations["D1"].pending, body.BodyEntry)
 
 
 def _waiting_body_then_week() -> tuple[Any, SharedDB, SlackFake, MultiCoach, str]:
@@ -564,10 +608,10 @@ def test_a_corrected_body_entry_replaces_the_old_one_without_a_not_saved_line() 
     assert isinstance(pending, body.BodyEntry) and pending.pain == 2
 
 
-def test_yes_and_also_saves_both_waiting_entries_in_order_then_asks_once() -> None:
+def test_log_both_then_saves_both_waiting_entries_in_order_then_asks_once() -> None:
     bot, shared, client, coach = _both_bot("Noted. Save it?", "Rice and salmon is a fine pick.")
     calls = len(coach.calls)
-    bot.handle(_dm("yes and also what should I eat tonight"), client)
+    bot.handle(_dm("log both then what should I eat tonight"), client)
     assert len(_entries(shared)) == 1 and _fuel_count(shared) == 1
     texts = [m["text"] for m in client.posted]
     body_at = next(i for i, t in enumerate(texts) if t.startswith("Saved to your body log"))
@@ -619,3 +663,19 @@ def test_a_duplicate_question_that_replaces_an_entry_says_so(tmp_path: Any) -> N
     shown = client.posted[-1]["text"]
     assert slack_bot.NOT_SAVED_BODY.format(day="2026-11-07") in shown
     assert shown.endswith(slack_bot.NOT_SAVED_FUEL.format(day="2026-11-07"))
+
+
+def test_a_body_entry_for_another_day_is_not_a_correction() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    coach = MultiCoach(
+        ["Got it. Save it?", "And yesterday's."],
+        {"propose_body_entry": NIGGLE},
+        {"propose_body_entry": {**NIGGLE, "date": "2026-11-06"}},
+    )
+    bot = _debrief_bot(coach, shared, _la(7, 8))
+    bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
+    bot.handle(_dm("it was sore yesterday too"), client)
+    assert slack_bot.NOT_SAVED_BODY.format(day="2026-11-07") in client.posted[-1]["text"]
+    pending = bot.conversations["D1"].pending
+    assert isinstance(pending, body.BodyEntry) and pending.date == "2026-11-06"
