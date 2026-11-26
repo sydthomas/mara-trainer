@@ -20,6 +20,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
   data is kept). Default window 12 weeks.
 
 ### Fixed
+- Slack: "log it then <request>" saves the waiting body/fueling entry before the coach answers the request (explicit save + "then" only; corrections never save), and a waiting entry replaced by a new proposal or a sync's duplicate question gets a "wasn't saved" line.
 - Server SSH is plain OpenSSH with keys only over Tailscale (bootstrap sets it); Tailscale SSH's periodic browser check blocked scripted runs.
 - The coach's "today" (and the date it puts on body and fueling entries) is the runner's local date, not the server clock: on the UTC server it ran a day ahead every evening.
 - Server setup starts the nightly backup timer right away (it was only enabled for the next boot).

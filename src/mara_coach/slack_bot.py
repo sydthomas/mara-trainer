@@ -25,6 +25,19 @@
   (`Conversation.more`); the bot lists both, "yes" saves both, "yes 1" / "yes 2" saves one, "no"
   saves neither. A week is always its own yes: proposed with anything else, only the first of
   those is kept to confirm and the reply says which one wasn't (`ONE_AT_A_TIME`).
+- Yes plus a request: while a body or fueling entry waits, an explicit save, then "then", then
+  a request ("yes log it then plan the rest of my week", "ok save it, then what's tomorrow",
+  "log both then plan my week") saves the waiting entries exactly as a plain yes does (without
+  the fueling save's coach follow-up), then sends the request to the coach with a note saying
+  what was saved (`yes_and_more`, `saved_note`). It is an allow-list: a bare "yes, ..." never
+  counts, and a request with hesitation, entry fields, symptoms, body parts, colours or digits
+  means nothing is saved and the whole message goes to the coach. A waiting week never takes
+  this: it needs its own yes.
+- Not dropped silently: when a waiting body or fueling entry is replaced by a new proposal or
+  a sync's duplicate question without a yes or a no, the reply ends with one line in code
+  saying it wasn't saved (`NOT_SAVED_BODY`, `NOT_SAVED_FUEL`). A corrected entry of the same
+  kind and day is shown for her yes, so it gets no such line. (An `IDLE_RESET` or "yes 1" /
+  "yes 2" drops the other entry as before, with no line.)
 - Sunday is one conversation: at `WEEKLY_HOUR` athlete-local (late until `WEEKLY_LAST_HOUR`),
   when the week ending or the next one is in the plan, the bot first syncs the week's runs from
   COROS in code (no separate reminder), then the coach writes a recap of the week and a preview
@@ -452,6 +465,83 @@ NO = re.compile(
     re.I,
 )
 CANCELLED = "Okay, not saved."
+# A yes, then more: "yes log it then plan the rest of my week". Only for a waiting body or
+# fueling entry (a week is always its own yes). An allow-list, not a guess: the head must name
+# the save ("log it", "save that", "log both", optionally after yes / ok and commas), then
+# "then" (or "and then", ", then", ". then", "; then"), then her request. A bare "yes, ..."
+# never saves: "yes, left ankle" or "yes, it's a 4" is a correction. The request is checked
+# again (`_EDIT_WORDS`): hesitation, entry fields, symptoms, body parts, colours or any digit
+# mean no save at all. A missed yes costs her one more message; a wrong save, a wrong log.
+_YES_THEN = re.compile(
+    r"^\s*(?:(?:y|yes|yep|yeah|yup|ok|okay|sure)[\s,]+)?(?:please[\s,]+)?"
+    r"(?:log|save)\s+(?:it|that|both)(?:[\s,]+please)?"
+    r"\s*(?:[,.;]\s*)?(?:and\s+)?then\b[\s,]*(?P<rest>.*?)\s*$",
+    re.I | re.S,
+)
+_EDIT_WORDS = re.compile(
+    r"\b(?:but|change[sd]?|except|instead|actually|wait|fix|edit|not|no|nope|wrong|updated?"
+    r"|make\s+it|should\s+be|hold|oops|sorry|correct(?:ion)?|typo|remove|delete|was|were"
+    r"|meant|unless|though|hmm+|bad|more\s+like|other"
+    r"|pain\w*|swell\w*|swollen|carbs?|gels?|gu|chews?|fluid|drank|drink\w*|ml|stomach"
+    r"|energy|effort|date|entry|hurt\w*|sore\w*|ach(?:e|es|ed|ing|y)|injur\w*"
+    r"|ibuprofen|advil|tylenol|left|right|side|leg|legs|knee|knees|hip|hips|ankle|ankles"
+    r"|foot|feet|calf|calves|shin|shins|green|yellow|red|amber|orange"
+    # taking the save back, or changing the entry
+    r"|never\s*mind|nvm|cancel\w*|scratch|scrap|undo|redo|reset|stop|ignore|go\s+back|forget"
+    r"|hang\s+on|second\s+thoughts?"
+    r"|set|mark|lower|raise|rename|add|call|note|niggle"
+    r"|one|two|three|four|five|six|seven|eight|nine|ten)\b"
+    r"|n['’]t\b|\d",
+    re.I,
+)
+NOT_SAVED_BODY = 'Your body entry for {day} wasn\'t saved. Say "log a niggle" (or ask) to redo it.'
+NOT_SAVED_FUEL = "Your fueling entry for {day} wasn't saved. Ask me to log it again to redo it."
+
+
+def yes_and_more(text: str) -> str | None:
+    """The request after an explicit save ("yes log it then plan my week" -> "plan my week"),
+    or None when the message isn't exactly that shape or the request could touch the entry."""
+    match = _YES_THEN.match(text)
+    if match is None:
+        return None
+    rest = match.group("rest")
+    if not re.search(r"[A-Za-z]", rest) or _EDIT_WORDS.search(rest):
+        return None
+    return rest
+
+
+def entry_name(item: fueling.FuelEntry | body.BodyEntry) -> str:
+    kind = "body" if isinstance(item, body.BodyEntry) else "fueling"
+    return f"her {kind} entry for {item.date}"
+
+
+def saved_note(saved: list[str], failed: list[str]) -> str:
+    """For the coach, ahead of the request she sent with her yes: what the bot did with it."""
+    parts = []
+    if saved:
+        parts.append("Saved: " + " and ".join(saved) + ".")
+    if failed:
+        parts.append("Couldn't save " + " and ".join(failed) + "; the app told her why.")
+    return "(" + " ".join(parts) + ")"
+
+
+def not_saved_lines(old: list[Pending], new: list[Pending]) -> list[str]:
+    """One line per body or fueling entry that was waiting for her yes and is now replaced
+    without being saved or declined. A new entry of the same kind for the same day replaces
+    it in view (a correction), so that one isn't reported; another day's entry is not."""
+    lines = []
+    for item in old:
+        if not isinstance(item, body.BodyEntry | fueling.FuelEntry):
+            continue
+        if any(
+            type(other) is type(item) and getattr(other, "date", None) == item.date for other in new
+        ):
+            continue
+        template = NOT_SAVED_BODY if isinstance(item, body.BodyEntry) else NOT_SAVED_FUEL
+        lines.append(template.format(day=item.date))
+    return lines
+
+
 SAVE_FOLLOW_UP = (
     "(Saved.) Give me your short coach reply: one or two observations from my fuel log, and "
     "one small thing to try next long run if it's worth changing anything."
@@ -923,6 +1013,10 @@ class SlackCoach:
                     convo.pending, convo.debrief = None, None
                 client.chat_postMessage(channel=channel, text=CANCELLED)
                 return
+            if isinstance(convo.pending, body.BodyEntry | fueling.FuelEntry) and (
+                request := yes_and_more(text)
+            ):
+                text = f"{self._save_entries(channel, convo, client)}\n\n{request}"
             question = self._body_tagged(text, event.get("ts"))
             week_start, missed = self._open_weekly()
             if week_start:
@@ -1162,8 +1256,12 @@ class SlackCoach:
             finally:
                 conn.close()
             if report is not None and report.pending:
-                convo.pending, convo.more = DuplicateRuns(tuple(report.pending)), []
+                duplicates = DuplicateRuns(tuple(report.pending))
+                lost = not_saved_lines([convo.pending, *convo.more], [duplicates])
+                convo.pending, convo.more = duplicates, []
                 text += "\n\n" + coros.duplicate_question(report.pending)
+                if lost:
+                    text += "\n\n" + "\n".join(lost)
             _finish(client, channel, placeholder, text)
         finally:
             self._untrack()
@@ -1190,15 +1288,44 @@ class SlackCoach:
         if isinstance(convo.pending, body.BodyEntry):
             self._save_body(channel, convo, convo.pending, client)
             return
+        self._save_fuel(channel, convo, convo.pending, client)
+
+    def _save_entries(self, channel: str, convo: Conversation, client: SlackClient) -> str:
+        """Her yes with a request after it: the waiting body / fueling entries are saved the
+        way a plain yes saves them (same order, same replies), but the fueling save's coach
+        follow-up is skipped, since her request goes to the coach next. Returns the note that
+        tells the coach what was saved."""
+        items, convo.more = [convo.pending, *convo.more], []
+        saved: list[str] = []
+        failed: list[str] = []
+        for item in items:
+            if isinstance(item, body.BodyEntry):
+                ok = self._save_body(channel, convo, item, client)
+            elif isinstance(item, fueling.FuelEntry):
+                ok = self._save_fuel(channel, convo, item, client, follow_up=False)
+            else:  # only entries wait beside each other
+                continue
+            (saved if ok else failed).append(entry_name(item))
+        convo.pending = None
+        return saved_note(saved, failed)
+
+    def _save_fuel(
+        self,
+        channel: str,
+        convo: Conversation,
+        entry: fueling.FuelEntry,
+        client: SlackClient,
+        follow_up: bool = True,
+    ) -> bool:
         conn = self.connect()
         try:
-            saved = fueling.add_entry(conn, convo.pending)
+            saved = fueling.add_entry(conn, entry)
         except fueling.FuelError as exc:
             convo.pending = None
             client.chat_postMessage(
                 channel=channel, text="Couldn't save that: " + "; ".join(exc.problems)
             )
-            return
+            return False
         finally:
             conn.close()
         convo.pending, convo.debrief = None, None
@@ -1208,9 +1335,11 @@ class SlackCoach:
             text=f"Saved to your fuel log (entry {saved['id']})"
             + (f", {cph:g} g carbs per hour." if cph is not None else "."),
         )
-        week_start, _ = self._open_weekly()
-        follow_up = week_after_debrief(week_start) if week_start else SAVE_FOLLOW_UP
-        self._reply(channel, convo, client, follow_up)
+        if follow_up:
+            week_start, _ = self._open_weekly()
+            question = week_after_debrief(week_start) if week_start else SAVE_FOLLOW_UP
+            self._reply(channel, convo, client, question)
+        return True
 
     def _sent_day(self, conn: sqlite3.Connection, ts: Any) -> str:
         """The athlete-local date a DM was sent, from Slack's `ts`: catch-up answers messages
@@ -1259,7 +1388,7 @@ class SlackCoach:
 
     def _save_body(
         self, channel: str, convo: Conversation, entry: body.BodyEntry, client: SlackClient
-    ) -> None:
+    ) -> bool:
         """Her yes to a proposed body entry: saved as she reported it. The reply is fixed text
         chosen by her own status (reported swelling gets the red text); nothing here rates the
         entry or says whether to run."""
@@ -1271,7 +1400,7 @@ class SlackCoach:
             client.chat_postMessage(
                 channel=channel, text="Couldn't save that: " + "; ".join(exc.problems)
             )
-            return
+            return False
         finally:
             conn.close()
         template = {"yellow": YELLOW_SAVED, "red": RED_SAVED}.get(saved["status"], BODY_SAVED)
@@ -1285,6 +1414,7 @@ class SlackCoach:
                 {"role": "assistant", "content": text},
             ]
             convo.turns = convo.turns[-2 * MAX_TURNS :]
+        return True
 
     def _open_niggles(self, since: str, until: str) -> list[dict[str, Any]]:
         conn = self.connect()
@@ -1798,9 +1928,11 @@ class SlackCoach:
             if proposal is not None
         ]
         both = niggle is not None and entry is not None  # these two wait together
+        lost: list[str] = []  # entries that waited for her yes and are now replaced: said in code
         if proposals:
-            convo.pending = proposals[0][1]
-            convo.more = [entry] if both else []
+            new: list[Pending] = [proposals[0][1], *([entry] if both else [])]
+            lost = not_saved_lines([convo.pending, *convo.more], new)
+            convo.pending, convo.more = new[0], new[1:]
         if answer != FAILED:
             if niggle is not None:
                 if week is not None:  # the week isn't the thing being confirmed now
@@ -1836,6 +1968,8 @@ class SlackCoach:
         ]
         convo.turns = convo.turns[-2 * MAX_TURNS :]
         self._save_turns(convo)
+        if lost:
+            tail += "\n\n" + "\n".join(lost)
         return answer + tail
 
 
