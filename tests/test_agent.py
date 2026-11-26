@@ -190,7 +190,8 @@ def test_system_prompt_shortening_a_session_is_a_cut() -> None:
     section = agent.SYSTEM_PROMPT.split("Adapting during the week")[1].split("Body check and")[0]
     for phrase in (
         "asks to shorten, drop or skip a session, propose a cut by default",
-        "She can ask for a cut any day, niggle or not",
+        "Her own request counts on any day",
+        "hold the standard once; if she still wants it, cut it",
         "Move miles to other days only if she asks for that",
         "never add distance to a session in a week where she has reported pain or a niggle",
         "Don't say the week has to hit its total when a cut is possible",
@@ -222,3 +223,12 @@ def test_today_is_the_runner_local_date_not_the_server_clock(
     api = FakeAPI(_resp("end_turn", _text("ok")))
     agent.Coach(conn, api).ask("What's today?")
     assert api.calls[0]["messages"][0]["content"].startswith("(Today is 2026-11-24.)")
+
+
+def test_system_prompt_a_cut_she_asks_for_is_allowed_mid_week() -> None:
+    """The niggle and yellow rules must not forbid a cut she asks for (no contradiction)."""
+    p = agent.SYSTEM_PROMPT
+    flat = " ".join(p.split())
+    assert "or when she asks to shorten or skip a session herself" in flat
+    assert "get-assessed rule below applies or she asks to shorten or skip a session" in flat
+    assert "If she lowered it only because she chose to" in flat

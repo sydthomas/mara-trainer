@@ -537,14 +537,18 @@ TOOLS: tuple[Tool, ...] = (
         "propose_week",
         "Write the current or a coming week: all 7 sessions with exact details, checked against "
         "the plan guardrails, so the total must match the target. Passed days stay unchanged. "
-        "With cut true (illness or a warning sign) sessions may only be shortened or rested. "
+        "With cut true (illness, a warning sign, or she asked to shorten or skip a session) "
+        "sessions may only be shortened or rested. "
         "With restore true (a qualified professional has said she may run again, after a week "
         "was lowered) sessions may come back up to what the week had before it was lowered, "
         "never more. It does NOT save; the app saves it in code after the runner replies yes.",
         _schema(
             {
                 "start_date": {**_DATE, "description": "The week's Monday, from plan_week"},
-                "cut": {"type": "boolean", "description": "Lower the week: illness, warning sign"},
+                "cut": {
+                    "type": "boolean",
+                    "description": "Lower the week: illness, warning sign, or her request",
+                },
                 "restore": {
                     "type": "boolean",
                     "description": "Give sessions back to a lowered week: only after a "
