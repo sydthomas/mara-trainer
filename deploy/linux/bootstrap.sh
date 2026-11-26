@@ -6,7 +6,7 @@
 #   bash /root/mara-deploy/deploy/linux/bootstrap.sh [REPO_URL]
 # Safe to re-run: every step checks before it changes anything. The firewall is enabled only
 # once Tailscale is up, so a first run over public SSH does not lock you out; run
-# `tailscale up --ssh --hostname mara`, then run this again.
+# `tailscale up --hostname mara`, then run this again.
 set -euo pipefail
 
 REPO_URL="${1:-https://github.com/sydthomas/mara-trainer.git}"
@@ -63,6 +63,17 @@ chmod 0750 "$ROOT"
 grep -q '^HISTCONTROL=.*ignorespace\|^HISTCONTROL=ignoreboth' /root/.bashrc 2>/dev/null \
   || echo 'HISTCONTROL=ignoreboth' >> /root/.bashrc
 
+# SSH: plain OpenSSH with keys only (reached over Tailscale once ufw is on). Not Tailscale SSH:
+# its default "check" mode wants a browser sign-in every few hours, which blocks scripted runs.
+# Only when root has a key, so this can never lock out the only way in.
+if [[ -s /root/.ssh/authorized_keys ]]; then
+  printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n' \
+    > /etc/ssh/sshd_config.d/05-mara.conf
+  sshd -t && systemctl reload ssh
+else
+  echo "WARNING: /root/.ssh/authorized_keys is empty; SSH left as is (add a key, then re-run)" >&2
+fi
+
 # 6. The code, with data/ and exports/ pointing at the volume folders. The app finds FIT files
 #    at <repo>/exports/coros (mara_coach.coros.EXPORTS, from the package path) and writes
 #    data/ relative to the working directory, so both are symlinks.
@@ -96,7 +107,7 @@ else
   cat <<'EOF'
 
 Tailscale is installed but not connected, so the firewall is NOT enabled yet.
-  1. tailscale up --ssh --hostname mara    (sign in with the link it prints)
+  1. tailscale up --hostname mara    (sign in with the link it prints)
   2. Tailscale admin console: disable key expiry for "mara"
   3. from the laptop: ssh mara              (check it works over Tailscale; runbook step 4)
   4. run this script again: it enables ufw (deny incoming, allow tailscale0)
