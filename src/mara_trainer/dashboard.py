@@ -451,7 +451,8 @@ def build_data(
     plan_weeks = [reports.plan_week(plan, w.start_date) for w in rollups]
     no_plan = None if plan else "No accepted plan yet, so only logged runs are shown."
     flagged = _body_by_week(conn, rollups[0].start_date, today)
-    block_start = min([w["start_date"] for w in (plan or {}).get("weeks", [])] + [today])
+    starts = [w.get("start_date") for w in (plan or {}).get("weeks", [])]
+    block_start = min([d for d in starts if d] + [today])
     block_flags = _body_by_week(conn, block_start, today)
 
     weekly = _columns_panel(

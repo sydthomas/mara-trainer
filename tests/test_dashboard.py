@@ -809,5 +809,16 @@ def test_block_view_page(full: sqlite3.Connection) -> None:
     assert block.count('class="wkrow') == len(db.load_accepted_plan(full)["weeks"])  # type: ignore[index]
     assert "Base" in block and "Taper" in block and "Race week" in block
     assert "14.3 mi done<br>" in block and "11.2 mi done so far" in block
-    assert "so far" in block and "yellow" in block
+    assert "Body checks: 1 yellow" in block
     assert not any(word in block.lower() for word in JUDGEMENT)
+
+
+def test_block_shows_body_checks_older_than_the_rollup_window(full: sqlite3.Connection) -> None:
+    body.add_entry(full, body.BodyEntry(date="2026-02-24", status="yellow", location="calf"))
+    rows = [
+        r
+        for g in panel(dashboard.build_data(full, TODAY, 4), "block")["phases"]
+        for r in g["weeks"]
+    ]
+    assert next(r for r in rows if r["start"] == "2026-02-23")["body"] == {"yellow": 1}
+    assert all(r["body"] == {} for r in rows if r["start"] != "2026-02-23")
