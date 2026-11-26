@@ -71,7 +71,11 @@ mara`). On the laptop, add to `~/.ssh/config`:
 Host mara
   User root
 ```
-so `ssh mara` works everywhere below (Tailscale SSH checks the login).
+so `ssh mara` works everywhere below. It is plain OpenSSH with the laptop's key (root: key only,
+no passwords; set by bootstrap), reachable only over Tailscale. Don't use Tailscale SSH
+(`tailscale up --ssh`): its default check mode asks for a browser sign-in every few hours and
+blocks scripted runs (seen 2026-11-25; turned off with `tailscale set --ssh=false`, and the
+key-only drop-in was written on the live server by hand the same day).
 
 ## Runbook: first setup
 Every step that needs an account or a credential is Sydney's.
@@ -100,7 +104,7 @@ Every step that needs an account or a credential is Sydney's.
    ```sh
    git clone --depth 1 https://github.com/sydthomas/mara-trainer.git /root/mara-deploy
    bash /root/mara-deploy/deploy/linux/bootstrap.sh
-   tailscale up --ssh --hostname mara   # sign in with the printed link (Sydney)
+   tailscale up --hostname mara         # sign in with the printed link (Sydney)
    passwd root                          # Sydney: save it in the password manager (Recovery)
    ```
    In the Tailscale admin console, **disable key expiry** for `mara` (otherwise SSH stops
@@ -108,7 +112,7 @@ Every step that needs an account or a credential is Sydney's.
    then run `bash /root/mara-deploy/deploy/linux/bootstrap.sh` again: it enables ufw. Check:
    `ufw status verbose` shows deny incoming, allow on tailscale0; SSH to the public IP now
    times out.
-5. **Secrets (Sydney, over Tailscale SSH).** One value per file, typed or pasted at a hidden
+5. **Secrets (Sydney, over SSH via Tailscale).** One value per file, typed or pasted at a hidden
    prompt (nothing in shell history, no trailing newline):
    ```sh
    put() { sudo -u mara bash -c 'umask 077; read -rsp "$1: " v; echo; printf %s "$v" > "$2"' _ "$1" "$2"; }
@@ -171,7 +175,7 @@ Every step that needs an account or a credential is Sydney's.
 - **B2 key rotated:** `put` the two `b2-account-*` files; the next backup uses them. The restic
   password does not change with the key.
 - **Tailscale:** if key expiry was left on and SSH stops, re-authenticate from the Recovery
-  Console (below) with `tailscale up --ssh --hostname mara`.
+  Console (below) with `tailscale up --hostname mara`.
 
 ## Recovery (Tailscale or SSH broken)
 The DO **Droplet Console** connects over SSH, so ufw blocks it once bootstrap has run. Use the
