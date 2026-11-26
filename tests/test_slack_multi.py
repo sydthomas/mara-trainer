@@ -679,3 +679,40 @@ def test_a_body_entry_for_another_day_is_not_a_correction() -> None:
     assert slack_bot.NOT_SAVED_BODY.format(day="2026-11-07") in client.posted[-1]["text"]
     pending = bot.conversations["D1"].pending
     assert isinstance(pending, body.BodyEntry) and pending.date == "2026-11-06"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "log it then never mind",
+        "log it then nevermind",
+        "log it then cancel",
+        "log it then scratch that",
+        "log it then undo",
+        "log it then forget it",
+        "log it then hang on",
+        "log it then on second thought",
+        "log it then set it to amber",
+        "log it then mark it orange",
+        "log it then lower it",
+        "log it then raise it",
+        "log it then rename it",
+        "log it then add a note",
+        "log it then make that a niggle",
+        "log it then three out of ten",
+    ],
+)
+def test_taking_it_back_or_editing_after_log_it_never_saves(text: str) -> None:
+    assert slack_bot.yes_and_more(text) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "yes log it then we need to plan the rest of the runs for this week",
+        "ok save it, then what's tomorrow",
+        "log both then plan my week",
+    ],
+)
+def test_the_plain_requests_still_save(text: str) -> None:
+    assert slack_bot.yes_and_more(text)
