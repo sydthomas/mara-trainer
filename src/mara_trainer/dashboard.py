@@ -8,8 +8,9 @@ page shows; `extra` are data panels kept for later versions and not rendered.
 
 `render_html` turns that dict into one HTML string: dark, phone first, inline CSS and inline
 SVG, no scripts and no external requests, so it opens offline and nothing leaves the laptop.
-Two views share the page through CSS radio tabs: Today (today's session, this week's strip,
-where the plan is, weekly miles, milestones) and Week (each day of this week as a row).
+Three views share the page through CSS radio tabs: Today (today's session, this week's strip,
+where the plan is, weekly miles, milestones), Week (each day of this week as a row) and Block
+(every week of the accepted plan, grouped by phase, planned next to done).
 
 Missing is not zero: a week or day with no logged runs has a null value and shows a dash or
 nothing, and a section with nothing to show says so.
@@ -153,6 +154,66 @@ def _this_week(
         "left_meters": sum(r["planned_meters"] or 0 for r in left) if left else None,
         "up_next": up_next,  # the first run day after today with nothing logged
         "rows": rows,
+    }
+
+
+def _block(
+    plan: dict[str, Any] | None,
+    activities: list[Activity],
+    tz: str,
+    today: str,
+    now: datetime,
+    flagged: dict[str, dict[str, int]],
+) -> dict[str, Any]:
+    """Every week of the accepted plan, Monday first: phase, planned distance (the sum of the
+    week's sessions, so a lowered week shows what it has now), planned long run, and for weeks
+    that have started the distance done so far and the longest run (null when nothing was
+    logged; weeks ahead have no done values). `body` = that week's yellow/red counts."""
+    weeks: list[dict[str, Any]] = []
+    for w in (plan or {}).get("weeks", []):
+        start = w.get("start_date")
+        if not start:
+            continue
+        end = (date.fromisoformat(start) + timedelta(days=6)).isoformat()
+        state = "ahead" if start > today else "past" if end < today else "current"
+        runs = [s for s in w["sessions"] if s["kind"] not in NOT_RUNS]
+        done = (
+            summarize_range(activities, [], tz, start, min(end, today), now)
+            if state != "ahead"
+            else None
+        )
+        weeks.append(
+            {
+                "week": w.get("week"),
+                "start": start,
+                "end": end,
+                "phase": w.get("phase"),
+                "state": state,
+                "planned_meters": sum(s["distance_meters"] for s in runs) if runs else None,
+                "planned_long_meters": next(
+                    (s["distance_meters"] for s in runs if s["kind"] == "long"), None
+                ),
+                "run_days": len([s for s in runs if s["distance_meters"] > 0]),
+                "done_meters": done.distance_meters if done and done.run_count else None,
+                "longest_meters": done.longest_run_meters if done and done.run_count else None,
+                "body": {
+                    s: flagged[start][s] for s in MARKED_STATUSES if s in flagged.get(start, {})
+                },
+            }
+        )
+    phases: list[dict[str, Any]] = []
+    for row in weeks:
+        if phases and phases[-1]["phase"] == row["phase"]:
+            phases[-1]["weeks"].append(row)
+        else:
+            phases.append({"phase": row["phase"], "weeks": [row]})
+    return {
+        "id": "block",
+        "title": "Training block",
+        "kind": "block",
+        "status": "ok" if weeks else "no_data",
+        "empty": "No accepted plan yet." if not plan else "The accepted plan has no dated weeks.",
+        "phases": phases,
     }
 
 
@@ -390,6 +451,8 @@ def build_data(
     plan_weeks = [reports.plan_week(plan, w.start_date) for w in rollups]
     no_plan = None if plan else "No accepted plan yet, so only logged runs are shown."
     flagged = _body_by_week(conn, rollups[0].start_date, today)
+    block_start = min([w["start_date"] for w in (plan or {}).get("weeks", [])] + [today])
+    block_flags = _body_by_week(conn, block_start, today)
 
     weekly = _columns_panel(
         "weekly_distance",
@@ -476,6 +539,7 @@ def build_data(
             _where(race, week, plan, today),
             weekly,
             _milestones(everything, all_weeks, race, today),
+            _block(plan, activities, tz, today, now, block_flags),
         ],
         # Kept for later versions; not rendered on the page.
         "extra": (
@@ -590,16 +654,32 @@ box-shadow:inset 3px 0 0 var(--ac)}
 .ok{font-size:13px;font-weight:600;color:var(--ac);white-space:nowrap}
 .next{font-size:13px;white-space:nowrap}
 .tabs input{position:absolute;opacity:0;pointer-events:none}
-.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--card);border-radius:10px;
+.seg{display:grid;grid-template-columns:1fr 1fr 1fr;background:var(--card);border-radius:10px;
 padding:2px;margin:2px 4px 14px}
 .seg label{text-align:center;padding:7px 0;font-size:14px;font-weight:600;color:var(--muted);
 border-radius:8px;cursor:pointer}
-#v-today:checked~.seg label[for=v-today],#v-week:checked~.seg label[for=v-week]{
+#v-today:checked~.seg label[for=v-today],#v-week:checked~.seg label[for=v-week],
+#v-block:checked~.seg label[for=v-block]{
 background:var(--card3);color:var(--text)}
-#v-today:focus-visible~.seg label[for=v-today],#v-week:focus-visible~.seg label[for=v-week]{
+#v-today:focus-visible~.seg label[for=v-today],#v-week:focus-visible~.seg label[for=v-week],
+#v-block:focus-visible~.seg label[for=v-block]{
 outline:2px solid var(--ac)}
 .view{display:none}
-#v-today:checked~.view.today,#v-week:checked~.view.week{display:block}
+#v-today:checked~.view.today,#v-week:checked~.view.week,#v-block:checked~.view.block{
+display:block}
+.wks{list-style:none;padding:0;margin:0}
+.phead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 8px}
+.phead .muted{font-size:12px}
+.wkrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;
+padding:9px 4px;border-bottom:1px solid var(--line)}
+.wkrow:last-child{border:0}
+.wkrow.now{background:var(--card2);border-radius:14px;border-bottom-color:transparent;
+box-shadow:inset 3px 0 0 var(--ac)}
+.wkrow.ahead .what b{font-weight:600}
+.wkrow .bar{margin-top:6px;height:4px}
+.wkrow .ok{text-align:right;font-size:12px;white-space:normal}
+.wkrow .marks{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}
+.wkrow .marks svg{width:10px;height:10px}
 footer{color:var(--faint);font-size:12px;margin:20px 4px 0}
 """
 
@@ -1078,8 +1158,77 @@ def _render_week_view(data: dict[str, Any], unit: str) -> str:
     return "".join(out)
 
 
+def _block_row(row: dict[str, Any], unit: str) -> str:
+    plan = (
+        f"{_amount(row['planned_meters'], 'distance', unit)} planned"
+        if row["planned_meters"] is not None
+        else "No runs planned"
+    )
+    sub = []
+    if row["planned_long_meters"] is not None:
+        sub.append(f"long run {_amount(row['planned_long_meters'], 'distance', unit)}")
+    if row["run_days"]:
+        sub.append(f"{row['run_days']} run{'s' if row['run_days'] != 1 else ''}")
+    if row["state"] == "ahead":
+        right = "<span></span>"
+    elif row["done_meters"] is None:
+        right = f'<span class="muted">{MISSING}</span>'
+    else:
+        so_far = " so far" if row["state"] == "current" else ""
+        longest = _amount(row["longest_meters"], "distance", unit)
+        right = (
+            f'<span class="ok">{escape(_amount(row["done_meters"], "distance", unit))} done'
+            f'{so_far}<br><span class="muted">longest {escape(longest)}</span></span>'
+        )
+    marks = ""
+    if row["body"]:
+        tip = f"Body checks: {_body_counts(row['body'])}"
+        drawn = "".join(
+            f'<svg viewBox="0 0 12 12" aria-hidden="true">{_status_mark(s, 6, 6.5)}</svg>'
+            for s in row["body"]
+        )
+        marks = (
+            f'<span class="marks" title="{escape(tip)}">{drawn}'
+            f'<span class="sr">{escape(tip)}</span></span>'
+        )
+    bar = _progress(row["done_meters"], row["planned_meters"]) if row["state"] != "ahead" else ""
+    cls = {"current": " now", "ahead": " ahead"}.get(row["state"], "")
+    return (
+        f'<li class="wkrow{cls}"><div class="when"><b>Wk {row["week"]}</b>'
+        f'<span class="muted">{_day(row["start"])}</span></div>'
+        f'<div class="what"><b>{escape(plan)}{marks}</b>'
+        f'<span class="muted">{escape(", ".join(sub))}</span>{bar}</div>{right}</li>'
+    )
+
+
+def _render_block_view(data: dict[str, Any], unit: str) -> str:
+    block = next(p for p in data["panels"] if p["id"] == "block")
+    where = next(p for p in data["panels"] if p["id"] == "where")
+    out = ['<p class="eyebrow">The whole plan</p><h1>Training block</h1>']
+    head = _race_line(where) if where["status"] == "ok" else _empty(where["empty"])
+    if where["status"] == "ok" and where["week"] is not None:
+        head += f'<p class="muted">This is week {where["week"]} of {where["of_weeks"]}</p>'
+    out.append(f'<section class="card" id="block">{head}')
+    if block["status"] != "ok":
+        out.append(_empty(block["empty"]))
+    out.append("</section>")
+    for group in block["phases"]:
+        label = _PHASE_LABELS.get(group["phase"], str(group["phase"]))
+        first, last = group["weeks"][0], group["weeks"][-1]
+        span = f"{_day(first['start'])} to {_day(last['end'])}"
+        n = len(group["weeks"])
+        rows = "".join(_block_row(r, unit) for r in group["weeks"])
+        out.append(
+            f'<section class="card days"><div class="phead"><h2>{escape(label)}</h2>'
+            f'<span class="muted">{n} week{"s" if n != 1 else ""} · {escape(span)}</span></div>'
+            f'<ul class="wks">{rows}</ul></section>'
+        )
+    return "".join(out)
+
+
 def render_html(data: dict[str, Any]) -> str:
-    """The whole dashboard as one offline HTML document: Today and Week views, no scripts."""
+    """The whole dashboard as one offline HTML document: Today, Week and Block views, no
+    scripts."""
     unit = data["unit"]
     today = date.fromisoformat(data["generated_for"])
     today_view = f'<p class="eyebrow">{today.strftime("%A, %b %-d")}</p><h1>Today</h1>' + "".join(
@@ -1094,9 +1243,12 @@ def render_html(data: dict[str, Any]) -> str:
         '<main class="tabs">'
         '<input type="radio" name="view" id="v-today" checked>'
         '<input type="radio" name="view" id="v-week">'
-        '<div class="seg"><label for="v-today">Today</label><label for="v-week">Week</label></div>'
+        '<input type="radio" name="view" id="v-block">'
+        '<div class="seg"><label for="v-today">Today</label><label for="v-week">Week</label>'
+        '<label for="v-block">Block</label></div>'
         f'<div class="view today">{today_view}<!-- /view --></div>'
         f'<div class="view week">{_render_week_view(data, unit)}<!-- /view --></div>'
+        f'<div class="view block">{_render_block_view(data, unit)}<!-- /view --></div>'
         "<footer>Built on this computer from the local training database. "
         "Nothing on this page is uploaded.</footer></main></body></html>\n"
     )

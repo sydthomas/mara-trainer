@@ -159,6 +159,10 @@ Every step that needs an account or a credential is Sydney's.
   (reports, imports, logins). Health entries (fuel, body) go through Slack, never as command
   arguments here: arguments show in process lists and shell history. To import a FIT file,
   `scp` it into `/srv/mara/exports/` first, then `coach.sh import /srv/mara/exports/<file>`.
+- **Dashboard** (built on the server, opened on the laptop; the file stays out of git):
+  `ssh mara sudo -u mara /srv/mara/app/deploy/linux/coach.sh dashboard --out
+  /srv/mara/tmp/dashboard.html && scp mara:/srv/mara/tmp/dashboard.html data/dashboard.html &&
+  open data/dashboard.html`.
 - **Unit changes** (a merged change to `deploy/linux/*.service|*.timer`, or to
   `install-units.sh`): review the diff, then
   `git -C /root/mara-deploy pull && bash /root/mara-deploy/deploy/linux/install-units.sh`.
