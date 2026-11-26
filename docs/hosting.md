@@ -3,7 +3,7 @@
 **Status: live on the server since 2026-11-24** (Droplet `mara`, SFO2, Tailscale only). The
 server owns the database; the laptop's `data/coach.db` is a stale copy and its LaunchAgent is
 disabled. Run coach commands on the server: `ssh mara sudo -u mara
-/srv/mara/app/deploy/linux/coach.sh <command>`. Restore drill: not yet done.
+/srv/mara/app/deploy/linux/coach.sh <command>`. Restore drill: passed 2026-11-26 (see Restore).
 
 ## Decision (2026-11-24)
 The Slack bot moves to a **DigitalOcean Droplet** (Basic, 1 GB, Ubuntu 24.04 LTS, SFO). Sydney
@@ -191,15 +191,27 @@ a new one, the Droplet power-cycles), then log in at the Recovery Console and ch
 ## Restore
 **Drill** (no change to live data):
 ```sh
-sudo -u mara /srv/mara/app/deploy/linux/backup.sh restic snapshots
+cd /srv/mara   # mara can't read /root; commands run from there print a harmless warning
+sudo -u mara /srv/mara/app/deploy/linux/backup.sh restic snapshots --compact
 sudo -u mara /srv/mara/app/deploy/linux/backup.sh restic restore latest \
-  --target /srv/mara/restore-test --include /srv/mara/backup/coach.db
-sqlite3 -readonly /srv/mara/restore-test/srv/mara/backup/coach.db "PRAGMA integrity_check"
-sudo -u mara env COACH_DB_PATH=/srv/mara/restore-test/srv/mara/backup/coach.db \
-  /srv/mara/app/deploy/linux/coach.sh summary --week last
-rm -rf /srv/mara/restore-test
+  --target /srv/mara/tmp/restore-drill          # DB snapshot + exports; tmp is mara's
+R=/srv/mara/tmp/restore-drill/srv/mara/backup/coach.db
+sudo -u mara sqlite3 -readonly $R "PRAGMA integrity_check"
+for t in $(sudo -u mara sqlite3 -readonly $R "select name from sqlite_master where type='table'"); do
+  echo "$t $(sudo -u mara sqlite3 -readonly $R "select count(*) from \"$t\"") \
+    $(sudo -u mara sqlite3 -readonly /srv/mara/data/coach.db "select count(*) from \"$t\"")"
+done                                            # restored vs live row counts
+sudo -u mara env COACH_DB_PATH=$R /srv/mara/app/deploy/linux/coach.sh summary --week last
+rm -rf /srv/mara/tmp/restore-drill
 ```
-Note the date and result here when done.
+Rows added since the 03:30 backup (a run synced that morning, a new gap) differ; nothing else
+should. The scratch copy goes under `/srv/mara/tmp` so it stays on the Volume, out of the way.
+
+| Date | Snapshot | Result |
+|---|---|---|
+| 2026-11-26 | latest (03:30 PT that day), 3 snapshots in the repo | integrity ok; every table matched live except rows added after the backup (1 run + its import batch, 1 gap); 21 of 22 FIT files (the 22nd synced after); `coach summary` and `plan show` read the restored DB. Took about 5 minutes. |
+
+Drill each quarter, and after any change to `backup.sh` or the restic settings.
 
 **Real restore** (DB lost or corrupt, server fine):
 ```sh
