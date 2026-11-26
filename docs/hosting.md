@@ -205,7 +205,7 @@ sudo -u mara env COACH_DB_PATH=$R /srv/mara/app/deploy/linux/coach.sh summary --
 rm -rf /srv/mara/tmp/restore-drill
 ```
 Rows added since the 03:30 backup (a run synced that morning, a new gap) differ; nothing else
-should. Use a scratch dir under `/srv/mara/tmp`: mara can't create `/srv/mara/restore-test`.
+should. The scratch copy goes under `/srv/mara/tmp` so it stays on the Volume, out of the way.
 
 | Date | Snapshot | Result |
 |---|---|---|
