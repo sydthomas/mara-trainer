@@ -138,6 +138,25 @@ def test_cut_must_lower_the_total() -> None:
     assert revised is None and "lower the week" in problems[0]
 
 
+def test_tool_cut_shortens_one_run_without_moving_miles(monkeypatch: Any) -> None:
+    """Mid-week, she asks to shorten one run: a cut that touches only that run passes, and the
+    other sessions stay as they were (nothing has to be made up elsewhere)."""
+    shared, plan = SharedDB(), _plan()
+    db.save_plan(shared.conn, plan)
+    start, _, sessions = _week(plan)
+    today = (date.fromisoformat(start) + timedelta(days=2)).isoformat()  # Wednesday
+    monkeypatch.setattr(reports, "athlete_today", lambda _: today)
+    run = [s for s in sessions if s["kind"] == "easy" and s["date"] > today][-1]
+    run["distance_meters"] = 3219  # 2 mi instead of the planned run
+    proposal = {"start_date": start, "sessions": sessions}
+    out = tools.call_tool(shared.conn, "propose_week", proposal)
+    assert out["ok"] is False  # a plain rewrite must still hit the week's total
+    out = tools.call_tool(shared.conn, "propose_week", {**proposal, "cut": True})
+    assert out["ok"] is True and out["saved"] is False
+    proposed = {s["date"]: s["distance_meters"] for s in out["week"]["sessions"]}
+    assert proposed == {s["date"]: s["distance_meters"] for s in sessions}
+
+
 def _lowered(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], str, str]:
     """The plan with week 2 rested (a cut), that week as it was, its start and the day before."""
     start, today, sessions = _week(plan)

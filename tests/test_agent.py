@@ -186,6 +186,19 @@ def test_system_prompt_restore_needs_a_professional() -> None:
         assert phrase in " ".join(section.split()), phrase
 
 
+def test_system_prompt_shortening_a_session_is_a_cut() -> None:
+    section = agent.SYSTEM_PROMPT.split("Adapting during the week")[1].split("Body check and")[0]
+    for phrase in (
+        "asks to shorten, drop or skip a session, propose a cut by default",
+        "She can ask for a cut any day, niggle or not",
+        "Move miles to other days only if she asks for that",
+        "never add distance to a session in a week where she has reported pain or a niggle",
+        "Don't say the week has to hit its total when a cut is possible",
+        "sessions come back only with restore",
+    ):
+        assert phrase in " ".join(section.split()), phrase
+
+
 def test_today_is_the_runner_local_date_not_the_server_clock(
     conn: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
