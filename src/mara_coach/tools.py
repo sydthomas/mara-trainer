@@ -539,9 +539,11 @@ TOOLS: tuple[Tool, ...] = (
         "the plan guardrails, so the total must match the target. Passed days stay unchanged. "
         "With cut true (illness, a warning sign, or she asked to shorten or skip a session) "
         "sessions may only be shortened or rested. "
-        "With restore true (a qualified professional has said she may run again, after a week "
-        "was lowered) sessions may come back up to what the week had before it was lowered, "
-        "never more. It does NOT save; the app saves it in code after the runner replies yes.",
+        "With restore true (after a week was lowered: for pain, a niggle or a warning sign only "
+        "once a qualified professional has said she may run again; for a passed illness or a "
+        "cut she chose, on her ask) sessions may come back up to what the week had before it "
+        "was lowered, never more. "
+        "It does NOT save; the app saves it in code after the runner replies yes.",
         _schema(
             {
                 "start_date": {**_DATE, "description": "The week's Monday, from plan_week"},
@@ -551,8 +553,8 @@ TOOLS: tuple[Tool, ...] = (
                 },
                 "restore": {
                     "type": "boolean",
-                    "description": "Give sessions back to a lowered week: only after a "
-                    "qualified professional said she may run again. Never with cut",
+                    "description": "Give sessions back to a lowered week (pain/niggle: only "
+                    "after a qualified professional said she may run). Never with cut",
                 },
                 "focus": {
                     "type": "string",
