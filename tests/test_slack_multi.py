@@ -700,6 +700,13 @@ def test_a_body_entry_for_another_day_is_not_a_correction() -> None:
         "log it then add a note",
         "log it then make that a niggle",
         "log it then three out of ten",
+        "log it then nvm",
+        "log it then stop",
+        "log it then redo it",
+        "log it then scrap that",
+        "log it then ignore that",
+        "log it then go back",
+        "log it then reset",
     ],
 )
 def test_taking_it_back_or_editing_after_log_it_never_saves(text: str) -> None:

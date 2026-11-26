@@ -487,7 +487,8 @@ _EDIT_WORDS = re.compile(
     r"|ibuprofen|advil|tylenol|left|right|side|leg|legs|knee|knees|hip|hips|ankle|ankles"
     r"|foot|feet|calf|calves|shin|shins|green|yellow|red|amber|orange"
     # taking the save back, or changing the entry
-    r"|never\s*mind|cancel\w*|scratch|undo|forget|hang\s+on|second\s+thoughts?"
+    r"|never\s*mind|nvm|cancel\w*|scratch|scrap|undo|redo|reset|stop|ignore|go\s+back|forget"
+    r"|hang\s+on|second\s+thoughts?"
     r"|set|mark|lower|raise|rename|add|call|note|niggle"
     r"|one|two|three|four|five|six|seven|eight|nine|ten)\b"
     r"|n['’]t\b|\d",
