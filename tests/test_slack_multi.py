@@ -442,3 +442,180 @@ def test_the_reminder_points_at_the_earlier_proposal_and_stays_out_of_the_histor
     assert "proposed earlier isn't saved yet" in shown and shown.count("isn't saved yet") == 1
     turns = bot.conversations["D1"].turns
     assert turns[-1]["content"] == "Thursday is easy on purpose."  # the coach never sees it
+
+
+# --- a yes with a request after it ("yes log it then plan the rest of my week")
+
+
+@pytest.mark.parametrize(
+    ("text", "wanted"),
+    [
+        (
+            "yes log it then we need to plan the rest of the runs for this week",
+            "we need to plan the rest of the runs for this week",
+        ),
+        ("Yes, log it, and then what's my long run?", "what's my long run?"),
+        ("yep save it. plan my week", "plan my week"),
+        ("yes and also what should I eat tonight", "what should I eat tonight"),
+        ("ok; plus sync my runs", "sync my runs"),
+    ],
+)
+def test_yes_and_more_finds_the_request_after_a_clear_yes(text: str, wanted: str) -> None:
+    assert slack_bot.yes_and_more(text) == wanted
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "yes",
+        "yes log it",
+        "no",
+        "no thanks, and plan my week",
+        "yes but change pain to 2",
+        "yes and change pain to 2",
+        "yes, actually it was the right shin",
+        "yes then make it a 4",
+        "yes and the date should be friday",
+        "yes, but not today",
+        "yes and don't push it",
+        "yes, 1 and then plan my week",
+        "ok, thanks. what's next week?",
+        "yes and",
+        "yes, ...",
+        "sounds good, then plan my week",
+        "yes I think so but",
+    ],
+)
+def test_yes_and_more_is_none_for_edits_and_plain_answers(text: str) -> None:
+    assert slack_bot.yes_and_more(text) is None
+
+
+def _waiting_body_then_week() -> tuple[Any, SharedDB, SlackFake, MultiCoach, str]:
+    """A body entry waits for her yes; the coach's next turn proposes a week."""
+    shared, proposal, _start, today = _week_proposal()
+    client = SlackFake()
+    coach = MultiCoach(
+        ["Got it. Save it?", "Here's the rest of your week. Save this week?"],
+        {"propose_body_entry": {**NIGGLE, "date": today}},
+        {"propose_week": proposal},
+    )
+    bot = _week_bot(coach, shared, today)
+    bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
+    assert isinstance(bot.conversations["D1"].pending, body.BodyEntry)
+    return bot, shared, client, coach, today
+
+
+def test_yes_then_a_request_saves_the_entry_and_sends_the_rest_to_the_coach() -> None:
+    """The Slack bug: her yes came with a request, the coach proposed a week, and the body
+    entry was replaced without being saved."""
+    bot, shared, client, coach, today = _waiting_body_then_week()
+    bot.handle(_dm("yes log it then we need to plan the rest of the runs for this week"), client)
+    [entry] = _entries(shared)
+    assert (entry["date"], entry["status"]) == (today, "yellow")
+    texts = [m["text"] for m in client.posted]
+    assert texts.count(slack_bot.YELLOW_SAVED.format(id=entry["id"])) == 1
+    assert coach.calls[-1][0] == (
+        f"(Saved: her body entry for {today}.)\n\n"
+        "we need to plan the rest of the runs for this week"
+    )
+    assert len(coach.calls) == 2  # the save is code; one coach turn for the request
+    assert isinstance(bot.conversations["D1"].pending, slack_bot.WeekProposal)
+    assert "wasn't saved" not in texts[-1] and slack_bot.WEEK_QUESTION in texts[-1]
+
+
+def test_yes_with_an_edit_saves_nothing_and_goes_to_the_coach_whole() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    coach = MultiCoach(["Got it. Save it?", "Updated."], {"propose_body_entry": NIGGLE})
+    bot = _debrief_bot(coach, shared, _la(7, 8))
+    bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
+    bot.handle(_dm("yes but change pain to 2"), client)
+    assert _entries(shared) == []
+    assert coach.calls[-1][0] == "yes but change pain to 2"
+    assert isinstance(bot.conversations["D1"].pending, body.BodyEntry)  # still waiting
+    assert client.posted[-1]["text"].endswith(slack_bot.BODY_QUESTION)
+
+
+def test_a_waiting_body_entry_replaced_by_a_week_is_said_in_code() -> None:
+    bot, shared, client, _coach, today = _waiting_body_then_week()
+    bot.handle(_dm("can you plan the rest of my week"), client)
+    assert _entries(shared) == []
+    assert isinstance(bot.conversations["D1"].pending, slack_bot.WeekProposal)
+    shown = client.posted[-1]["text"]
+    assert shown.endswith(slack_bot.NOT_SAVED_BODY.format(day=today))
+    assert shown.count("wasn't saved") == 1
+    turns = bot.conversations["D1"].turns
+    assert "wasn't saved" not in turns[-1]["content"]  # code's note, not the coach's words
+
+
+def test_a_corrected_body_entry_replaces_the_old_one_without_a_not_saved_line() -> None:
+    shared, client = SharedDB(), SlackFake()
+    db.save_plan(shared.conn, PLAN)
+    coach = MultiCoach(
+        ["Got it. Save it?", "Updated."],
+        {"propose_body_entry": NIGGLE},
+        {"propose_body_entry": {**NIGGLE, "pain": 2}},
+    )
+    bot = _debrief_bot(coach, shared, _la(7, 8))
+    bot.handle(_dm("left shin sore, 3 out of 10, no swelling, yellow"), client)
+    bot.handle(_dm("yes but change pain to 2"), client)
+    assert "wasn't saved" not in client.posted[-1]["text"]
+    pending = bot.conversations["D1"].pending
+    assert isinstance(pending, body.BodyEntry) and pending.pain == 2
+
+
+def test_yes_and_also_saves_both_waiting_entries_in_order_then_asks_once() -> None:
+    bot, shared, client, coach = _both_bot("Noted. Save it?", "Rice and salmon is a fine pick.")
+    calls = len(coach.calls)
+    bot.handle(_dm("yes and also what should I eat tonight"), client)
+    assert len(_entries(shared)) == 1 and _fuel_count(shared) == 1
+    texts = [m["text"] for m in client.posted]
+    body_at = next(i for i, t in enumerate(texts) if t.startswith("Saved to your body log"))
+    fuel_at = next(i for i, t in enumerate(texts) if t.startswith("Saved to your fuel log"))
+    assert body_at < fuel_at
+    assert len(coach.calls) == calls + 1  # no separate fueling follow-up: her request instead
+    assert coach.calls[-1][0] == (
+        "(Saved: her body entry for 2026-11-07 and her fueling entry for 2026-11-07.)\n\n"
+        "what should I eat tonight"
+    )
+    assert texts[-1] == "Rice and salmon is a fine pick."
+    convo = bot.conversations["D1"]
+    assert convo.pending is None and convo.more == [] and convo.debrief is None
+
+
+def test_a_waiting_week_still_needs_its_own_yes() -> None:
+    """A week is always its own yes: "yes and push it" is not one, so nothing is saved."""
+    shared, proposal, start, today = _week_proposal()
+    client, push = SlackFake(), FakePush()
+    coach = WeekCoach(["Save this week?", "Say yes to save it."], proposal)
+    bot = _week_bot(coach, shared, today, push)
+    bot.handle(_dm("all good"), client)
+    bot.handle(_dm("yes and push it"), client)
+    assert coach.calls[-1][0] == "yes and push it"
+    assert push.days == [] and _week_details(shared, start) != "Leg press 3x10."
+    assert isinstance(bot.conversations["D1"].pending, slack_bot.WeekProposal)
+    assert client.posted[-1]["text"].endswith(slack_bot.WEEK_QUESTION)
+
+
+def test_yes_then_a_request_still_saves_after_a_restart() -> None:
+    shared = SharedDB()
+    db.save_plan(shared.conn, PLAN)
+    first = MultiCoach(["Got it. Save it?"], {"propose_body_entry": NIGGLE})
+    _debrief_bot(first, shared, _la(7, 8)).handle(_dm("left shin, 3, yellow"), SlackFake())
+    client, coach = SlackFake(), MultiCoach(["Saturday is 10 mi."])
+    restarted = _debrief_bot(coach, shared, _la(7, 9))
+    restarted.handle(_dm("yes, log it, then what's my long run?"), client)
+    assert len(_entries(shared)) == 1
+    assert coach.calls[0][0] == "(Saved: her body entry for 2026-11-07.)\n\nwhat's my long run?"
+
+
+def test_a_duplicate_question_that_replaces_an_entry_says_so(tmp_path: Any) -> None:
+    bot, _shared, client, _ = _both_bot("Noted. Save it?")
+    path = tmp_path / "1.fit"
+    path.write_bytes(b"")
+    pending = coros.Pending(path, ("k",), ("Sat 11/7: 10.00 mi, 1:30:00",))
+    bot.sync = lambda conn, now: coros.SyncReport("2026-11-02", "2026-11-08", pending=[pending])
+    bot.handle(_dm("sync my runs"), client)
+    shown = client.posted[-1]["text"]
+    assert slack_bot.NOT_SAVED_BODY.format(day="2026-11-07") in shown
+    assert shown.endswith(slack_bot.NOT_SAVED_FUEL.format(day="2026-11-07"))
