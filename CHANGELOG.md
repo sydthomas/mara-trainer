@@ -9,6 +9,7 @@ versions follow [SemVer](https://semver.org/) (before 1.0: minor = features, pat
 - Coach: asking to shorten or skip a run now gets a cut (lower week total) by default instead of moving the miles to other days; new eval case `plan-shorten-one-run-is-a-cut`.
 
 ### Added
+- `coach dashboard`: a Block view (third tab) lists every week of the accepted plan grouped by phase: planned distance (from the week's sessions, so a lowered week shows its lowered total), planned long run and number of runs, and for weeks that have started the distance done, the longest run and yellow/red body-check marks. Weeks ahead show the plan only; no verdict words. `docs/hosting.md` shows how to build it on the server and open it on the laptop.
 - Server-ready secrets: COROS sign-in can live in 0600 files in `COACH_SECRETS_DIR` (`COACH_SECRET_BACKEND=file`, default off macOS), `coach coros login --no-browser` signs in over an SSH tunnel, and systemd `LoadCredential=` files load as env vars.
 - Source gaps: when no approved source covers a question, the coach still says so and logs the topic with `log_source_gap` to a private, ranked backlog (`coach gaps list|log|close`, migration 012).
 - DigitalOcean hosting: `coach backup` (integrity-checked SQLite snapshot), `deploy/linux/` (bootstrap, hardened systemd units, nightly restic backups to B2, deploy with a startup check, laptop-to-server data move) and the runbook in `docs/hosting.md`; the LaunchAgent becomes the fallback.

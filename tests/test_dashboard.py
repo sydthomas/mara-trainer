@@ -33,7 +33,8 @@ SETUP = RaceSetup(
     longest_run_meters=16000,
     experience="returning",
 )
-SHOWN = ["today", "this_week", "where", "weekly_distance", "milestones"]
+TODAY_SHOWN = ["today", "this_week", "where", "weekly_distance", "milestones"]
+SHOWN = [*TODAY_SHOWN, "block"]
 NOT_SHOWN = ["long_run", "fueling", "hr_at_pace", "body_log"]
 JUDGEMENT = ("missed", "skipped", "behind", "should", "on track", "great", "well done", "failed")
 
@@ -121,6 +122,7 @@ def test_empty_db_every_panel_says_no_data(conn: sqlite3.Connection) -> None:
     assert "Import runs or accept a plan to see weekly miles." in today
     assert "<svg" not in section(page, "weekly_distance")
     assert "0.0" not in page and "0 mi" not in page
+    assert "No accepted plan yet." in view(page, "block")
 
 
 def test_default_is_twelve_weeks(conn: sqlite3.Connection) -> None:
@@ -450,15 +452,17 @@ def test_km_display_follows_the_athlete_unit(full: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------- the page
 
 
-def test_page_has_two_css_tabs_today_first(full: sqlite3.Connection) -> None:
+def test_page_has_three_css_tabs_today_first(full: sqlite3.Connection) -> None:
     page = dashboard.render_html(dashboard.build_data(full, TODAY, 4))
     assert '<input type="radio" name="view" id="v-today" checked>' in page
     assert '<input type="radio" name="view" id="v-week">' in page
+    assert '<input type="radio" name="view" id="v-block">' in page
+    assert '<label for="v-block">Block</label>' in page
     assert (
         '<label for="v-today">Today</label>' in page and '<label for="v-week">Week</label>' in page
     )
     today, week = view(page, "today"), view(page, "week")
-    for panel_id in SHOWN:
+    for panel_id in TODAY_SHOWN:
         assert f'id="{panel_id}"' in today
     # Weekly miles and milestones stay on Today only.
     assert "Weekly miles" not in week and "Milestones" not in week
@@ -749,3 +753,72 @@ def test_body_panel_entries_in_the_window(conn: sqlite3.Connection) -> None:
     log = panel(with_extra(conn, TODAY, 4), "body_log")
     assert log["status"] == "ok" and log["start"] == "2026-02-16" and log["end"] == TODAY
     assert [(r["date"], r["status"], r["location"]) for r in log["rows"]] == entries[1:5]
+
+
+# ---------------------------------------------------------------- block view
+
+
+def test_block_lists_every_plan_week_by_phase(full: sqlite3.Connection) -> None:
+    data = dashboard.build_data(full, TODAY, 4)
+    block = panel(data, "block")
+    plan = db.load_accepted_plan(full)
+    assert plan is not None
+    rows = [r for g in block["phases"] for r in g["weeks"]]
+    assert [r["start"] for r in rows] == [w["start_date"] for w in plan["weeks"]]
+    # consecutive weeks of one phase share a group; groups follow plan order
+    assert [g["phase"] for g in block["phases"]] == [
+        p
+        for i, p in enumerate(w["phase"] for w in plan["weeks"])
+        if i == 0 or plan["weeks"][i - 1]["phase"] != p
+    ]
+    by_start = {r["start"]: r for r in rows}
+    assert by_start["2026-03-02"]["state"] == "past"
+    assert by_start["2026-03-02"]["done_meters"] == 23000
+    assert by_start["2026-03-02"]["longest_meters"] == 15000
+    current = by_start["2026-03-09"]
+    assert current["state"] == "current" and current["done_meters"] == 18000
+    assert by_start["2026-02-23"]["done_meters"] is None  # nothing logged: missing, not zero
+    ahead = [r for r in rows if r["start"] > TODAY]
+    assert ahead and all(r["state"] == "ahead" and r["done_meters"] is None for r in ahead)
+    for r, w in zip(rows, plan["weeks"], strict=True):
+        runs = [s for s in w["sessions"] if s["kind"] not in ("rest", "strength")]
+        assert r["planned_meters"] == sum(s["distance_meters"] for s in runs)
+
+
+def test_block_planned_total_follows_sessions_after_a_cut(full: sqlite3.Connection) -> None:
+    edit_week(full, {0: {"distance_meters": 5000}})  # long run lowered; target left as it was
+    row = next(
+        r
+        for g in panel(dashboard.build_data(full, TODAY, 4), "block")["phases"]
+        for r in g["weeks"]
+        if r["start"] == "2026-03-09"
+    )
+    plan = db.load_accepted_plan(full)
+    assert plan is not None
+    week = next(w for w in plan["weeks"] if w["start_date"] == "2026-03-09")
+    runs = [s for s in week["sessions"] if s["kind"] not in ("rest", "strength")]
+    assert row["planned_meters"] == sum(s["distance_meters"] for s in runs)
+    assert row["planned_long_meters"] == 5000
+
+
+def test_block_view_page(full: sqlite3.Connection) -> None:
+    body.add_entry(full, body.BodyEntry(date="2026-03-10", status="yellow", location="calf"))
+    page = dashboard.render_html(dashboard.build_data(full, TODAY, 4))
+    block = view(page, "block")
+    assert "Training block" in block and 'class="wkrow now"' in block
+    assert block.count('class="wkrow') == len(db.load_accepted_plan(full)["weeks"])  # type: ignore[index]
+    assert "Base" in block and "Taper" in block and "Race week" in block
+    assert "14.3 mi done<br>" in block and "11.2 mi done so far" in block
+    assert "Body checks: 1 yellow" in block
+    assert not any(word in block.lower() for word in JUDGEMENT)
+
+
+def test_block_shows_body_checks_older_than_the_rollup_window(full: sqlite3.Connection) -> None:
+    body.add_entry(full, body.BodyEntry(date="2026-02-24", status="yellow", location="calf"))
+    rows = [
+        r
+        for g in panel(dashboard.build_data(full, TODAY, 4), "block")["phases"]
+        for r in g["weeks"]
+    ]
+    assert next(r for r in rows if r["start"] == "2026-02-23")["body"] == {"yellow": 1}
+    assert all(r["body"] == {} for r in rows if r["start"] != "2026-02-23")
